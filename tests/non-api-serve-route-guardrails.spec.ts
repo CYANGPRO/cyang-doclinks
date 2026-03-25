@@ -11,7 +11,10 @@ test.describe("non-api serving route guardrails", () => {
     expect(code.includes("enforceIpAbuseBlock(")).toBeTruthy();
     expect(code.includes("rateLimit(")).toBeTruthy();
     expect(code.includes("assertCanServeView(")).toBeTruthy();
-    expect(code.includes('if (!u || !roleAtLeast(u.role, "admin"))')).toBeTruthy();
+    expect(
+      code.includes('if (!u || !roleAtLeast(u.role, "admin"))') ||
+        code.includes('if (!u || !deps.roleAtLeast(u.role, "admin"))')
+    ).toBeTruthy();
   });
 
   test("/s/[token]/raw enforces token consumption, unlock checks, and rate limits", () => {

@@ -22,6 +22,11 @@ export const INTENTIONAL_EXTRA_ENV_GROUPS = {
     keys: [
       "ADMIN_COOKIE_SECRET",
       "ADMIN_PASSWORD",
+      "LIVE_RESTORE_TARGET_BASE_URL",
+      "LIVE_RUNTIME_BASE_URL",
+      "LIVE_RUNTIME_STRIPE_PRICE_ID",
+      "LIVE_RUNTIME_STRIPE_TIMEOUT_SECONDS",
+      "LIVE_RUNTIME_UPLOAD_SCAN_TIMEOUT_SECONDS",
       "R2_ACCOUNT_ID",
     ],
   },
@@ -29,6 +34,8 @@ export const INTENTIONAL_EXTRA_ENV_GROUPS = {
     description: "Operational knobs that are intentionally available for tuning, incident response, or deploy-specific caching behavior.",
     keys: [
       "ANALYTICS_AGGREGATE_DAYS_BACK",
+      "SKIP_ENV_LOCAL_BOOTSTRAP",
+      "VERIFY_LOCAL_RUNTIME",
     ],
   },
 };

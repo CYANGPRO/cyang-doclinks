@@ -2,6 +2,7 @@
 
 import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync } from "node:fs";
+import { listSuiteFiles } from "./lib/test-suites.mjs";
 
 function resolveSpawn(command, args) {
   if (process.platform === "win32" && (command === "npm" || command === "npx")) {
@@ -20,8 +21,13 @@ function quoteArg(arg) {
 
 const forwardedArgs = [];
 let requireExistingBuild = false;
+let profile = "local-safe";
 
 for (const arg of process.argv.slice(2)) {
+  if (arg.startsWith("--profile=")) {
+    profile = arg.slice("--profile=".length).trim() || "local-safe";
+    continue;
+  }
   if (arg === "--runInBand") {
     forwardedArgs.push("--workers=1");
     continue;
@@ -33,9 +39,13 @@ for (const arg of process.argv.slice(2)) {
   forwardedArgs.push(arg);
 }
 
+const explicitSpecArgs = forwardedArgs.filter((arg) => /\.spec\.(ts|tsx|js|jsx|mts|mjs)$/u.test(arg));
+const suiteFiles = explicitSpecArgs.length > 0 ? [] : listSuiteFiles(profile);
+const effectiveArgs = explicitSpecArgs.length > 0 ? forwardedArgs : [...forwardedArgs, ...suiteFiles];
+
 const playwrightCommand =
-  forwardedArgs.length > 0
-    ? `npm run test:playwright -- ${forwardedArgs.map(quoteArg).join(" ")}`
+  effectiveArgs.length > 0
+    ? `npm run test:playwright -- ${effectiveArgs.map(quoteArg).join(" ")}`
     : "npm run test:playwright";
 
 function hasUsableProductionBuild() {
@@ -69,7 +79,7 @@ function run(command, args) {
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
 
-if (!existsSync(".env.local") && existsSync(".env.example")) {
+if (!existsSync(".env.local") && existsSync(".env.example") && process.env.SKIP_ENV_LOCAL_BOOTSTRAP !== "1") {
   copyFileSync(".env.example", ".env.local");
   console.log("Prepared .env.local from .env.example for the test run.");
 }
@@ -86,6 +96,10 @@ if (!hasUsableProductionBuild()) {
   run("npm", ["run", "build"]);
 } else {
   console.log("Using existing production build for the Playwright-backed test run.");
+}
+
+if (explicitSpecArgs.length === 0) {
+  console.log(`Running Playwright suite profile: ${profile}`);
 }
 
 run("npx", [

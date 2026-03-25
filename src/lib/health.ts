@@ -44,6 +44,15 @@ export type PublicHealthSnapshot = {
   error?: string;
 };
 
+export type HealthDependencySummaryDeps = {
+  auditRuntimeConfig: typeof auditRuntimeConfig;
+  probeDatabase: () => Promise<HealthCheck>;
+  probeStorage: () => Promise<HealthCheck>;
+  probeScanQueue: () => Promise<HealthCheck>;
+  probeBackupRecovery: () => Promise<HealthCheck>;
+  probeKeyRotation: () => Promise<HealthCheck>;
+};
+
 type DependencyHealthCacheEntry = {
   expiresAt: number;
   summary: HealthSummary;
@@ -398,8 +407,19 @@ function configCheckFromAudit(report: ConfigAuditReport): HealthCheck {
   };
 }
 
-export function buildLivenessSummary(): HealthSummary {
-  const config = auditRuntimeConfig();
+const defaultHealthDependencySummaryDeps: HealthDependencySummaryDeps = {
+  auditRuntimeConfig,
+  probeDatabase,
+  probeStorage,
+  probeScanQueue,
+  probeBackupRecovery,
+  probeKeyRotation,
+};
+
+export function buildLivenessSummary(
+  deps: Pick<HealthDependencySummaryDeps, "auditRuntimeConfig"> = defaultHealthDependencySummaryDeps
+): HealthSummary {
+  const config = deps.auditRuntimeConfig();
   return {
     ok: true,
     service: "cyang.io",
@@ -426,21 +446,25 @@ export function buildLivenessSummary(): HealthSummary {
   };
 }
 
-async function buildDependencyChecks(): Promise<{ config: ConfigAuditReport; checks: HealthCheck[] }> {
-  const config = auditRuntimeConfig();
+async function buildDependencyChecks(
+  deps: HealthDependencySummaryDeps = defaultHealthDependencySummaryDeps
+): Promise<{ config: ConfigAuditReport; checks: HealthCheck[] }> {
+  const config = deps.auditRuntimeConfig();
   const checks = await Promise.all([
-    probeDatabase(),
-    probeStorage(),
-    probeScanQueue(),
-    probeBackupRecovery(),
-    probeKeyRotation(),
+    deps.probeDatabase(),
+    deps.probeStorage(),
+    deps.probeScanQueue(),
+    deps.probeBackupRecovery(),
+    deps.probeKeyRotation(),
   ]);
   checks.unshift(configCheckFromAudit(config));
   return { config, checks };
 }
 
-export async function buildDependencySummary(): Promise<HealthSummary> {
-  const { config, checks } = await buildDependencyChecks();
+export async function buildDependencySummary(
+  deps: HealthDependencySummaryDeps = defaultHealthDependencySummaryDeps
+): Promise<HealthSummary> {
+  const { config, checks } = await buildDependencyChecks(deps);
   const summary = summarizeHealthChecks(checks);
   return {
     ok: summary.ok,
@@ -467,13 +491,14 @@ function getDependencyHealthCacheMs() {
 }
 
 export async function getCachedDependencySummary(): Promise<HealthSummary> {
+  const useCache = defaultHealthDependencySummaryDeps;
   const now = Date.now();
   if (dependencyHealthCache && dependencyHealthCache.expiresAt > now) {
     return dependencyHealthCache.summary;
   }
 
   if (!dependencyHealthInFlight) {
-    dependencyHealthInFlight = buildDependencySummary()
+    dependencyHealthInFlight = buildDependencySummary(useCache)
       .then((summary) => {
         dependencyHealthCache = {
           summary,

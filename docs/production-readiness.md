@@ -22,6 +22,21 @@ It validates:
 - production dependency audit
 - release-gate config checks when deployment env vars are present
 
+## Local Sandbox Validation
+
+Run this when you want isolated, deterministic runtime confidence without live cloud accounts:
+
+```bash
+npm run verify:local
+```
+
+It uses the dedicated local verification profile from `.env.local.verify.example` and proves the secure-sharing, scan, webhook, health, and restore paths with deterministic adapters.
+
+For the repo test split:
+
+- `npm test` runs deterministic local-safe suites
+- `npm run test:live-ish` runs the environment-gated suites
+
 ## Release Gate
 
 Run this in staging/production with real env vars loaded:
@@ -65,6 +80,7 @@ It fails on:
 
 ## Related Docs
 
+- `docs/local-verification.md`
 - `docs/environment-ownership.md`
 - `docs/database-migrations.md`
 - `docs/staging-fire-drill.md`

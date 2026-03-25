@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+  buildDependencySummary,
   classifyBackupRecoverySummary,
   summarizeHealthChecks,
   toExternalHealthSummary,
@@ -111,5 +112,53 @@ test.describe("health readiness aggregation", () => {
     expect(JSON.stringify(summary)).not.toContain("enc_key_version");
     expect(JSON.stringify(summary)).not.toContain("public.docs");
     expect(JSON.stringify(summary)).not.toContain("database");
+  });
+
+  test("builds dependency summaries from injectable probes so local verification can simulate failures safely", async () => {
+    const summary = await buildDependencySummary({
+      auditRuntimeConfig: () => ({
+        ok: false,
+        environment: "development",
+        status: "warn",
+        errorCount: 0,
+        warningCount: 1,
+        findings: [],
+      }),
+      probeDatabase: async () => ({
+        name: "database",
+        state: "down",
+        critical: true,
+        summary: "Database dependency is unavailable.",
+        details: { reason: 'column "enc_key_version" does not exist' },
+      }),
+      probeStorage: async () => ({
+        name: "storage",
+        state: "ok",
+        critical: true,
+        summary: "Object storage reachable.",
+      }),
+      probeScanQueue: async () => ({
+        name: "scan_queue",
+        state: "degraded",
+        critical: true,
+        summary: "Malware scanning is reachable but has backlog or failure signals.",
+      }),
+      probeBackupRecovery: async () => ({
+        name: "backup_recovery",
+        state: "ok",
+        critical: false,
+        summary: "Backups and restore drill cadence are within policy.",
+      }),
+      probeKeyRotation: async () => ({
+        name: "key_rotation",
+        state: "ok",
+        critical: false,
+        summary: "Key rotation queue is healthy.",
+      }),
+    });
+
+    expect(summary.status).toBe("down");
+    expect(summary.checks.some((check) => check.name === "database" && check.state === "down")).toBeTruthy();
+    expect(JSON.stringify(toExternalHealthSummary(summary))).not.toContain("enc_key_version");
   });
 });

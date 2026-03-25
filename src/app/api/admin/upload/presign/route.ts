@@ -38,6 +38,60 @@ const BodySchema = z.object({
   encrypt: z.boolean().optional(),
 });
 
+export type UploadPresignRouteDeps = {
+  sql: typeof sql;
+  getR2Bucket: typeof getR2Bucket;
+  r2Client: typeof r2Client;
+  requireUser: typeof requireUser;
+  assertCanUpload: typeof assertCanUpload;
+  getPlanForUser: typeof getPlanForUser;
+  enforcePlanLimitsEnabled: typeof enforcePlanLimitsEnabled;
+  enforceGlobalApiRateLimit: typeof enforceGlobalApiRateLimit;
+  clientIpKey: typeof clientIpKey;
+  detectPresignFailureSpike: typeof detectPresignFailureSpike;
+  enforceIpAbuseBlock: typeof enforceIpAbuseBlock;
+  logSecurityEvent: typeof logSecurityEvent;
+  maybeBlockIpOnAbuse: typeof maybeBlockIpOnAbuse;
+  getActiveMasterKeyOrThrow: typeof getActiveMasterKeyOrThrow;
+  appendImmutableAudit: typeof appendImmutableAudit;
+  reportException: typeof reportException;
+  validateUploadType: typeof validateUploadType;
+  getRouteTimeoutMs: typeof getRouteTimeoutMs;
+  isRouteTimeoutError: typeof isRouteTimeoutError;
+  withRouteTimeout: typeof withRouteTimeout;
+  assertRuntimeEnv: typeof assertRuntimeEnv;
+  isRuntimeEnvError: typeof isRuntimeEnvError;
+  withRequestTelemetry: typeof withRequestTelemetry;
+  getSignedUrl: typeof getSignedUrl;
+};
+
+const defaultUploadPresignRouteDeps: UploadPresignRouteDeps = {
+  sql,
+  getR2Bucket,
+  r2Client,
+  requireUser,
+  assertCanUpload,
+  getPlanForUser,
+  enforcePlanLimitsEnabled,
+  enforceGlobalApiRateLimit,
+  clientIpKey,
+  detectPresignFailureSpike,
+  enforceIpAbuseBlock,
+  logSecurityEvent,
+  maybeBlockIpOnAbuse,
+  getActiveMasterKeyOrThrow,
+  appendImmutableAudit,
+  reportException,
+  validateUploadType,
+  getRouteTimeoutMs,
+  isRouteTimeoutError,
+  withRouteTimeout,
+  assertRuntimeEnv,
+  isRuntimeEnvError,
+  withRequestTelemetry,
+  getSignedUrl,
+};
+
 function safeKeyPart(name: string) {
   return name.replace(/[^a-zA-Z0-9._-]+/g, "_").replace(/_+/g, "_").slice(0, 120);
 }
@@ -63,18 +117,21 @@ function parseJsonBodyLength(req: Request): number {
   return Number.isFinite(out) ? Math.max(0, Math.floor(out)) : 0;
 }
 
-export async function POST(req: Request) {
-  const ipInfo = clientIpKey(req);
-  const timeoutMs = getRouteTimeoutMs("ROUTE_TIMEOUT_UPLOAD_PRESIGN_MS", 20_000);
+export async function postUploadPresignRoute(
+  req: Request,
+  deps: UploadPresignRouteDeps = defaultUploadPresignRouteDeps
+) {
+  const ipInfo = deps.clientIpKey(req);
+  const timeoutMs = deps.getRouteTimeoutMs("ROUTE_TIMEOUT_UPLOAD_PRESIGN_MS", 20_000);
   try {
-    return await withRequestTelemetry(
+    return await deps.withRequestTelemetry(
       req,
-      () => withRouteTimeout(
+      () => deps.withRouteTimeout(
         (async () => {
         if (parseJsonBodyLength(req) > MAX_UPLOAD_PRESIGN_BODY_BYTES) {
           return NextResponse.json({ ok: false, error: "PAYLOAD_TOO_LARGE" }, { status: 413 });
         }
-        const abuseBlock = await enforceIpAbuseBlock({ req, scope: "upload_presign" });
+        const abuseBlock = await deps.enforceIpAbuseBlock({ req, scope: "upload_presign" });
         if (!abuseBlock.ok) {
           return NextResponse.json(
             { ok: false, error: "ABUSE_BLOCKED" },
@@ -82,7 +139,7 @@ export async function POST(req: Request) {
           );
         }
         // Global API throttle (best-effort)
-        const globalRl = await enforceGlobalApiRateLimit({
+        const globalRl = await deps.enforceGlobalApiRateLimit({
           req,
           scope: "ip:api",
           limit: Number(process.env.RATE_LIMIT_API_IP_PER_MIN || 240),
@@ -111,10 +168,10 @@ export async function POST(req: Request) {
           );
         }
 
-        const user = await requireUser();
-        assertRuntimeEnv("upload_presign");
-        const plan = await getPlanForUser(user.id);
-        const r2Bucket = getR2Bucket();
+        const user = await deps.requireUser();
+        deps.assertRuntimeEnv("upload_presign");
+        const plan = await deps.getPlanForUser(user.id);
+        const r2Bucket = deps.getR2Bucket();
 
         // Upload presign throttle per-IP (stronger)
         const basePresignLimit = Number(process.env.RATE_LIMIT_UPLOAD_PRESIGN_IP_PER_MIN || 30);
@@ -123,7 +180,7 @@ export async function POST(req: Request) {
           plan.id === "free"
             ? Math.max(1, Math.min(basePresignLimit, Number.isFinite(freePresignLimit) ? freePresignLimit : 12))
             : basePresignLimit;
-        const presignRl = await enforceGlobalApiRateLimit({
+        const presignRl = await deps.enforceGlobalApiRateLimit({
           req,
           scope: "ip:upload_presign",
           limit: effectivePresignLimit,
@@ -180,12 +237,12 @@ export async function POST(req: Request) {
         const contentType = declaredType.canonicalMime;
 
         // Hard enforcement needs an explicit sizeBytes to prevent bypassing storage/file-size caps.
-        if (enforcePlanLimitsEnabled() && (sizeBytes == null || !Number.isFinite(sizeBytes) || sizeBytes <= 0)) {
+        if (deps.enforcePlanLimitsEnabled() && (sizeBytes == null || !Number.isFinite(sizeBytes) || sizeBytes <= 0)) {
           return NextResponse.json({ ok: false, error: "MISSING_SIZE", message: "sizeBytes is required." }, { status: 400 });
         }
 
         // --- Monetization / plan limits (hidden) ---
-        const canUpload = await assertCanUpload({ userId: user.id, sizeBytes: sizeBytes ?? null });
+        const canUpload = await deps.assertCanUpload({ userId: user.id, sizeBytes: sizeBytes ?? null });
         if (!canUpload.ok) {
           return NextResponse.json(
             { ok: false, error: "PAYMENT_REQUIRED", message: canUpload.message || "Upgrade required to upload." },
@@ -196,10 +253,10 @@ export async function POST(req: Request) {
         // --- Mandatory encryption configuration ---
         let activeKeyId: string;
         try {
-          activeKeyId = (await getActiveMasterKeyOrThrow()).id;
+          activeKeyId = (await deps.getActiveMasterKeyOrThrow()).id;
         } catch (e: unknown) {
           const msg = e instanceof Error && e.message === "MASTER_KEY_REVOKED" ? "Active master key is revoked." : "Missing DOC_MASTER_KEYS.";
-          await logSecurityEvent({
+          await deps.logSecurityEvent({
             type: "upload_presign_error",
             severity: "high",
             ip: ipInfo.ip,
@@ -209,7 +266,7 @@ export async function POST(req: Request) {
             message: "Encryption configuration unavailable during presign",
             meta: { reason: msg },
           });
-          await detectPresignFailureSpike({ ip: ipInfo.ip });
+          await deps.detectPresignFailureSpike({ ip: ipInfo.ip });
           return NextResponse.json(
             { ok: false, error: "ENCRYPTION_NOT_CONFIGURED", message: "Encryption configuration unavailable." },
             { status: 500 }
@@ -223,7 +280,7 @@ export async function POST(req: Request) {
 
         const createdByEmail = user.email;
 
-        await sql`
+        await deps.sql`
           insert into docs (
             id,
             org_id,
@@ -254,7 +311,7 @@ export async function POST(req: Request) {
           )
         `;
 
-        await appendImmutableAudit({
+        await deps.appendImmutableAudit({
           streamKey: `doc:${docId}`,
           action: "doc.upload_initiated",
           actorUserId: user.id,
@@ -291,7 +348,7 @@ export async function POST(req: Request) {
           "x-amz-meta-orig-ext",
         ]);
 
-        const uploadUrl = await getSignedUrl(r2Client, new PutObjectCommand(putParams), {
+        const uploadUrl = await deps.getSignedUrl(deps.r2Client, new PutObjectCommand(putParams), {
           expiresIn,
           unhoistableHeaders,
         });
@@ -316,7 +373,7 @@ export async function POST(req: Request) {
       { routeKey: "/api/admin/upload/presign" }
     );
   } catch (err: unknown) {
-    if (isRouteTimeoutError(err)) {
+    if (deps.isRouteTimeoutError(err)) {
       return NextResponse.json(
         { ok: false, error: "TIMEOUT", message: "Unable to initialize upload in time." },
         { status: 504 }
@@ -332,13 +389,13 @@ export async function POST(req: Request) {
     if (authCode === "MFA_REQUIRED") {
       return NextResponse.json({ ok: false, error: "MFA_REQUIRED" }, { status: 403 });
     }
-    if (isRuntimeEnvError(err)) {
+    if (deps.isRuntimeEnvError(err)) {
       return NextResponse.json(
         { ok: false, error: "ENV_MISCONFIGURED", message: "Upload configuration is unavailable." },
         { status: 503 }
       );
     }
-    await logSecurityEvent({
+    await deps.logSecurityEvent({
       type: "upload_presign_error",
       severity: "high",
       ip: ipInfo.ip,
@@ -346,8 +403,8 @@ export async function POST(req: Request) {
       message: "Unhandled presign error",
       meta: { error_type: err instanceof Error ? err.name || "Error" : typeof err },
     });
-    await detectPresignFailureSpike({ ip: ipInfo.ip });
-    await reportException({
+    await deps.detectPresignFailureSpike({ ip: ipInfo.ip });
+    await deps.reportException({
       error: err,
       event: "upload_presign_route_error",
       context: { route: "/api/admin/upload/presign" },
@@ -357,4 +414,8 @@ export async function POST(req: Request) {
       { status: 500 }
     );
   }
+}
+
+export async function POST(req: Request) {
+  return postUploadPresignRoute(req);
 }
