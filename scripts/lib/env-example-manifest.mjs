@@ -34,8 +34,6 @@ export const INTENTIONAL_EXTRA_ENV_GROUPS = {
     description: "Operational knobs that are intentionally available for tuning, incident response, or deploy-specific caching behavior.",
     keys: [
       "ANALYTICS_AGGREGATE_DAYS_BACK",
-      "SKIP_ENV_LOCAL_BOOTSTRAP",
-      "VERIFY_LOCAL_RUNTIME",
     ],
   },
 };
