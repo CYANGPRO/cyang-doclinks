@@ -26,6 +26,56 @@ const MAX_PACK_ID_LEN = 64;
 const MAX_ISO_LEN = 64;
 const MAX_MAX_VIEWS = 1_000_000;
 
+export type V1SharesRouteDeps = {
+  sql: typeof sql;
+  verifyApiKeyFromRequest: typeof verifyApiKeyFromRequest;
+  emitWebhook: typeof emitWebhook;
+  assertCanCreateShare: typeof assertCanCreateShare;
+  getPlanForUser: typeof getPlanForUser;
+  normalizeExpiresAtForPlan: typeof normalizeExpiresAtForPlan;
+  normalizeMaxViewsForPlan: typeof normalizeMaxViewsForPlan;
+  clientIpKey: typeof clientIpKey;
+  enforceGlobalApiRateLimit: typeof enforceGlobalApiRateLimit;
+  appendImmutableAudit: typeof appendImmutableAudit;
+  resolvePublicAppBaseUrl: typeof resolvePublicAppBaseUrl;
+  DEFAULT_SHARE_SETTINGS: typeof DEFAULT_SHARE_SETTINGS;
+  PRO_PACK_UPSELL_MESSAGE: typeof PRO_PACK_UPSELL_MESSAGE;
+  applyPack: typeof applyPack;
+  getPackById: typeof getPackById;
+  isPackAvailableForPlan: typeof isPackAvailableForPlan;
+  getShareEligibility: typeof getShareEligibility;
+  getRouteTimeoutMs: typeof getRouteTimeoutMs;
+  isRouteTimeoutError: typeof isRouteTimeoutError;
+  withRouteTimeout: typeof withRouteTimeout;
+  withRequestTelemetry: typeof withRequestTelemetry;
+  bcryptHash: typeof bcrypt.hash;
+};
+
+const defaultV1SharesRouteDeps: V1SharesRouteDeps = {
+  sql,
+  verifyApiKeyFromRequest,
+  emitWebhook,
+  assertCanCreateShare,
+  getPlanForUser,
+  normalizeExpiresAtForPlan,
+  normalizeMaxViewsForPlan,
+  clientIpKey,
+  enforceGlobalApiRateLimit,
+  appendImmutableAudit,
+  resolvePublicAppBaseUrl,
+  DEFAULT_SHARE_SETTINGS,
+  PRO_PACK_UPSELL_MESSAGE,
+  applyPack,
+  getPackById,
+  isPackAvailableForPlan,
+  getShareEligibility,
+  getRouteTimeoutMs,
+  isRouteTimeoutError,
+  withRouteTimeout,
+  withRequestTelemetry,
+  bcryptHash: bcrypt.hash,
+};
+
 function newToken(): string {
   return crypto.randomBytes(16).toString("hex");
 }
@@ -51,19 +101,22 @@ function parseSharePassword(value: unknown): string | null | "INVALID" {
   return parseOptionalExactPasswordInput(value, MAX_SHARE_PASSWORD_LEN);
 }
 
-export async function POST(req: NextRequest) {
-  const ipInfo = clientIpKey(req);
-  const timeoutMs = getRouteTimeoutMs("ROUTE_TIMEOUT_API_V1_SHARES_MS", 20_000);
+export async function postV1SharesRoute(
+  req: NextRequest,
+  deps: V1SharesRouteDeps = defaultV1SharesRouteDeps
+) {
+  const ipInfo = deps.clientIpKey(req);
+  const timeoutMs = deps.getRouteTimeoutMs("ROUTE_TIMEOUT_API_V1_SHARES_MS", 20_000);
   try {
-    return await withRequestTelemetry(
+    return await deps.withRequestTelemetry(
       req,
-      () => withRouteTimeout(
+      () => deps.withRouteTimeout(
         (async () => {
         if (parseJsonBodyLength(req) > MAX_SHARE_BODY_BYTES) {
           return NextResponse.json({ ok: false, error: "PAYLOAD_TOO_LARGE" }, { status: 413 });
         }
 
-        const rl = await enforceGlobalApiRateLimit({
+        const rl = await deps.enforceGlobalApiRateLimit({
           req,
           scope: "ip:api",
           limit: Number(process.env.RATE_LIMIT_API_IP_PER_MIN || 240),
@@ -77,7 +130,7 @@ export async function POST(req: NextRequest) {
           );
         }
 
-        const auth = await verifyApiKeyFromRequest(req);
+        const auth = await deps.verifyApiKeyFromRequest(req);
         if (!auth.ok) {
           return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
         }
@@ -97,7 +150,7 @@ export async function POST(req: NextRequest) {
   if (!docId) return NextResponse.json({ ok: false, error: "MISSING_DOC_ID" }, { status: 400 });
   if (!isUuid(docId)) return NextResponse.json({ ok: false, error: "INVALID_DOC_ID" }, { status: 400 });
 
-  const docRows = (await sql`
+  const docRows = (await deps.sql`
     select
       owner_id::text as owner_id,
       coalesce(status::text, 'ready') as doc_state,
@@ -117,7 +170,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "FORBIDDEN" }, { status: 403 });
   }
 
-  const shareEligibility = getShareEligibility({
+  const shareEligibility = deps.getShareEligibility({
     docStateRaw: docRow.doc_state,
     scanStateRaw: docRow.scan_state,
     moderationStatusRaw: docRow.moderation_status,
@@ -130,14 +183,14 @@ export async function POST(req: NextRequest) {
   }
 
   // --- Monetization / plan limits (hidden) ---
-  const shareAllowed = await assertCanCreateShare(auth.ownerId);
+  const shareAllowed = await deps.assertCanCreateShare(auth.ownerId);
   if (!shareAllowed.ok) {
     return NextResponse.json(
       { ok: false, error: "PAYMENT_REQUIRED", message: shareAllowed.message || "Upgrade required for more active shares." },
       { status: 402 }
     );
   }
-  const plan = await getPlanForUser(auth.ownerId);
+  const plan = await deps.getPlanForUser(auth.ownerId);
 
   const rawEmailInput = body?.to_email ?? body?.toEmail ?? "";
   const toEmail = parseOptionalEmail(rawEmailInput);
@@ -149,7 +202,7 @@ export async function POST(req: NextRequest) {
   if (passwordRaw === "INVALID") {
     return NextResponse.json({ ok: false, error: "INVALID_PASSWORD" }, { status: 400 });
   }
-  const passwordHash = passwordRaw ? await bcrypt.hash(passwordRaw, 12) : null;
+  const passwordHash = passwordRaw ? await deps.bcryptHash(passwordRaw, 12) : null;
 
   const allowedCountriesRaw = body?.allowed_countries ?? body?.allowedCountries ?? null;
   const blockedCountriesRaw = body?.blocked_countries ?? body?.blockedCountries ?? null;
@@ -205,14 +258,14 @@ export async function POST(req: NextRequest) {
 
   const packInput = String(body?.pack_id ?? body?.packId ?? "").trim();
   const safePackInput = /[\r\n\0]/.test(packInput) ? "" : packInput.slice(0, MAX_PACK_ID_LEN);
-  const selectedPack = getPackById(safePackInput);
-  if (!isPackAvailableForPlan(selectedPack, plan.id)) {
+  const selectedPack = deps.getPackById(safePackInput);
+  if (!deps.isPackAvailableForPlan(selectedPack, plan.id)) {
     return NextResponse.json(
-      { ok: false, error: "PACK_REQUIRES_PRO", message: PRO_PACK_UPSELL_MESSAGE },
+      { ok: false, error: "PACK_REQUIRES_PRO", message: deps.PRO_PACK_UPSELL_MESSAGE },
       { status: 402 }
     );
   }
-  let resolvedSettings = applyPack(DEFAULT_SHARE_SETTINGS, selectedPack.id);
+  let resolvedSettings = deps.applyPack(deps.DEFAULT_SHARE_SETTINGS, selectedPack.id);
 
   const expiresFieldPresent =
     (overrides ? ("expires_at" in overrides || "expiresAt" in overrides) : false) ||
@@ -258,12 +311,12 @@ export async function POST(req: NextRequest) {
   const allowDownload = resolvedSettings.allowDownload;
   const watermarkEnabled = resolvedSettings.watermarkEnabled;
 
-  const planExpiresAt = normalizeExpiresAtForPlan({
+  const planExpiresAt = deps.normalizeExpiresAtForPlan({
     plan,
     requestedExpiresAtIso: normalizedExpiresAt,
     defaultDaysIfNotAllowed: 7,
   });
-  const planMaxViews = normalizeMaxViewsForPlan({ plan, requestedMaxViews });
+  const planMaxViews = deps.normalizeMaxViewsForPlan({ plan, requestedMaxViews });
   const adjustedForPlan =
     planExpiresAt !== normalizedExpiresAt ||
     planMaxViews !== maxViews;
@@ -279,7 +332,7 @@ export async function POST(req: NextRequest) {
   const token = newToken();
   // Newer schema supports geo + watermark columns; fall back silently if not present.
   try {
-    await sql`
+    await deps.sql`
       insert into public.share_tokens
         (token, doc_id, to_email, expires_at, max_views, password_hash, allow_download, allowed_countries, blocked_countries, watermark_enabled, watermark_text, pack_id, pack_version)
       values
@@ -287,14 +340,14 @@ export async function POST(req: NextRequest) {
     `;
   } catch {
     try {
-      await sql`
+      await deps.sql`
         insert into public.share_tokens
           (token, doc_id, to_email, expires_at, max_views, password_hash, allow_download, allowed_countries, blocked_countries, watermark_enabled, watermark_text)
         values
           (${token}, ${docId}::uuid, ${toEmail}, ${normalizedExpiresAt}, ${maxViews}, ${passwordHash}, ${allowDownload}, ${allowedCountries}, ${blockedCountries}, ${watermarkEnabled}, ${watermarkText})
       `;
     } catch {
-      await sql`
+      await deps.sql`
         insert into public.share_tokens (token, doc_id, to_email, expires_at, max_views, password_hash)
         values (${token}, ${docId}::uuid, ${toEmail}, ${normalizedExpiresAt}, ${maxViews}, ${passwordHash})
       `;
@@ -303,13 +356,13 @@ export async function POST(req: NextRequest) {
 
   let base: string;
   try {
-    base = resolvePublicAppBaseUrl(req.url);
+    base = deps.resolvePublicAppBaseUrl(req.url);
   } catch {
     return NextResponse.json({ ok: false, error: "ENV_MISCONFIGURED" }, { status: 500 });
   }
   const url = `${base}/s/${token}`;
 
-  emitWebhook("share.created", {
+  deps.emitWebhook("share.created", {
     token,
     doc_id: docId,
     to_email: toEmail,
@@ -323,7 +376,7 @@ export async function POST(req: NextRequest) {
     created_via: "api",
   });
 
-  await appendImmutableAudit({
+  await deps.appendImmutableAudit({
     streamKey: `doc:${docId}`,
     action: "share.create",
     actorUserId: auth.ownerId,
@@ -361,9 +414,13 @@ export async function POST(req: NextRequest) {
       { routeKey: "/api/v1/shares" }
     );
   } catch (e: unknown) {
-    if (isRouteTimeoutError(e)) {
+    if (deps.isRouteTimeoutError(e)) {
       return NextResponse.json({ ok: false, error: "TIMEOUT" }, { status: 504 });
     }
     return NextResponse.json({ ok: false, error: "SERVER_ERROR" }, { status: 500 });
   }
+}
+
+export async function POST(req: NextRequest) {
+  return postV1SharesRoute(req);
 }

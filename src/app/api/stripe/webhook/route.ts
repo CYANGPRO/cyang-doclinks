@@ -29,6 +29,60 @@ import { assertRuntimeEnv, isRuntimeEnvError } from "@/lib/runtimeEnv";
 
 const DEFAULT_STRIPE_WEBHOOK_MAX_BODY_BYTES = 256 * 1024;
 
+export type StripeWebhookRouteDeps = {
+  verifyStripeWebhookSignature: typeof verifyStripeWebhookSignature;
+  beginWebhookEvent: typeof beginWebhookEvent;
+  billingTablesReady: typeof billingTablesReady;
+  completeWebhookEvent: typeof completeWebhookEvent;
+  getUserIdByStripeCustomerId: typeof getUserIdByStripeCustomerId;
+  resolveUserIdForStripeWebhookEvent: typeof resolveUserIdForStripeWebhookEvent;
+  markWebhookEventDuplicate: typeof markWebhookEventDuplicate;
+  markPaymentFailure: typeof markPaymentFailure;
+  markPaymentSucceeded: typeof markPaymentSucceeded;
+  syncUserPlanFromSubscription: typeof syncUserPlanFromSubscription;
+  unixToIso: typeof unixToIso;
+  upsertStripeSubscription: typeof upsertStripeSubscription;
+  appendImmutableAudit: typeof appendImmutableAudit;
+  clientIpKey: typeof clientIpKey;
+  enforceGlobalApiRateLimit: typeof enforceGlobalApiRateLimit;
+  enforceIpAbuseBlock: typeof enforceIpAbuseBlock;
+  logDbErrorEvent: typeof logDbErrorEvent;
+  logSecurityEvent: typeof logSecurityEvent;
+  maybeBlockIpOnAbuse: typeof maybeBlockIpOnAbuse;
+  getRouteTimeoutMs: typeof getRouteTimeoutMs;
+  isRouteTimeoutError: typeof isRouteTimeoutError;
+  withRouteTimeout: typeof withRouteTimeout;
+  assertRuntimeEnv: typeof assertRuntimeEnv;
+  isRuntimeEnvError: typeof isRuntimeEnvError;
+};
+
+const defaultStripeWebhookRouteDeps: StripeWebhookRouteDeps = {
+  verifyStripeWebhookSignature,
+  beginWebhookEvent,
+  billingTablesReady,
+  completeWebhookEvent,
+  getUserIdByStripeCustomerId,
+  resolveUserIdForStripeWebhookEvent,
+  markWebhookEventDuplicate,
+  markPaymentFailure,
+  markPaymentSucceeded,
+  syncUserPlanFromSubscription,
+  unixToIso,
+  upsertStripeSubscription,
+  appendImmutableAudit,
+  clientIpKey,
+  enforceGlobalApiRateLimit,
+  enforceIpAbuseBlock,
+  logDbErrorEvent,
+  logSecurityEvent,
+  maybeBlockIpOnAbuse,
+  getRouteTimeoutMs,
+  isRouteTimeoutError,
+  withRouteTimeout,
+  assertRuntimeEnv,
+  isRuntimeEnvError,
+};
+
 function planFromStripePriceId(priceId: string | null): "free" | "pro" {
   const proPrices = String(process.env.STRIPE_PRO_PRICE_IDS || "")
     .split(",")
@@ -73,16 +127,19 @@ function safeWebhookMessage(errorLike: unknown): string {
   return trimmed.slice(0, 240);
 }
 
-export async function POST(req: NextRequest) {
-  const timeoutMs = getRouteTimeoutMs("ROUTE_TIMEOUT_STRIPE_WEBHOOK_MS", 15_000);
-  const requestIp = clientIpKey(req).ip;
+export async function postStripeWebhookRoute(
+  req: NextRequest,
+  deps: StripeWebhookRouteDeps = defaultStripeWebhookRouteDeps
+) {
+  const timeoutMs = deps.getRouteTimeoutMs("ROUTE_TIMEOUT_STRIPE_WEBHOOK_MS", 15_000);
+  const requestIp = deps.clientIpKey(req).ip;
   try {
-    return await withRouteTimeout(
+    return await deps.withRouteTimeout(
       (async () => {
         const maxBodyBytes = getMaxWebhookBodyBytes();
         const contentLength = parseContentLength(req.headers.get("content-length"));
         if (contentLength != null && contentLength > maxBodyBytes) {
-          await logSecurityEvent({
+          await deps.logSecurityEvent({
             type: "stripe_webhook_payload_too_large",
             severity: "medium",
             ip: requestIp,
@@ -93,15 +150,15 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ ok: false, error: "PAYLOAD_TOO_LARGE" }, { status: 413 });
         }
 
-        assertRuntimeEnv("stripe_webhook");
-        const abuseBlock = await enforceIpAbuseBlock({ req, scope: "billing_webhook" });
+        deps.assertRuntimeEnv("stripe_webhook");
+        const abuseBlock = await deps.enforceIpAbuseBlock({ req, scope: "billing_webhook" });
         if (!abuseBlock.ok) {
           return NextResponse.json(
             { ok: false, error: "ABUSE_BLOCKED" },
             { status: 403, headers: { "Retry-After": String(abuseBlock.retryAfterSeconds) } }
           );
         }
-        const webhookRl = await enforceGlobalApiRateLimit({
+        const webhookRl = await deps.enforceGlobalApiRateLimit({
           req,
           scope: "ip:stripe_webhook",
           limit: Number(process.env.RATE_LIMIT_STRIPE_WEBHOOK_IP_PER_MIN || 300),
@@ -117,7 +174,7 @@ export async function POST(req: NextRequest) {
 
         const rawBody = await req.text();
         if (Buffer.byteLength(rawBody, "utf8") > maxBodyBytes) {
-          await logSecurityEvent({
+          await deps.logSecurityEvent({
             type: "stripe_webhook_payload_too_large",
             severity: "medium",
             ip: requestIp,
@@ -129,7 +186,7 @@ export async function POST(req: NextRequest) {
         }
 
         const signature = req.headers.get("stripe-signature");
-        const verified = verifyStripeWebhookSignature({
+        const verified = deps.verifyStripeWebhookSignature({
           rawBody,
           signatureHeader: signature,
           secret: process.env.STRIPE_WEBHOOK_SECRET ?? null,
@@ -137,7 +194,7 @@ export async function POST(req: NextRequest) {
         });
 
         if (!verified.ok) {
-          await logSecurityEvent({
+          await deps.logSecurityEvent({
             type: "stripe_webhook_invalid_signature",
             severity: "high",
             ip: requestIp,
@@ -145,7 +202,7 @@ export async function POST(req: NextRequest) {
             message: verified.error,
           });
           if (requestIp) {
-            await maybeBlockIpOnAbuse({
+            await deps.maybeBlockIpOnAbuse({
               ip: requestIp,
               category: "stripe_webhook_invalid_signature",
               scope: "billing_webhook",
@@ -158,14 +215,14 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ ok: false, error: "INVALID_SIGNATURE" }, { status: 400 });
         }
 
-        const ready = await billingTablesReady();
+        const ready = await deps.billingTablesReady();
         if (!ready) {
           return NextResponse.json({ ok: false, error: "BILLING_TABLES_NOT_READY" }, { status: 503 });
         }
 
-        const dedupe = await beginWebhookEvent(verified.eventId, verified.eventType, verified.payload);
+        const dedupe = await deps.beginWebhookEvent(verified.eventId, verified.eventType, verified.payload);
         if (dedupe === "duplicate") {
-          await markWebhookEventDuplicate(verified.eventId);
+          await deps.markWebhookEventDuplicate(verified.eventId);
           return NextResponse.json({ ok: true, duplicate: true });
         }
 
@@ -191,7 +248,7 @@ export async function POST(req: NextRequest) {
             const stripeCustomerId = String(obj?.customer || "").trim() || null;
             const metadata = (obj.metadata && typeof obj.metadata === "object" ? obj.metadata : {}) as Record<string, unknown>;
             const metadataUserId = String(metadata.user_id || "").trim() || null;
-            const binding = await resolveUserIdForStripeWebhookEvent({
+            const binding = await deps.resolveUserIdForStripeWebhookEvent({
               stripeSubscriptionId,
               stripeCustomerId,
               metadataUserId,
@@ -199,7 +256,7 @@ export async function POST(req: NextRequest) {
             if (!binding.ok) {
               webhookStatus = "ignored";
               webhookMessage = binding.error;
-              await logSecurityEvent({
+              await deps.logSecurityEvent({
                 type: "stripe_webhook_binding_rejected",
                 severity: "high",
                 ip: requestIp,
@@ -212,10 +269,10 @@ export async function POST(req: NextRequest) {
 
               const status = String(obj?.status || (eventType.endsWith(".deleted") ? "canceled" : "incomplete")).toLowerCase();
               const planId = planFromStripePriceId(getSubPriceId(obj));
-              const currentPeriodEnd = unixToIso(obj?.current_period_end);
+              const currentPeriodEnd = deps.unixToIso(obj?.current_period_end);
               const cancelAtPeriodEnd = Boolean(obj?.cancel_at_period_end);
 
-              await upsertStripeSubscription({
+              await deps.upsertStripeSubscription({
                 userId,
                 stripeCustomerId,
                 stripeSubscriptionId,
@@ -228,36 +285,36 @@ export async function POST(req: NextRequest) {
               });
 
               if (userId) {
-                await syncUserPlanFromSubscription(userId);
+                await deps.syncUserPlanFromSubscription(userId);
               }
             }
           } else if (eventType === "invoice.payment_failed") {
             const stripeSubscriptionId = String(obj?.subscription || "").trim() || null;
             const stripeCustomerId = String(obj?.customer || "").trim() || null;
-            const userId = await getUserIdByStripeCustomerId(stripeCustomerId);
-            await markPaymentFailure({
+            const userId = await deps.getUserIdByStripeCustomerId(stripeCustomerId);
+            await deps.markPaymentFailure({
               stripeSubscriptionId,
               stripeCustomerId,
               graceDays: getGraceDays(),
               eventCreatedUnix,
             });
-            if (userId) await syncUserPlanFromSubscription(userId);
+            if (userId) await deps.syncUserPlanFromSubscription(userId);
           } else if (eventType === "invoice.payment_succeeded") {
             const stripeSubscriptionId = String(obj?.subscription || "").trim() || null;
             const stripeCustomerId = String(obj?.customer || "").trim() || null;
-            const userId = await getUserIdByStripeCustomerId(stripeCustomerId);
-            await markPaymentSucceeded({
+            const userId = await deps.getUserIdByStripeCustomerId(stripeCustomerId);
+            await deps.markPaymentSucceeded({
               stripeSubscriptionId,
               stripeCustomerId,
               eventCreatedUnix,
             });
-            if (userId) await syncUserPlanFromSubscription(userId);
+            if (userId) await deps.syncUserPlanFromSubscription(userId);
           } else {
             webhookStatus = "ignored";
             webhookMessage = `Unhandled event type: ${eventType}`;
           }
 
-          await appendImmutableAudit({
+          await deps.appendImmutableAudit({
             streamKey: "billing:stripe_webhook",
             action: `billing.stripe.${eventType}`,
             subjectId: verified.eventId,
@@ -268,13 +325,13 @@ export async function POST(req: NextRequest) {
         } catch (e: unknown) {
           webhookStatus = "failed";
           webhookMessage = safeWebhookMessage(e);
-          await logDbErrorEvent({
+          await deps.logDbErrorEvent({
             scope: "billing_webhook",
             message: webhookMessage,
             ip: requestIp,
             meta: { route: "/api/stripe/webhook", eventType, eventId: verified.eventId },
           });
-          await logSecurityEvent({
+          await deps.logSecurityEvent({
             type: "stripe_webhook_processing_failed",
             severity: "high",
             ip: requestIp,
@@ -284,7 +341,7 @@ export async function POST(req: NextRequest) {
           });
         }
 
-        await completeWebhookEvent(verified.eventId, webhookStatus, webhookMessage);
+        await deps.completeWebhookEvent(verified.eventId, webhookStatus, webhookMessage);
 
         if (webhookStatus === "failed") {
           return NextResponse.json({ ok: false, error: "WEBHOOK_PROCESSING_FAILED" }, { status: 500 });
@@ -296,18 +353,18 @@ export async function POST(req: NextRequest) {
     );
   } catch (e: unknown) {
     if (e instanceof Error) {
-      await logDbErrorEvent({
+      await deps.logDbErrorEvent({
         scope: "billing_webhook",
         message: e.message,
         ip: requestIp,
         meta: { route: "/api/stripe/webhook" },
       });
     }
-    if (isRuntimeEnvError(e)) {
+    if (deps.isRuntimeEnvError(e)) {
       return NextResponse.json({ ok: false, error: "ENV_MISCONFIGURED" }, { status: 503 });
     }
-    if (isRouteTimeoutError(e)) {
-      await logSecurityEvent({
+    if (deps.isRouteTimeoutError(e)) {
+      await deps.logSecurityEvent({
         type: "stripe_webhook_timeout",
         severity: "high",
         ip: requestIp,
@@ -317,7 +374,7 @@ export async function POST(req: NextRequest) {
       });
       return NextResponse.json({ ok: false, error: "TIMEOUT" }, { status: 504 });
     }
-    await logSecurityEvent({
+    await deps.logSecurityEvent({
       type: "stripe_webhook_unhandled_error",
       severity: "high",
       ip: requestIp,
@@ -326,4 +383,8 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json({ ok: false, error: "SERVER_ERROR" }, { status: 500 });
   }
+}
+
+export async function POST(req: NextRequest) {
+  return postStripeWebhookRoute(req);
 }

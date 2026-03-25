@@ -57,9 +57,18 @@ Manual restore test (from a dump file):
    - `pg_restore --clean --if-exists --no-owner --no-privileges --dbname "$TARGET_DATABASE_URL" <dump-file>`
 3. Run smoke checks before any cutover:
    - `npm run restore:verify -- --require-current-migrations`
+   - `LIVE_RESTORE_TARGET_DATABASE_URL="$TARGET_DATABASE_URL" LIVE_RESTORE_EXPECTED_BACKUP_FILE="<dump-file-name>" npm run runtime:proof:live`
 4. Record the drill result if desired:
    - success: `npm run restore:verify -- --record-success --notes "quarterly restore drill"`
    - failure: `npm run restore:verify -- --record-failure --notes "restore validation issue"`
+
+What `runtime:proof:live` adds beyond `restore:verify`:
+
+- confirms the recovery target is not the primary DB
+- requires the named backup artifact to exist in both source and recovery `backup_runs`
+- verifies docs/share/audit counts are non-empty on the restored target
+- records a recovery-drill row automatically unless `LIVE_RESTORE_RECORD_RESULT=0`
+- optionally checks `/api/health/ready` on `LIVE_RESTORE_TARGET_BASE_URL`
 
 ## 2) R2 Object Recovery
 1. Confirm bucket retention/versioning configuration in Cloudflare dashboard.
@@ -92,3 +101,4 @@ Manual restore test (from a dump file):
 - Security event ingestion and alert spikes operating.
 - `/api/health/ready` returns `200`.
 - `/api/health/deps` shows fresh backups and no critical dependency failures.
+- `npm run runtime:proof:live` passes against the named restored backup artifact before cutover.

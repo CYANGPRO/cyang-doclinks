@@ -20,6 +20,72 @@ import { assertRuntimeEnv, isRuntimeEnvError } from "@/lib/runtimeEnv";
 import { resolvePublicAppBaseUrl } from "@/lib/publicBaseUrl";
 import { withRequestTelemetry } from "@/lib/perfTelemetry";
 
+export type ServeRouteDeps = {
+  sql: typeof sql;
+  mintAccessTicket: typeof mintAccessTicket;
+  resolveDoc: typeof resolveDoc;
+  getClientIpFromHeaders: typeof getClientIpFromHeaders;
+  getUserAgentFromHeaders: typeof getUserAgentFromHeaders;
+  logDocAccess: typeof logDocAccess;
+  rateLimit: typeof rateLimit;
+  rateLimitHeaders: typeof rateLimitHeaders;
+  stableHash: typeof stableHash;
+  emitWebhook: typeof emitWebhook;
+  geoDecisionForRequest: typeof geoDecisionForRequest;
+  getCountryFromHeaders: typeof getCountryFromHeaders;
+  assertCanServeView: typeof assertCanServeView;
+  incrementMonthlyViews: typeof incrementMonthlyViews;
+  enforcePlanLimitsEnabled: typeof enforcePlanLimitsEnabled;
+  getAuthedUser: typeof getAuthedUser;
+  roleAtLeast: typeof roleAtLeast;
+  isGlobalServeDisabled: typeof isGlobalServeDisabled;
+  isSecurityTestNoDbMode: typeof isSecurityTestNoDbMode;
+  getRouteTimeoutMs: typeof getRouteTimeoutMs;
+  isRouteTimeoutError: typeof isRouteTimeoutError;
+  withRouteTimeout: typeof withRouteTimeout;
+  enforceIpAbuseBlock: typeof enforceIpAbuseBlock;
+  logDbErrorEvent: typeof logDbErrorEvent;
+  logSecurityEvent: typeof logSecurityEvent;
+  maybeBlockIpOnAbuse: typeof maybeBlockIpOnAbuse;
+  assertRuntimeEnv: typeof assertRuntimeEnv;
+  isRuntimeEnvError: typeof isRuntimeEnvError;
+  resolvePublicAppBaseUrl: typeof resolvePublicAppBaseUrl;
+  withRequestTelemetry: typeof withRequestTelemetry;
+};
+
+const defaultServeRouteDeps: ServeRouteDeps = {
+  sql,
+  mintAccessTicket,
+  resolveDoc,
+  getClientIpFromHeaders,
+  getUserAgentFromHeaders,
+  logDocAccess,
+  rateLimit,
+  rateLimitHeaders,
+  stableHash,
+  emitWebhook,
+  geoDecisionForRequest,
+  getCountryFromHeaders,
+  assertCanServeView,
+  incrementMonthlyViews,
+  enforcePlanLimitsEnabled,
+  getAuthedUser,
+  roleAtLeast,
+  isGlobalServeDisabled,
+  isSecurityTestNoDbMode,
+  getRouteTimeoutMs,
+  isRouteTimeoutError,
+  withRouteTimeout,
+  enforceIpAbuseBlock,
+  logDbErrorEvent,
+  logSecurityEvent,
+  maybeBlockIpOnAbuse,
+  assertRuntimeEnv,
+  isRuntimeEnvError,
+  resolvePublicAppBaseUrl,
+  withRequestTelemetry,
+};
+
 function hashIp(ip: string) {
   const salt = process.env.VIEW_SALT || "";
   if (!salt || !ip) return null;
@@ -37,24 +103,28 @@ function parseDisposition(req: NextRequest): "inline" | "attachment" {
   return "inline";
 }
 
-export async function GET(req: NextRequest, ctx: { params: Promise<{ docId: string }> }) {
-  const timeoutMs = getRouteTimeoutMs("ROUTE_TIMEOUT_SERVE_MS", 25_000);
+export async function getServeRoute(
+  req: NextRequest,
+  ctx: { params: Promise<{ docId: string }> },
+  deps: ServeRouteDeps = defaultServeRouteDeps
+) {
+  const timeoutMs = deps.getRouteTimeoutMs("ROUTE_TIMEOUT_SERVE_MS", 25_000);
   try {
-    return await withRequestTelemetry(
+    return await deps.withRequestTelemetry(
       req,
-      () => withRouteTimeout(
+      () => deps.withRouteTimeout(
         (async () => {
-        assertRuntimeEnv("serve");
+        deps.assertRuntimeEnv("serve");
 
-        if (isSecurityTestNoDbMode()) {
+        if (deps.isSecurityTestNoDbMode()) {
           return new Response("Not found", { status: 404 });
         }
 
-  if (await isGlobalServeDisabled()) {
+  if (await deps.isGlobalServeDisabled()) {
     return new Response("Unavailable", { status: 503 });
   }
 
-  const abuseBlock = await enforceIpAbuseBlock({ req, scope: "serve" });
+  const abuseBlock = await deps.enforceIpAbuseBlock({ req, scope: "serve" });
   if (!abuseBlock.ok) {
     return new Response("Forbidden", {
       status: 403,
@@ -69,16 +139,16 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ docId: stri
 
   let resolved;
   if (tokenParam) {
-    resolved = await resolveDoc({ token: tokenParam });
+    resolved = await deps.resolveDoc({ token: tokenParam });
   } else if (aliasParam) {
-    resolved = await resolveDoc({ alias: aliasParam });
+    resolved = await deps.resolveDoc({ alias: aliasParam });
   } else {
     // Direct /serve/{docId} access is reserved for privileged first-party users.
-    const u = await getAuthedUser();
-    if (!u || !roleAtLeast(u.role, "admin")) {
+    const u = await deps.getAuthedUser();
+    if (!u || !deps.roleAtLeast(u.role, "admin")) {
       return new Response("Forbidden", { status: 403 });
     }
-    resolved = await resolveDoc({ docId });
+    resolved = await deps.resolveDoc({ docId });
   }
 
   if (!resolved.ok) {
@@ -96,19 +166,19 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ docId: stri
   // --- Rate limiting (best-effort) ---
   // 1) Global IP throttling for the serve endpoint
   // 2) Optional token abuse protection if a share token is provided
-  const ip = getClientIpFromHeaders(req.headers) || "";
+  const ip = deps.getClientIpFromHeaders(req.headers) || "";
   const ipHash = hashIp(ip);
   const dispositionForLog = parseDisposition(req);
-  const ipKey = stableHash(ip, "VIEW_SALT");
+  const ipKey = deps.stableHash(ip, "VIEW_SALT");
 
   // --- Geo-based restriction (best-effort) ---
-  const country = getCountryFromHeaders(req.headers);
-  const geo = await geoDecisionForRequest({ country, docId, token: tokenParam });
+  const country = deps.getCountryFromHeaders(req.headers);
+  const geo = await deps.geoDecisionForRequest({ country, docId, token: tokenParam });
   if (!geo.allowed) {
     return new Response("Forbidden", { status: 403 });
   }
 
-  const ipRl = await rateLimit({
+  const ipRl = await deps.rateLimit({
     scope: "ip:serve",
     id: ipKey,
     limit: Number(process.env.RATE_LIMIT_SERVE_IP_PER_MIN || 120),
@@ -117,14 +187,14 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ docId: stri
   });
 
   if (!ipRl.ok) {
-    await logSecurityEvent({
+    await deps.logSecurityEvent({
       type: "serve_rate_limited",
       severity: "medium",
       ip,
       scope: "serve",
       message: "Serve IP rate limit exceeded",
     });
-    await maybeBlockIpOnAbuse({
+    await deps.maybeBlockIpOnAbuse({
       ip,
       category: "serve_rate_limit",
       scope: "serve",
@@ -136,29 +206,29 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ docId: stri
     return new Response("Too Many Requests", {
       status: 429,
       headers: {
-        ...rateLimitHeaders(ipRl),
+        ...deps.rateLimitHeaders(ipRl),
         "Retry-After": String(ipRl.resetSeconds),
       },
     });
   }
 
   if (tokenParam) {
-    const tokenRl = await rateLimit({
-      scope: "token:serve",
-      id: stableHash(String(tokenParam), "VIEW_SALT"),
+      const tokenRl = await deps.rateLimit({
+        scope: "token:serve",
+        id: deps.stableHash(String(tokenParam), "VIEW_SALT"),
       limit: Number(process.env.RATE_LIMIT_SERVE_TOKEN_PER_MIN || 240),
       windowSeconds: 60,
       failClosed: true,
     });
     if (!tokenRl.ok) {
-      await logSecurityEvent({
+      await deps.logSecurityEvent({
         type: "serve_token_rate_limited",
         severity: "medium",
         ip,
         scope: "serve",
         message: "Serve token rate limit exceeded",
       });
-      await maybeBlockIpOnAbuse({
+      await deps.maybeBlockIpOnAbuse({
         ip,
         category: "serve_token_rate_limit",
         scope: "serve",
@@ -170,7 +240,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ docId: stri
       return new Response("Too Many Requests", {
         status: 429,
         headers: {
-          ...rateLimitHeaders(tokenRl),
+          ...deps.rateLimitHeaders(tokenRl),
           "Retry-After": String(tokenRl.resetSeconds),
         },
       });
@@ -180,7 +250,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ docId: stri
   // --- Monetization / plan limits (hidden) ---
   // Enforce the document owner's monthly view quota.
   try {
-    const ownerRows = (await sql`
+    const ownerRows = (await deps.sql`
       select owner_id::text as owner_id
       from public.docs
       where id = ${resolved.docId}::uuid
@@ -188,24 +258,24 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ docId: stri
     `) as unknown as Array<{ owner_id: string | null }>;
     const ownerId = ownerRows?.[0]?.owner_id ?? null;
     if (ownerId) {
-      const allowed = await assertCanServeView(ownerId);
+      const allowed = await deps.assertCanServeView(ownerId);
       if (!allowed.ok) {
         return new Response("Temporarily unavailable", { status: 429 });
       }
-      await incrementMonthlyViews(ownerId, 1);
+      await deps.incrementMonthlyViews(ownerId, 1);
     }
   } catch {
-    if (enforcePlanLimitsEnabled()) {
+    if (deps.enforcePlanLimitsEnabled()) {
       return new Response("Temporarily unavailable", { status: 503 });
     }
   }
 
   // Audit log (best-effort)
   try {
-    const userAgent = getUserAgentFromHeaders(req.headers);
+    const userAgent = deps.getUserAgentFromHeaders(req.headers);
 
     // 1) High-level audit trail (writes to doc_audit if present)
-    await logDocAccess({
+    await deps.logDocAccess({
       docId: resolved.docId,
       alias: aliasParam,
       shareId: null,
@@ -217,12 +287,12 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ docId: stri
     // 2) Access logs (writes to doc_access_log with the schema we observed in prod)
     //    columns: id, doc_id, alias, token, ip, user_agent, created_at
     try {
-      await sql`
+      await deps.sql`
         insert into public.doc_access_log (doc_id, alias, token, ip, user_agent)
         values (${resolved.docId}::uuid, ${aliasParam}, ${tokenParam}, ${ip || null}, ${userAgent || null})
       `;
 
-      emitWebhook("doc.viewed", {
+      deps.emitWebhook("doc.viewed", {
         docId: resolved.docId,
         alias: aliasParam ?? null,
         path: url.pathname,
@@ -248,14 +318,14 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ docId: stri
 
     // Try newer schema first (share_token + event_type). Fall back to legacy schema.
     try {
-      await sql`
+      await deps.sql`
         insert into public.doc_views
           (doc_id, alias, path, kind, user_agent, referer, ip_hash, share_token, event_type)
         values
           (${resolved.docId}::uuid, ${aliasParam}, ${url.pathname}, 'serve', ${ua}, ${ref}, ${ipHash}, ${tokenParam}, ${dispositionForLog === "attachment" ? "file_download" : "preview_view"})
       `;
 
-      emitWebhook("doc.viewed", {
+      deps.emitWebhook("doc.viewed", {
         docId: resolved.docId,
         alias: aliasParam ?? null,
         path: url.pathname,
@@ -265,7 +335,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ docId: stri
         eventType: dispositionForLog === "attachment" ? "file_download" : "preview_view",
       });
     } catch {
-      await sql`
+      await deps.sql`
         insert into public.doc_views
           (doc_id, alias, path, kind, user_agent, referer, ip_hash)
         values
@@ -281,7 +351,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ docId: stri
 
   const disposition = parseDisposition(req);
 
-  const ticketId = await mintAccessTicket({
+  const ticketId = await deps.mintAccessTicket({
     req,
     docId: resolved.docId,
     shareToken: tokenParam,
@@ -296,13 +366,13 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ docId: stri
   if (!ticketId) {
     return new Response("Server error", {
       status: 500,
-      headers: { ...rateLimitHeaders(ipRl) },
+      headers: { ...deps.rateLimitHeaders(ipRl) },
     });
   }
 
   let appBaseUrl: string;
   try {
-    appBaseUrl = resolvePublicAppBaseUrl(req.url);
+    appBaseUrl = deps.resolvePublicAppBaseUrl(req.url);
   } catch {
     return new Response("Unavailable", { status: 503 });
   }
@@ -311,7 +381,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ docId: stri
           status: 302,
           headers: {
             Location: new URL(`/t/${ticketId}`, appBaseUrl).toString(),
-            ...rateLimitHeaders(ipRl),
+            ...deps.rateLimitHeaders(ipRl),
           },
         });
         })(),
@@ -320,14 +390,14 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ docId: stri
       { routeKey: "/serve/[docId]" }
     );
   } catch (e: unknown) {
-    if (isRuntimeEnvError(e)) {
+    if (deps.isRuntimeEnvError(e)) {
       return new Response("Unavailable", { status: 503 });
     }
-    if (isRouteTimeoutError(e)) {
-      void logSecurityEvent({
+    if (deps.isRouteTimeoutError(e)) {
+      void deps.logSecurityEvent({
         type: "serve_timeout",
         severity: "high",
-        ip: getClientIpFromHeaders(req.headers) || null,
+        ip: deps.getClientIpFromHeaders(req.headers) || null,
         scope: "serve",
         message: "Serve route exceeded timeout",
         meta: { timeoutMs },
@@ -335,13 +405,17 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ docId: stri
       return new Response("Gateway Timeout", { status: 504 });
     }
     if (e instanceof Error) {
-      await logDbErrorEvent({
+      await deps.logDbErrorEvent({
         scope: "serve",
         message: e.message,
-        ip: getClientIpFromHeaders(req.headers) || null,
+        ip: deps.getClientIpFromHeaders(req.headers) || null,
         meta: { route: "/serve/[docId]" },
       });
     }
     throw e;
   }
+}
+
+export async function GET(req: NextRequest, ctx: { params: Promise<{ docId: string }> }) {
+  return getServeRoute(req, ctx);
 }

@@ -19,6 +19,7 @@ const commands = [
   ["npm", ["run", "test:security:freeze:ci"]],
   ["npm", ["run", "test:billing:webhook:ci"]],
   ["node", ["scripts/restore-verify.mjs", "--require-current-migrations"]],
+  ["node", ["scripts/live-runtime-proof.mjs", "--summary-json", ".tmp/live-runtime-proof-summary.json"]],
 ];
 
 for (const [command, args] of commands) {

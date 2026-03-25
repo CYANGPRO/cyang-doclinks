@@ -16,6 +16,9 @@ export default defineConfig({
   testDir: "./tests",
   timeout: 60_000,
   fullyParallel: false,
+  // Keep runtime/integration proofs on a single worker so file-level suites do not
+  // overlap against shared state, local servers, or production-like artifacts.
+  workers: 1,
   retries: 0,
   reporter: [["list"]],
   use: {

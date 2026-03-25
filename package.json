@@ -32,6 +32,7 @@
     "release:gate": "node scripts/release-gate.mjs",
     "production-readiness": "node scripts/production-readiness.mjs",
     "restore:verify": "node scripts/restore-verify.mjs",
+    "runtime:proof:live": "node scripts/live-runtime-proof.mjs",
     "fire-drill:staging": "node scripts/fire-drill-staging.mjs",
     "test:a11y": "playwright test tests/a11y.spec.ts",
     "test:a11y:ci": "start-server-and-test \"npm run start\" http://127.0.0.1:3000 \"npm run test:a11y\"",

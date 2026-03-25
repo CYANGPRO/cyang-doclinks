@@ -18,6 +18,28 @@ type VerifyAliasPasswordResult =
     | { ok: true }
     | { ok: false; error: "not_found" | "expired" | "revoked" | "bad_password"; message: string };
 
+export type AliasPasswordActionDeps = {
+    sql: typeof sql;
+    cookies: typeof cookies;
+    headers: typeof headers;
+    rateLimit: typeof rateLimit;
+    stableHash: typeof stableHash;
+    bcryptCompare: typeof bcrypt.compare;
+    trustDeviceForDoc: typeof trustDeviceForDoc;
+    getAliasRow: typeof getAliasRow;
+};
+
+const defaultAliasPasswordActionDeps: AliasPasswordActionDeps = {
+    sql,
+    cookies,
+    headers,
+    rateLimit,
+    stableHash,
+    bcryptCompare: bcrypt.compare,
+    trustDeviceForDoc,
+    getAliasRow,
+};
+
 function normAlias(alias: string): string {
     return decodeURIComponent(String(alias || "")).trim().toLowerCase();
 }
@@ -125,12 +147,15 @@ export async function isAliasUnlockedAction(aliasInput: string): Promise<boolean
     return isDeviceTrustedForDoc({ docId: row.docId, deviceHash: dHash });
 }
 
-export async function verifyAliasPasswordResultAction(formData: FormData): Promise<VerifyAliasPasswordResult> {
+export async function verifyAliasPasswordResultWithDeps(
+    formData: FormData,
+    deps: AliasPasswordActionDeps = defaultAliasPasswordActionDeps
+): Promise<VerifyAliasPasswordResult> {
     const alias = normAlias(String(formData.get("alias") || ""));
     const password = normalizeExactPasswordInput(formData.get("password"), MAX_SHARE_PASSWORD_LEN) ?? "";
     if (!alias) return { ok: false, error: "not_found", message: "Missing alias." };
 
-    const row = await getAliasRow(alias);
+    const row = await deps.getAliasRow(alias);
     if (!row.ok) return { ok: false, error: "not_found", message: "Link not found." };
     if (row.revokedAt) return { ok: false, error: "revoked", message: "This link has been revoked." };
     if (isExpired(row.expiresAt)) return { ok: false, error: "expired", message: "This link has expired." };
@@ -142,13 +167,13 @@ export async function verifyAliasPasswordResultAction(formData: FormData): Promi
 
     // Brute-force throttle (best-effort)
     try {
-        const h = await headers();
+        const h = await deps.headers();
         const ip = getClientIpFromHeaders(h) || "";
-        const ipKey = stableHash(ip, "VIEW_SALT");
-        const aliasKey = stableHash(alias, "VIEW_SALT");
+        const ipKey = deps.stableHash(ip, "VIEW_SALT");
+        const aliasKey = deps.stableHash(alias, "VIEW_SALT");
         const id = `${aliasKey}:${ipKey}`;
 
-        const rl1 = await rateLimit({
+        const rl1 = await deps.rateLimit({
             scope: "pw:alias:1m",
             id,
             limit: Number(process.env.RATE_LIMIT_ALIAS_PW_PER_MIN || 10),
@@ -157,7 +182,7 @@ export async function verifyAliasPasswordResultAction(formData: FormData): Promi
         });
         if (!rl1.ok) return { ok: false, error: "bad_password", message: "Too many attempts. Try again soon." };
 
-        const rl2 = await rateLimit({
+        const rl2 = await deps.rateLimit({
             scope: "pw:alias:10m",
             id,
             limit: Number(process.env.RATE_LIMIT_ALIAS_PW_PER_10MIN || 25),
@@ -169,25 +194,25 @@ export async function verifyAliasPasswordResultAction(formData: FormData): Promi
         return { ok: false, error: "bad_password", message: "Password verification is temporarily unavailable." };
     }
 
-    const match = await bcrypt.compare(password, row.passwordHash);
+    const match = await deps.bcryptCompare(password, row.passwordHash);
     if (!match) return { ok: false, error: "bad_password", message: "Incorrect password." };
 
     // DB trust (best-effort)
     try {
-        const h = await headers();
+        const h = await deps.headers();
         const ip = getClientIpFromHeaders(h);
         const ua = getUserAgentFromHeaders(h);
         const dHash = deviceHashFrom(ip, ua);
         if (dHash) {
             const trustedUntilIso = new Date(Date.now() + DEVICE_TRUST_HOURS * 3600 * 1000).toISOString();
-            await trustDeviceForDoc({ docId: row.docId, deviceHash: dHash, trustedUntilIso });
+            await deps.trustDeviceForDoc({ docId: row.docId, deviceHash: dHash, trustedUntilIso });
         }
     } catch {
         // ignore
     }
 
     const expMs = Date.now() + DEVICE_TRUST_HOURS * 3600 * 1000;
-    const c = await cookies();
+    const c = await deps.cookies();
     c.set(aliasTrustCookieName(alias), makeAliasTrustCookieValue(alias, expMs), {
         httpOnly: true,
         secure: true,
@@ -197,4 +222,8 @@ export async function verifyAliasPasswordResultAction(formData: FormData): Promi
     });
 
     return { ok: true };
+}
+
+export async function verifyAliasPasswordResultAction(formData: FormData): Promise<VerifyAliasPasswordResult> {
+    return verifyAliasPasswordResultWithDeps(formData);
 }

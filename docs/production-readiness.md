@@ -56,6 +56,13 @@ It fails on:
 8. `npm run release:gate`
 9. `npm run db:migrate -- apply`
 
+`npm run fire-drill:staging` now includes `npm run runtime:proof:live`, which is the deployed smoke pack for:
+
+- real R2 presign/upload/head/get
+- real scanner + `/api/cron/scan`
+- real Stripe-generated webhook delivery
+- real restored-backup target verification
+
 ## Related Docs
 
 - `docs/environment-ownership.md`

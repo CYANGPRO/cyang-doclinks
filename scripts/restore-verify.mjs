@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 
 import { createMigrationClient, getMigrationStatus } from "./lib/migrations.mjs";
+import {
+  assertRestoreVerificationReady,
+  readRestoreVerificationSnapshot,
+  recordRecoveryDrill,
+} from "./lib/restore-verify.mjs";
 
 function hasFlag(flag) {
   return process.argv.includes(flag);
@@ -20,51 +25,24 @@ async function main() {
   const requireCurrentMigrations = hasFlag("--require-current-migrations");
 
   try {
-    const rows = await sql.unsafe(`
-      select
-        (select count(*)::bigint from public.docs) as docs_count,
-        (select count(*)::bigint from public.share_tokens) as share_tokens_count,
-        (select count(*)::bigint from public.immutable_audit_log) as immutable_audit_count,
-        to_regclass('public.recovery_drills')::text as recovery_drills_ready,
-        to_regclass('public.schema_migrations')::text as schema_migrations_ready
-    `);
-    const row = rows[0];
+    const summary = await readRestoreVerificationSnapshot({ sql });
     console.log(
       JSON.stringify(
-        {
-          docsCount: Number(row.docs_count || 0),
-          shareTokensCount: Number(row.share_tokens_count || 0),
-          immutableAuditCount: Number(row.immutable_audit_count || 0),
-          recoveryDrillsReady: Boolean(row.recovery_drills_ready),
-          schemaMigrationsReady: Boolean(row.schema_migrations_ready),
-        },
+        summary,
         null,
         2
       )
     );
 
-    if (requireCurrentMigrations) {
-      const status = await getMigrationStatus({ sql });
-      if (status.pending.length || status.drift.length) {
-        throw new Error("Restore verification failed because migrations are not current.");
-      }
-    }
+    await assertRestoreVerificationReady({ sql, requireCurrentMigrations, getMigrationStatus });
 
     if (recordSuccess || recordFailure) {
-      await sql.unsafe(
-        `
-          insert into public.recovery_drills (status, notes, details)
-          values ($1, $2, $3::jsonb)
-        `,
-        [
-          recordSuccess ? "success" : "failed",
-          notes || null,
-          JSON.stringify({
-            verifiedAt: new Date().toISOString(),
-            requireCurrentMigrations,
-          }),
-        ]
-      );
+      await recordRecoveryDrill({
+        sql,
+        status: recordSuccess ? "success" : "failed",
+        notes,
+        requireCurrentMigrations,
+      });
       console.log(`Recorded recovery drill status: ${recordSuccess ? "success" : "failed"}.`);
     }
   } finally {

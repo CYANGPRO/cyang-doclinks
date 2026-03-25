@@ -60,8 +60,8 @@ function isMaxed(view_count: number, max_views: number | null) {
     return view_count >= max_views;
 }
 
-async function getClientIpFromHeaders(): Promise<string> {
-    const h = await headers();
+async function getClientIpFromHeaders(readHeaders: typeof headers = headers): Promise<string> {
+    const h = await readHeaders();
     const xff = h.get("x-forwarded-for") || "";
     return xff.split(",")[0]?.trim() || "";
 }
@@ -71,6 +71,28 @@ function hashIp(ip: string) {
     if (!salt || !ip) return null;
     return crypto.createHmac("sha256", salt).update(ip).digest("hex").slice(0, 32);
 }
+
+export type SharePasswordActionDeps = {
+    sql: typeof sql;
+    resolveShareGateMeta: typeof resolveShareGateMeta;
+    rateLimit: typeof rateLimit;
+    stableHash: typeof stableHash;
+    cookies: typeof cookies;
+    headers: typeof headers;
+    bcryptCompare: typeof bcrypt.compare;
+    redirect: typeof redirect;
+};
+
+const defaultSharePasswordActionDeps: SharePasswordActionDeps = {
+    sql,
+    resolveShareGateMeta,
+    rateLimit,
+    stableHash,
+    cookies,
+    headers,
+    bcryptCompare: bcrypt.compare,
+    redirect,
+};
 
 export async function isShareUnlockedAction(token: string): Promise<boolean> {
     const safeToken = cleanText(token, MAX_TOKEN_LEN);
@@ -92,16 +114,19 @@ export async function isShareUnlockedAction(token: string): Promise<boolean> {
     return rows.length > 0;
 }
 
-async function throttlePasswordAttempts(args: { token: string; ip: string }): Promise<
+async function throttlePasswordAttempts(
+  args: { token: string; ip: string },
+  deps: Pick<SharePasswordActionDeps, "rateLimit" | "stableHash">
+): Promise<
   | { ok: true }
   | { ok: false; retryAfterSeconds: number; message: string }
 > {
-  const ipKey = stableHash(args.ip, "VIEW_SALT");
-  const tokenKey = stableHash(args.token, "VIEW_SALT");
+  const ipKey = deps.stableHash(args.ip, "VIEW_SALT");
+  const tokenKey = deps.stableHash(args.token, "VIEW_SALT");
   const id = `${tokenKey}:${ipKey}`;
 
   // Fast bucket (burst)
-  const rl1 = await rateLimit({
+  const rl1 = await deps.rateLimit({
     scope: "pw:share:1m",
     id,
     limit: readEnvInt("RATE_LIMIT_PW_PER_MIN", RATE_LIMIT_PER_MIN, { min: 1 }),
@@ -113,7 +138,7 @@ async function throttlePasswordAttempts(args: { token: string; ip: string }): Pr
   }
 
   // Slow bucket (sustained brute force)
-  const rl2 = await rateLimit({
+  const rl2 = await deps.rateLimit({
     scope: "pw:share:10m",
     id,
     limit: readEnvInt("RATE_LIMIT_PW_PER_10MIN", RATE_LIMIT_PER_10MIN, { min: 1 }),
@@ -144,8 +169,9 @@ type VerifySharePasswordResult =
 /**
  * Core verifier that returns a structured result.
  */
-export async function verifySharePasswordCore(
-    formData: FormData
+export async function verifySharePasswordCoreWithDeps(
+    formData: FormData,
+    deps: SharePasswordActionDeps = defaultSharePasswordActionDeps
 ): Promise<VerifySharePasswordResult> {
     const token = cleanText(formData.get("token"), MAX_TOKEN_LEN);
     const password = readExactPassword(formData.get("password"));
@@ -153,7 +179,7 @@ export async function verifySharePasswordCore(
 
     if (!token || !isShareToken(token)) return { ok: false, error: "not_found", message: "Missing token." };
 
-    const share = await resolveShareGateMeta(token);
+    const share = await deps.resolveShareGateMeta(token);
     if (!share.ok) return { ok: false, error: "not_found", message: "Share not found." };
 
     // Recipient restriction (forward protection)
@@ -187,12 +213,12 @@ export async function verifySharePasswordCore(
         const unlockId = randomId();
         const expiresAt = new Date(Date.now() + UNLOCK_HOURS * 3600 * 1000);
 
-        await sql`
+        await deps.sql`
       insert into public.share_unlocks (token, unlock_id, ip_hash, expires_at)
       values (${token}, ${unlockId}, ${null}, ${expiresAt.toISOString()})
     `;
 
-        const c = await cookies();
+        const c = await deps.cookies();
         c.set(cookieName(token), unlockId, {
             httpOnly: true,
             secure: true,
@@ -217,14 +243,14 @@ export async function verifySharePasswordCore(
 
     // Rate limit (best-effort)
     try {
-        const ip = await getClientIpFromHeaders();
+        const ip = await getClientIpFromHeaders(deps.headers);
         const ipHash = hashIp(ip) || "unknown";
 
-        const thr = await throttlePasswordAttempts({ token, ip });
+        const thr = await throttlePasswordAttempts({ token, ip }, deps);
         if (!thr.ok) return { ok: false, error: "rate_limited", message: thr.message };
 
         // Keep old table (if present) for admin debugging / history.
-        await sql`
+        await deps.sql`
           insert into public.share_pw_attempts (token, ip_hash)
           values (${token}, ${ipHash})
         `;
@@ -232,18 +258,18 @@ export async function verifySharePasswordCore(
         return { ok: false, error: "rate_limited", message: "Password verification is temporarily unavailable." };
     }
 
-    const match = await bcrypt.compare(password, passwordHash);
+    const match = await deps.bcryptCompare(password, passwordHash);
     if (!match) return { ok: false, error: "bad_password", message: "Incorrect password." };
 
     const unlockId = randomId();
     const expiresAt = new Date(Date.now() + UNLOCK_HOURS * 3600 * 1000);
 
-    await sql`
+    await deps.sql`
     insert into public.share_unlocks (token, unlock_id, ip_hash, expires_at)
     values (${token}, ${unlockId}, ${null}, ${expiresAt.toISOString()})
   `;
 
-    const c = await cookies();
+    const c = await deps.cookies();
     c.set(cookieName(token), unlockId, {
         httpOnly: true,
         secure: true,
@@ -265,19 +291,25 @@ export async function verifySharePasswordCore(
     return { ok: true };
 }
 
+export async function verifySharePasswordCore(
+    formData: FormData
+): Promise<VerifySharePasswordResult> {
+    return verifySharePasswordCoreWithDeps(formData);
+}
+
 /**
  * Use THIS for <form action={...}>.
  * Must return void/Promise<void>. Redirects instead of returning data.
  */
 export async function verifySharePasswordAction(formData: FormData): Promise<void> {
     const token = cleanText(formData.get("token"), MAX_TOKEN_LEN);
-    const res = await verifySharePasswordCore(formData);
+    const res = await verifySharePasswordCoreWithDeps(formData);
 
     if (res.ok) {
-        redirect(`/s/${encodeURIComponent(token)}/view`);
+        defaultSharePasswordActionDeps.redirect(`/s/${encodeURIComponent(token)}/view`);
     }
 
-    redirect(`/s/${encodeURIComponent(token)}?error=${encodeURIComponent(res.message)}`);
+    defaultSharePasswordActionDeps.redirect(`/s/${encodeURIComponent(token)}?error=${encodeURIComponent(res.message)}`);
 }
 
 /**
@@ -287,5 +319,5 @@ export async function verifySharePasswordAction(formData: FormData): Promise<voi
 export async function verifySharePasswordResultAction(
     formData: FormData
 ): Promise<VerifySharePasswordResult> {
-    return verifySharePasswordCore(formData);
+    return verifySharePasswordCoreWithDeps(formData);
 }

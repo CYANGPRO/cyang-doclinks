@@ -59,6 +59,28 @@ Optional:
    - `stripe_event_log` present
    - processed/duplicate counts are non-zero after test replay
 
+## Deployed Smoke Proof
+
+The repo now includes a live runtime proof command:
+
+```bash
+npm run runtime:proof:live
+```
+
+For Stripe, it does not call `/api/stripe/webhook` directly. It:
+
+1. creates a real Stripe test-mode customer
+2. attaches `pm_card_visa`
+3. creates a subscription on the configured price
+4. updates the subscription
+5. cancels the subscription
+6. waits for the deployed app to record `customer.subscription.created`, `customer.subscription.updated`, and `customer.subscription.deleted`
+7. verifies `billing_subscriptions`, `billing_webhook_events`, and `stripe_event_log` reflect those deliveries
+
+Safety guard:
+
+- The command refuses to run with `sk_live_...` unless `LIVE_RUNTIME_STRIPE_ALLOW_LIVE=1` is set intentionally.
+
 ## Webhook Hardening Expectations
 1. Signature must validate for every webhook request.
 2. Duplicate event IDs must be ignored without double-applying plan changes.

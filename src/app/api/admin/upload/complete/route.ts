@@ -51,6 +51,74 @@ const DOC_FINALIZE_REQUIRED_COLUMNS = [
 ] as const;
 const MAX_UPLOAD_COMPLETE_BODY_BYTES = 16 * 1024;
 
+export type UploadCompleteRouteDeps = {
+  validatePdfBuffer: typeof validatePdfBuffer;
+  sql: typeof sql;
+  slugify: typeof slugify;
+  requireDocWrite: typeof requireDocWrite;
+  requireUser: typeof requireUser;
+  getPlanForUser: typeof getPlanForUser;
+  incrementUploads: typeof incrementUploads;
+  enforceGlobalApiRateLimit: typeof enforceGlobalApiRateLimit;
+  clientIpKey: typeof clientIpKey;
+  logDbErrorEvent: typeof logDbErrorEvent;
+  logSecurityEvent: typeof logSecurityEvent;
+  detectStorageSpike: typeof detectStorageSpike;
+  getR2Bucket: typeof getR2Bucket;
+  r2Client: typeof r2Client;
+  enqueueDocScan: typeof enqueueDocScan;
+  encryptAes256Gcm: typeof encryptAes256Gcm;
+  generateDataKey: typeof generateDataKey;
+  generateIv: typeof generateIv;
+  wrapDataKey: typeof wrapDataKey;
+  getActiveMasterKeyOrThrow: typeof getActiveMasterKeyOrThrow;
+  getRouteTimeoutMs: typeof getRouteTimeoutMs;
+  isRouteTimeoutError: typeof isRouteTimeoutError;
+  withRouteTimeout: typeof withRouteTimeout;
+  assertRuntimeEnv: typeof assertRuntimeEnv;
+  isRuntimeEnvError: typeof isRuntimeEnvError;
+  validateUploadType: typeof validateUploadType;
+  resolvePublicAppBaseUrl: typeof resolvePublicAppBaseUrl;
+  findMissingPublicTableColumns: typeof findMissingPublicTableColumns;
+  withRequestTelemetry: typeof withRequestTelemetry;
+  jsonError: typeof jsonError;
+  jsonRateLimitError: typeof jsonRateLimitError;
+};
+
+const defaultUploadCompleteRouteDeps: UploadCompleteRouteDeps = {
+  validatePdfBuffer,
+  sql,
+  slugify,
+  requireDocWrite,
+  requireUser,
+  getPlanForUser,
+  incrementUploads,
+  enforceGlobalApiRateLimit,
+  clientIpKey,
+  logDbErrorEvent,
+  logSecurityEvent,
+  detectStorageSpike,
+  getR2Bucket,
+  r2Client,
+  enqueueDocScan,
+  encryptAes256Gcm,
+  generateDataKey,
+  generateIv,
+  wrapDataKey,
+  getActiveMasterKeyOrThrow,
+  getRouteTimeoutMs,
+  isRouteTimeoutError,
+  withRouteTimeout,
+  assertRuntimeEnv,
+  isRuntimeEnvError,
+  validateUploadType,
+  resolvePublicAppBaseUrl,
+  findMissingPublicTableColumns,
+  withRequestTelemetry,
+  jsonError,
+  jsonRateLimitError,
+};
+
 function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
@@ -91,6 +159,14 @@ function uploadFinalizeFailed() {
   return jsonError("UPLOAD_FINALIZE_FAILED", 500);
 }
 
+function uploadFinalizeUnavailableWithDeps(deps: Pick<UploadCompleteRouteDeps, "jsonError">) {
+  return deps.jsonError("UPLOAD_FINALIZE_UNAVAILABLE", 503);
+}
+
+function uploadFinalizeFailedWithDeps(deps: Pick<UploadCompleteRouteDeps, "jsonError">) {
+  return deps.jsonError("UPLOAD_FINALIZE_FAILED", 500);
+}
+
 async function streamToBuffer(body: AsyncIterable<unknown>): Promise<Buffer> {
   const chunks: Buffer[] = [];
   for await (const chunk of body) {
@@ -115,16 +191,19 @@ async function streamToBuffer(body: AsyncIterable<unknown>): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
-export async function POST(req: NextRequest) {
-  const timeoutMs = getRouteTimeoutMs("ROUTE_TIMEOUT_UPLOAD_COMPLETE_MS", 45_000);
+export async function postUploadCompleteRoute(
+  req: NextRequest,
+  deps: UploadCompleteRouteDeps = defaultUploadCompleteRouteDeps
+) {
+  const timeoutMs = deps.getRouteTimeoutMs("ROUTE_TIMEOUT_UPLOAD_COMPLETE_MS", 45_000);
   let stage = "init";
   try {
-    return await withRequestTelemetry(
+    return await deps.withRequestTelemetry(
       req,
-      () => withRouteTimeout(
+      () => deps.withRouteTimeout(
         (async () => {
         stage = "global_rate_limit";
-        const globalRl = await enforceGlobalApiRateLimit({
+        const globalRl = await deps.enforceGlobalApiRateLimit({
           req,
           scope: "ip:api",
           limit: Number(process.env.RATE_LIMIT_API_IP_PER_MIN || 240),
@@ -132,35 +211,35 @@ export async function POST(req: NextRequest) {
           strict: true,
         });
         if (!globalRl.ok) {
-          return jsonRateLimitError(globalRl.status, globalRl.retryAfterSeconds);
+          return deps.jsonRateLimitError(globalRl.status, globalRl.retryAfterSeconds);
         }
 
     stage = "parse_body";
     if (parseJsonBodyLength(req) > MAX_UPLOAD_COMPLETE_BODY_BYTES) {
-      return jsonError("PAYLOAD_TOO_LARGE", 413);
+      return deps.jsonError("PAYLOAD_TOO_LARGE", 413);
     }
     const parsedBody = await req.json().catch(() => null);
     if (!parsedBody || typeof parsedBody !== "object" || Array.isArray(parsedBody)) {
-      return jsonError("BAD_REQUEST", 400, { message: "Request body must be a JSON object." });
+      return deps.jsonError("BAD_REQUEST", 400, { message: "Request body must be a JSON object." });
     }
     const body = parsedBody as CompleteRequest;
 
         stage = "auth";
-        const user = await requireUser();
+        const user = await deps.requireUser();
         stage = "runtime_env";
-        assertRuntimeEnv("upload_complete");
-        const r2Bucket = getR2Bucket();
-        const plan = await getPlanForUser(user.id);
+        deps.assertRuntimeEnv("upload_complete");
+        const r2Bucket = deps.getR2Bucket();
+        const plan = await deps.getPlanForUser(user.id);
 
         // Upload complete throttle per-IP
-        const ipInfo = clientIpKey(req);
+        const ipInfo = deps.clientIpKey(req);
         const baseCompleteLimit = Number(process.env.RATE_LIMIT_UPLOAD_COMPLETE_IP_PER_MIN || 30);
         const freeCompleteLimit = Number(process.env.RATE_LIMIT_UPLOAD_COMPLETE_FREE_IP_PER_MIN || 12);
         const effectiveCompleteLimit =
           plan.id === "free"
             ? Math.max(1, Math.min(baseCompleteLimit, Number.isFinite(freeCompleteLimit) ? freeCompleteLimit : 12))
             : baseCompleteLimit;
-        const completeRl = await enforceGlobalApiRateLimit({
+        const completeRl = await deps.enforceGlobalApiRateLimit({
           req,
           scope: "ip:upload_complete",
           limit: effectiveCompleteLimit,
@@ -168,14 +247,14 @@ export async function POST(req: NextRequest) {
           strict: true,
         });
         if (!completeRl.ok) {
-          await logSecurityEvent({
+          await deps.logSecurityEvent({
             type: "upload_throttle",
             severity: "medium",
             ip: ipInfo.ip,
             scope: "ip:upload_complete",
             message: "Upload complete throttled",
           });
-          return jsonRateLimitError(completeRl.status, completeRl.retryAfterSeconds);
+          return deps.jsonRateLimitError(completeRl.status, completeRl.retryAfterSeconds);
         }
 
     const title = body.title ?? null;
@@ -190,7 +269,7 @@ export async function POST(req: NextRequest) {
       const key = body.r2_key ?? null;
 
       if (bucket && key) {
-        const rows = (await sql`
+        const rows = (await deps.sql`
           select id::text as id
           from public.docs
           where r2_bucket = ${bucket}
@@ -215,11 +294,11 @@ export async function POST(req: NextRequest) {
 
     // AuthZ: must be able to manage this doc.
     stage = "authorize_doc_write";
-    await requireDocWrite(docId);
+    await deps.requireDocWrite(docId);
 
     // 2) Fetch existing doc (for slug fallback)
     stage = "load_doc_row";
-    const docRows = (await sql`
+    const docRows = (await deps.sql`
       select
         id::text as id,
         coalesce(original_filename, title, '')::text as name,
@@ -237,9 +316,9 @@ export async function POST(req: NextRequest) {
 
     stage = "schema_preflight";
     // Strict schema preflight (no fallback writes): fail fast with actionable detail.
-    const missingFinalizeColumns = await findMissingPublicTableColumns("docs", DOC_FINALIZE_REQUIRED_COLUMNS);
+    const missingFinalizeColumns = await deps.findMissingPublicTableColumns("docs", DOC_FINALIZE_REQUIRED_COLUMNS);
     if (missingFinalizeColumns.length > 0) {
-      await logSecurityEvent({
+      await deps.logSecurityEvent({
         type: "upload_complete_schema_mismatch",
         severity: "high",
         ip: ipInfo.ip,
@@ -248,13 +327,13 @@ export async function POST(req: NextRequest) {
         message: "Docs schema missing required upload finalization columns",
         meta: { missingFinalizeColumns },
       });
-      return uploadFinalizeUnavailable();
+      return uploadFinalizeUnavailableWithDeps(deps);
     }
 
     stage = "mark_processing";
     // Legacy deployments may enforce docs_status_check without 'processing'.
     // Keep status as 'uploading' until the final update marks it 'ready'.
-    await sql`
+    await deps.sql`
       update public.docs
       set status = 'uploading'
       where id = ${docId}::uuid
@@ -266,13 +345,13 @@ export async function POST(req: NextRequest) {
     const docBucket = docRows[0].r2_bucket;
     const docKey = docRows[0].r2_key;
     if (!docBucket || !docKey) {
-      return jsonError("MISSING_R2_POINTER", 409);
+      return deps.jsonError("MISSING_R2_POINTER", 409);
     }
 
     // Defensive: ensure this doc points at the configured bucket.
     // (Prevents any future cross-bucket pointer mistakes from becoming a data exfil path.)
     if (docBucket !== r2Bucket) {
-      await logSecurityEvent({
+      await deps.logSecurityEvent({
         type: "upload_complete_bucket_mismatch",
         severity: "high",
         ip: ipInfo.ip,
@@ -281,19 +360,19 @@ export async function POST(req: NextRequest) {
         message: "Doc bucket does not match configured R2 bucket",
         meta: { docBucket, configuredBucket: r2Bucket },
       });
-      return jsonError("BUCKET_MISMATCH", 409);
+      return deps.jsonError("BUCKET_MISMATCH", 409);
     }
 
     const cleanupRejectedObject = async (reason: string, meta?: Record<string, unknown>) => {
       try {
-        await r2Client.send(
+          await deps.r2Client.send(
           new DeleteObjectCommand({
             Bucket: docBucket,
             Key: docKey,
           })
         );
       } catch (e: unknown) {
-        await logSecurityEvent({
+        await deps.logSecurityEvent({
           type: "upload_complete_cleanup_failed",
           severity: "high",
           ip: ipInfo.ip,
@@ -310,7 +389,7 @@ export async function POST(req: NextRequest) {
     const absMax = Number(process.env.UPLOAD_ABSOLUTE_MAX_BYTES || 104_857_600); // 100 MB default
 
     // Pull expected size and encryption flag from DB.
-    const verifyRows = (await sql`
+    const verifyRows = (await deps.sql`
       select
         size_bytes::bigint as size_bytes,
         encryption_enabled::boolean as encryption_enabled
@@ -326,7 +405,7 @@ export async function POST(req: NextRequest) {
     const encryptionEnabled = Boolean(verifyRows?.[0]?.encryption_enabled);
 
     if (!encryptionEnabled) {
-      await logSecurityEvent({
+      await deps.logSecurityEvent({
         type: "upload_complete_encryption_required",
         severity: "high",
         ip: ipInfo.ip,
@@ -335,20 +414,20 @@ export async function POST(req: NextRequest) {
         message: "Upload completion blocked because encryption is not enabled for this doc",
       });
       await cleanupRejectedObject("encryption_required");
-      return jsonError("ENCRYPTION_REQUIRED", 409);
+      return deps.jsonError("ENCRYPTION_REQUIRED", 409);
     }
 
     stage = "head_object";
     let head: HeadObjectCommandOutput;
     try {
-      head = await r2Client.send(
+      head = await deps.r2Client.send(
         new HeadObjectCommand({
           Bucket: docBucket,
           Key: docKey,
         })
       );
     } catch (e: unknown) {
-      await logSecurityEvent({
+      await deps.logSecurityEvent({
         type: "upload_complete_missing_object",
         severity: "high",
         ip: ipInfo.ip,
@@ -357,7 +436,7 @@ export async function POST(req: NextRequest) {
         message: "Upload complete called but R2 object missing",
         meta: { err: e instanceof Error ? e.name || e.message : String(e) },
       });
-      return jsonError("OBJECT_MISSING", 409);
+      return deps.jsonError("OBJECT_MISSING", 409);
     }
 
     const contentLength = Number(head?.ContentLength ?? 0);
@@ -366,10 +445,10 @@ export async function POST(req: NextRequest) {
 
     if (!Number.isFinite(contentLength) || contentLength <= 0) {
       await cleanupRejectedObject("invalid_object", { contentLength });
-      return jsonError("INVALID_OBJECT", 409);
+      return deps.jsonError("INVALID_OBJECT", 409);
     }
     if (Number.isFinite(absMax) && absMax > 0 && contentLength > absMax) {
-      await logSecurityEvent({
+      await deps.logSecurityEvent({
         type: "upload_complete_too_large",
         severity: "high",
         ip: ipInfo.ip,
@@ -379,13 +458,13 @@ export async function POST(req: NextRequest) {
         meta: { contentLength, absMax },
       });
       await cleanupRejectedObject("object_too_large", { contentLength, absMax });
-      return jsonError("OBJECT_TOO_LARGE", 413);
+      return deps.jsonError("OBJECT_TOO_LARGE", 413);
     }
 
     if (Number.isFinite(expectedPlain) && expectedPlain > 0) {
       const allowedSizes = new Set<number>([expectedPlain]);
       if (!allowedSizes.has(contentLength)) {
-        await logSecurityEvent({
+        await deps.logSecurityEvent({
           type: "upload_complete_size_mismatch",
           severity: "high",
           ip: ipInfo.ip,
@@ -395,7 +474,7 @@ export async function POST(req: NextRequest) {
           meta: { expectedPlain, contentLength, encryptionEnabled },
         });
         await cleanupRejectedObject("size_mismatch", { expectedPlain, contentLength, encryptionEnabled });
-        return jsonError("SIZE_MISMATCH", 409);
+        return deps.jsonError("SIZE_MISMATCH", 409);
       }
     }
 
@@ -405,7 +484,7 @@ export async function POST(req: NextRequest) {
     const metaOrigExt = (meta["orig-ext"] || meta["orig_ext"] || "").toString();
 
     if (!metaDocId) {
-      await logSecurityEvent({
+      await deps.logSecurityEvent({
         type: "upload_complete_meta_missing_doc_id",
         severity: "high",
         ip: ipInfo.ip,
@@ -414,11 +493,11 @@ export async function POST(req: NextRequest) {
         message: "R2 object metadata doc-id missing",
       });
       await cleanupRejectedObject("metadata_missing");
-      return jsonError("METADATA_MISSING", 409);
+      return deps.jsonError("METADATA_MISSING", 409);
     }
 
     if (metaDocId !== docId) {
-      await logSecurityEvent({
+      await deps.logSecurityEvent({
         type: "upload_complete_meta_mismatch",
         severity: "high",
         ip: ipInfo.ip,
@@ -428,11 +507,11 @@ export async function POST(req: NextRequest) {
         meta: { metaDocId, docId },
       });
       await cleanupRejectedObject("metadata_mismatch", { metaDocId, docId });
-      return jsonError("METADATA_MISMATCH", 409);
+      return deps.jsonError("METADATA_MISMATCH", 409);
     }
 
     if (!metaOrigCt) {
-      await logSecurityEvent({
+      await deps.logSecurityEvent({
         type: "upload_complete_mime_missing",
         severity: "high",
         ip: ipInfo.ip,
@@ -442,11 +521,11 @@ export async function POST(req: NextRequest) {
         meta: { metaOrigCt, ct, metaOrigExt },
       });
       await cleanupRejectedObject("mime_missing", { metaOrigCt, contentType: ct, metaOrigExt });
-      return jsonError("MIME_MISSING", 409);
+      return deps.jsonError("MIME_MISSING", 409);
     }
 
     if (ct && ct !== metaOrigCt) {
-      await logSecurityEvent({
+      await deps.logSecurityEvent({
         type: "upload_complete_content_type_mismatch",
         severity: "high",
         ip: ipInfo.ip,
@@ -456,7 +535,7 @@ export async function POST(req: NextRequest) {
         meta: { contentType: ct, metaOrigCt },
       });
       await cleanupRejectedObject("content_type_mismatch", { encryptionEnabled: true, contentType: ct, metaOrigCt });
-      return jsonError("CONTENT_TYPE_MISMATCH", 409);
+      return deps.jsonError("CONTENT_TYPE_MISMATCH", 409);
     }
 
     // 4) Read uploaded PDF bytes and validate server-side before encryption.
@@ -466,7 +545,7 @@ export async function POST(req: NextRequest) {
     let riskFlags: Record<string, unknown> | null = null;
     let uploadedBytes: Buffer;
     try {
-      const uploadedObj: GetObjectCommandOutput = await r2Client.send(
+      const uploadedObj: GetObjectCommandOutput = await deps.r2Client.send(
         new GetObjectCommand({
           Bucket: docBucket,
           Key: docKey,
@@ -475,18 +554,18 @@ export async function POST(req: NextRequest) {
       uploadedBytes = await streamToBuffer(uploadedObj.Body as AsyncIterable<unknown>);
     } catch {
       await cleanupRejectedObject("object_read_failed");
-      return jsonError("OBJECT_READ_FAILED", 409);
+      return deps.jsonError("OBJECT_READ_FAILED", 409);
     }
 
     const filenameForValidation = (originalFilename || docRows[0].name || "upload.bin").trim();
     stage = "validate_type";
-    const typeCheck = validateUploadType({
+    const typeCheck = deps.validateUploadType({
       filename: filenameForValidation,
       declaredMime: metaOrigCt || docRows[0].content_type || null,
       bytes: uploadedBytes,
     });
     if (!typeCheck.ok) {
-      await logSecurityEvent({
+      await deps.logSecurityEvent({
         type: "upload_complete_type_validation_failed",
         severity: "high",
         ip: ipInfo.ip,
@@ -496,17 +575,17 @@ export async function POST(req: NextRequest) {
         meta: { error: typeCheck.error, message: typeCheck.message, metaOrigCt, filenameForValidation },
       });
       await cleanupRejectedObject("type_validation_failed_before_encrypt", { error: typeCheck.error });
-      return jsonError(typeCheck.error, 409, { message: typeCheck.message });
+      return deps.jsonError(typeCheck.error, 409, { message: typeCheck.message });
     }
 
     if (typeCheck.canonicalMime === "application/pdf") {
-      const safety = validatePdfBuffer({
+      const safety = deps.validatePdfBuffer({
         bytes: uploadedBytes,
         absMaxBytes: absMax,
         maxPdfPages: Number(process.env.PDF_MAX_PAGES || 2000),
       });
       if (!safety.ok) {
-        await logSecurityEvent({
+        await deps.logSecurityEvent({
           type: "upload_complete_pdf_validation_failed",
           severity: "high",
           ip: ipInfo.ip,
@@ -516,7 +595,7 @@ export async function POST(req: NextRequest) {
           meta: { error: safety.error, message: safety.message, details: safety.details ?? null },
         });
         await cleanupRejectedObject("pdf_validation_failed_before_encrypt", { error: safety.error });
-        return jsonError(safety.error, 409, { message: safety.message });
+        return deps.jsonError(safety.error, 409, { message: safety.message });
       }
       scanStatus = "pending";
       riskLevel = safety.riskLevel;
@@ -536,12 +615,12 @@ export async function POST(req: NextRequest) {
     let encWrapIv: Buffer | null = null;
     let encWrapTag: Buffer | null = null;
     try {
-      const mk = await getActiveMasterKeyOrThrow();
-      const dataKey = generateDataKey();
-      encIv = generateIv();
-      const wrap = wrapDataKey({ dataKey, masterKey: mk.key });
-      const ciphertext = encryptAes256Gcm({ plaintext: uploadedBytes, iv: encIv, key: dataKey });
-      await r2Client.send(
+      const mk = await deps.getActiveMasterKeyOrThrow();
+      const dataKey = deps.generateDataKey();
+      encIv = deps.generateIv();
+      const wrap = deps.wrapDataKey({ dataKey, masterKey: mk.key });
+      const ciphertext = deps.encryptAes256Gcm({ plaintext: uploadedBytes, iv: encIv, key: dataKey });
+      await deps.r2Client.send(
         new PutObjectCommand({
           Bucket: docBucket,
           Key: docKey,
@@ -560,16 +639,16 @@ export async function POST(req: NextRequest) {
       encWrapTag = wrap.tag;
     } catch {
       await cleanupRejectedObject("server_side_encrypt_failed");
-      return uploadFinalizeFailed();
+      return uploadFinalizeFailedWithDeps(deps);
     }
     if (!encIv || !encKeyVersion || !encWrappedKey || !encWrapIv || !encWrapTag) {
       await cleanupRejectedObject("server_side_encrypt_metadata_missing");
-      return uploadFinalizeFailed();
+      return uploadFinalizeFailedWithDeps(deps);
     }
 
     stage = "update_doc";
 // 6) Mark doc ready + update metadata (best-effort)
-    const updatedRows = (await sql`
+    const updatedRows = (await deps.sql`
       update public.docs
       set
         title = coalesce(${title}, title),
@@ -606,10 +685,10 @@ export async function POST(req: NextRequest) {
 stage = "enqueue_scan";
 // 4b) Enqueue async malware scan (best-effort; runs via /api/cron/scan)
 try {
-  await enqueueDocScan({ docId, bucket: docBucket, key: docKey });
+  await deps.enqueueDocScan({ docId, bucket: docBucket, key: docKey });
 } catch (e: unknown) {
   // Non-fatal; upload is still usable unless other rules quarantine it.
-  await logSecurityEvent({
+  await deps.logSecurityEvent({
     type: "malware_scan_enqueue_failed",
     severity: "medium",
     ip: ipInfo.ip,
@@ -623,7 +702,7 @@ stage = "usage_counters";
 // --- Monetization counters (hidden) ---
 // Count this as an upload for the doc owner (usually the signed-in user).
 try {
-  const usageRows = (await sql`
+  const usageRows = (await deps.sql`
     select owner_id::text as owner_id
          , org_id::text as org_id
          , size_bytes::bigint as size_bytes
@@ -635,11 +714,11 @@ try {
   const orgId = usageRows?.[0]?.org_id ?? null;
   const sizeBytes = Number(usageRows?.[0]?.size_bytes ?? 0);
   if (ownerId) {
-    await incrementUploads(ownerId, 1);
+    await deps.incrementUploads(ownerId, 1);
 
     // Storage spike detection (best-effort)
     if (Number.isFinite(sizeBytes) && sizeBytes > 0) {
-      await detectStorageSpike({ ownerId, sizeBytes, ip: ipInfo.ip, orgId, docId });
+      await deps.detectStorageSpike({ ownerId, sizeBytes, ip: ipInfo.ip, orgId, docId });
     }
   }
 } catch (e) {
@@ -650,7 +729,7 @@ try {
 
     stage = "create_alias";
     // 4) Generate alias base
-    let base = slugify(title || originalFilename || existingName || "document");
+    let base = deps.slugify(title || originalFilename || existingName || "document");
     if (!base) base = `doc-${docId.slice(0, 8)}`;
 
     // 5) Create alias with collision handling
@@ -665,7 +744,7 @@ try {
       const candidateAlias = i === 0 ? base : `${base}-${i + 1}`;
 
       try {
-        await sql`
+        await deps.sql`
           insert into public.doc_aliases (alias, doc_id, is_active, expires_at, revoked_at)
           values (${candidateAlias}, ${docId}::uuid, true, now() + (${aliasTtlDays}::int * interval '1 day'), null)
         `;
@@ -678,7 +757,7 @@ try {
           (msg.includes("expires_at") || msg.includes("revoked_at") || msg.includes("is_active"));
         if (missingCol) {
           try {
-            await sql`
+            await deps.sql`
               insert into public.doc_aliases (alias, doc_id)
               values (${candidateAlias}, ${docId}::uuid)
             `;
@@ -693,18 +772,18 @@ try {
     }
 
     if (!finalAlias) {
-      return uploadFinalizeFailed();
+      return uploadFinalizeFailedWithDeps(deps);
     }
 
     stage = "build_view_url";
     let baseUrl: string;
     try {
-      baseUrl = resolvePublicAppBaseUrl(req.url);
+      baseUrl = deps.resolvePublicAppBaseUrl(req.url);
     } catch (e: unknown) {
       // Do not fail upload finalization due to APP_URL/NEXTAUTH_URL configuration.
       // Fallback to request origin so client still receives a usable link.
       const reqOrigin = new URL(req.url).origin;
-      await logSecurityEvent({
+      await deps.logSecurityEvent({
         type: "upload_complete_base_url_fallback",
         severity: "medium",
         ip: ipInfo.ip,
@@ -717,7 +796,7 @@ try {
     }
 
         stage = "done";
-        await logSecurityEvent({
+        await deps.logSecurityEvent({
           type: "upload_complete_success",
           severity: "low",
           ip: ipInfo.ip,
@@ -755,55 +834,59 @@ try {
     if (authCode === "MFA_REQUIRED") {
       return jsonError("MFA_REQUIRED", 403, { message: "Complete MFA to finalize uploads." });
     }
-    if (isRuntimeEnvError(e)) {
-      await logDbErrorEvent({
+    if (deps.isRuntimeEnvError(e)) {
+      await deps.logDbErrorEvent({
         scope: "upload_complete",
         message: "runtime_env_error",
-        ip: clientIpKey(req).ip,
+        ip: deps.clientIpKey(req).ip,
         meta: { route: "/api/admin/upload/complete", stage, code: "RUNTIME_ENV_ERROR" },
       });
-      return uploadFinalizeUnavailable();
+      return uploadFinalizeUnavailableWithDeps(deps);
     }
     console.error("upload_complete_failed", {
       stage,
       code,
       message: msg,
     });
-    if (isRouteTimeoutError(e)) {
-      await logSecurityEvent({
+    if (deps.isRouteTimeoutError(e)) {
+      await deps.logSecurityEvent({
         type: "upload_complete_timeout",
         severity: "high",
-        ip: clientIpKey(req).ip,
+        ip: deps.clientIpKey(req).ip,
       scope: "upload_complete",
       message: "Upload completion exceeded timeout",
       meta: { timeoutMs },
       });
-      return jsonError("UPLOAD_FINALIZE_TIMEOUT", 504);
+      return deps.jsonError("UPLOAD_FINALIZE_TIMEOUT", 504);
     }
     if (code === "42703" || missingColumn) {
-      await logDbErrorEvent({
+      await deps.logDbErrorEvent({
         scope: "upload_complete",
         message: msg,
-        ip: clientIpKey(req).ip,
+        ip: deps.clientIpKey(req).ip,
         meta: { route: "/api/admin/upload/complete", stage, code: code || "42703", missingColumn },
       });
-      return uploadFinalizeUnavailable();
+      return uploadFinalizeUnavailableWithDeps(deps);
     }
     if (code === "42P01") {
-      await logDbErrorEvent({
+      await deps.logDbErrorEvent({
         scope: "upload_complete",
         message: msg,
-        ip: clientIpKey(req).ip,
+        ip: deps.clientIpKey(req).ip,
         meta: { route: "/api/admin/upload/complete", stage, code },
       });
-      return uploadFinalizeUnavailable();
+      return uploadFinalizeUnavailableWithDeps(deps);
     }
-    await logDbErrorEvent({
+    await deps.logDbErrorEvent({
       scope: "upload_complete",
       message: msg,
-      ip: clientIpKey(req).ip,
+      ip: deps.clientIpKey(req).ip,
       meta: { route: "/api/admin/upload/complete", stage, code },
     });
-    return jsonError("UPLOAD_FINALIZE_FAILED", 500, { message: "Unable to finalize upload." });
+    return deps.jsonError("UPLOAD_FINALIZE_FAILED", 500, { message: "Unable to finalize upload." });
   }
+}
+
+export async function POST(req: NextRequest) {
+  return postUploadCompleteRoute(req);
 }
