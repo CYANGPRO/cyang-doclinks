@@ -2,7 +2,7 @@ import type { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
 import { sql } from "@/lib/db";
-import { isSafePasswordCandidate } from "@/lib/password";
+import { normalizeExactPasswordInput } from "@/lib/password";
 import { hasSignupConsentCookie, isSignupEnabled, recordTermsAcceptance, verifyManualCredentials } from "@/lib/signup";
 
 /**
@@ -197,9 +197,9 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         const email = String(credentials?.email || "").trim().toLowerCase();
-        const password = String(credentials?.password || "");
+        const password = normalizeExactPasswordInput(credentials?.password || "", MANUAL_PASSWORD_MAX_LEN);
         if (!isLikelyEmail(email)) return null;
-        if (!isSafePasswordCandidate(password, MANUAL_PASSWORD_MAX_LEN)) return null;
+        if (!password) return null;
         const user = await verifyManualCredentials(email, password);
         if (!user) return null;
         return {

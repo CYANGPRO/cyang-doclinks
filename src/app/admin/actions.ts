@@ -13,6 +13,7 @@ import { generateApiKey, hashApiKey } from "@/lib/apiKeys";
 import { emitWebhook } from "@/lib/webhooks";
 import { appendImmutableAudit } from "@/lib/immutableAudit";
 import { resolveConfiguredPublicAppBaseUrl } from "@/lib/publicBaseUrl";
+import { MAX_SHARE_PASSWORD_LEN, normalizeExactPasswordInput, passwordCharLength } from "@/lib/password";
 
 function getBaseUrl() {
   return resolveConfiguredPublicAppBaseUrl();
@@ -125,7 +126,6 @@ const MAX_ALIAS_LEN = 160;
 const MAX_TOKEN_LEN = 128;
 const MAX_EMAIL_LEN = 320;
 const MAX_REASON_LEN = 512;
-const MAX_PASSWORD_LEN = 256;
 const MAX_API_KEY_NAME_LEN = 120;
 const MAX_BULK_JSON_CHARS = 64 * 1024;
 const MAX_BULK_ITEMS = 500;
@@ -532,10 +532,12 @@ export async function revokeDocShareAction(formData: FormData): Promise<void> {
 // Used as <form action={setSharePasswordAction}>
 export async function setSharePasswordAction(formData: FormData): Promise<void> {
   const token = readFormText(formData, "token", MAX_TOKEN_LEN);
-  const password = readFormText(formData, "password", MAX_PASSWORD_LEN);
+  const passwordInput = String(formData.get("password") || "");
+  const password = normalizeExactPasswordInput(passwordInput, MAX_SHARE_PASSWORD_LEN);
 
   if (!token) throw new Error("Missing token.");
-  if (password.length < 4) throw new Error("Password must be at least 4 characters.");
+  if (!password) throw new Error("Password contains unsupported characters or is too long.");
+  if (passwordCharLength(password) < 4) throw new Error("Password must be at least 4 characters.");
 
   await requireShareWrite(token);
 

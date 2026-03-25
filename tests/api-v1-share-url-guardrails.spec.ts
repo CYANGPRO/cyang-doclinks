@@ -16,5 +16,7 @@ test.describe("api v1 share URL guardrails", () => {
     expect(code.includes("INVALID_TO_EMAIL")).toBeTruthy();
     expect(code.includes("INVALID_PASSWORD")).toBeTruthy();
     expect(code.includes("MAX_COUNTRY_ITEMS")).toBeTruthy();
+    expect(code.includes("parseOptionalExactPasswordInput(")).toBeTruthy();
+    expect(code.includes("const pwd = raw.trim()")).toBeFalsy();
   });
 });

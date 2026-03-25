@@ -14,12 +14,12 @@ import { DEFAULT_SHARE_SETTINGS, PRO_PACK_UPSELL_MESSAGE, applyPack, getPackById
 import { getShareEligibility } from "@/lib/documentStatus";
 import { getRouteTimeoutMs, isRouteTimeoutError, withRouteTimeout } from "@/lib/routeTimeout";
 import { withRequestTelemetry } from "@/lib/perfTelemetry";
+import { MAX_SHARE_PASSWORD_LEN, parseOptionalExactPasswordInput } from "@/lib/password";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const BASIC_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_SHARE_BODY_BYTES = 64 * 1024;
 const MAX_TO_EMAIL_LEN = 320;
-const MAX_SHARE_PASSWORD_LEN = 256;
 const MAX_COUNTRY_ITEMS = 64;
 const MAX_WATERMARK_TEXT_LEN = 400;
 const MAX_PACK_ID_LEN = 64;
@@ -48,12 +48,7 @@ function parseOptionalEmail(value: unknown): string | null {
 }
 
 function parseSharePassword(value: unknown): string | null | "INVALID" {
-  const raw = String(value ?? "");
-  if (!raw) return null;
-  const pwd = raw.trim();
-  if (!pwd) return null;
-  if (pwd.length > MAX_SHARE_PASSWORD_LEN || /[\0]/.test(pwd)) return "INVALID";
-  return pwd;
+  return parseOptionalExactPasswordInput(value, MAX_SHARE_PASSWORD_LEN);
 }
 
 export async function POST(req: NextRequest) {

@@ -11,6 +11,7 @@ import { resolveConfiguredPublicAppBaseUrl } from "@/lib/publicBaseUrl";
 import { DEFAULT_SHARE_SETTINGS, PRO_PACK_UPSELL_MESSAGE, applyPack, getPackById, isPackAvailableForPlan } from "@/lib/packs";
 import { getShareEligibility } from "@/lib/documentStatus";
 import { sendHtmlEmail } from "@/lib/email";
+import { MAX_SHARE_PASSWORD_LEN, normalizeExactPasswordInput, passwordCharLength } from "@/lib/password";
 
 /**
  * NOTE:
@@ -55,7 +56,6 @@ const MAX_DOC_ID_LEN = 64;
 const MAX_ALIAS_LEN = 160;
 const MAX_TOKEN_LEN = 128;
 const MAX_EMAIL_LEN = 320;
-const MAX_PASSWORD_LEN = 256;
 const MAX_PACK_ID_LEN = 64;
 const MAX_DATE_OVERRIDE_LEN = 64;
 const MAX_COUNTRY_FIELD_LEN = 2048;
@@ -68,6 +68,12 @@ function readFormText(formData: FormData, key: string, maxLen: number): string {
   const value = raw.trim();
   if (value.length > maxLen) return "";
   return value;
+}
+
+function readExactPasswordField(formData: FormData, key: string, maxLen: number): string {
+  const raw = String(formData.get(key) || "");
+  if (passwordCharLength(raw) > maxLen || /[\u0000-\u001F\u007F]/u.test(raw)) return "";
+  return raw;
 }
 
 function newToken(): string {
@@ -225,7 +231,7 @@ export async function createAndEmailShareToken(
     const shareTitleRaw = readFormText(form, "shareTitle", MAX_SHARE_TITLE_LEN);
     const shareTitle = shareTitleRaw ? shareTitleRaw.slice(0, MAX_SHARE_TITLE_LEN) : null;
     const toEmailRaw = readFormText(form, "toEmail", MAX_EMAIL_LEN);
-    const passwordRaw = readFormText(form, "password", MAX_PASSWORD_LEN);
+    const passwordRaw = readExactPasswordField(form, "password", MAX_SHARE_PASSWORD_LEN);
     const selectedPackRaw = readFormText(form, "packId", MAX_PACK_ID_LEN);
     const selectedPack = getPackById(selectedPackRaw);
 
@@ -313,7 +319,13 @@ export async function createAndEmailShareToken(
     const allowDownload = resolvedSettings.allowDownload;
     const watermarkEnabled = resolvedSettings.watermarkEnabled;
 
-    const password = passwordRaw.trim();
+    const password = normalizeExactPasswordInput(passwordRaw, MAX_SHARE_PASSWORD_LEN) ?? "";
+    if (passwordRaw && !password) {
+      return { ok: false, error: "INVALID_PASSWORD", message: "Password contains unsupported characters or is too long." };
+    }
+    if (password && passwordCharLength(password) < 4) {
+      return { ok: false, error: "INVALID_PASSWORD", message: "Password must be at least 4 characters." };
+    }
     const passwordHash = password ? await bcrypt.hash(password, 10) : null;
     const parseCountries = (raw: string): string[] | null => {
       if (!raw) return null;

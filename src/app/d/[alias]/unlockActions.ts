@@ -12,6 +12,7 @@ import {
 } from "@/lib/deviceTrust";
 import { deviceHashFrom, getClientIpFromHeaders, getUserAgentFromHeaders, isDeviceTrustedForDoc, trustDeviceForDoc } from "@/lib/audit";
 import { rateLimit, stableHash } from "@/lib/rateLimit";
+import { MAX_SHARE_PASSWORD_LEN, normalizeExactPasswordInput } from "@/lib/password";
 
 type VerifyAliasPasswordResult =
     | { ok: true }
@@ -126,7 +127,7 @@ export async function isAliasUnlockedAction(aliasInput: string): Promise<boolean
 
 export async function verifyAliasPasswordResultAction(formData: FormData): Promise<VerifyAliasPasswordResult> {
     const alias = normAlias(String(formData.get("alias") || ""));
-    const password = String(formData.get("password") || "");
+    const password = normalizeExactPasswordInput(formData.get("password"), MAX_SHARE_PASSWORD_LEN) ?? "";
     if (!alias) return { ok: false, error: "not_found", message: "Missing alias." };
 
     const row = await getAliasRow(alias);

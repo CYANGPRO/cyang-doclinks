@@ -232,6 +232,15 @@ test.describe("api route guardrails", () => {
     }
   });
 
+  test("health routes expose only external summaries on public endpoints", () => {
+    const live = src("src/app/api/health/live/route.ts");
+    const publicHealth = src("src/app/api/health/public/route.ts");
+    expect(live.includes("toExternalHealthSummary(")).toBeTruthy();
+    expect(live.includes("buildLivenessSummary()")).toBeTruthy();
+    expect(live.includes("NextResponse.json(buildLivenessSummary())")).toBeFalsy();
+    expect(publicHealth.includes("getCachedPublicHealthSnapshot()")).toBeTruthy();
+  });
+
   test("admin control-plane routes use route timeout guards", () => {
     const routes = [
       "src/app/api/admin/abuse/route.ts",

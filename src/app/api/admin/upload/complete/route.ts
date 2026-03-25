@@ -764,12 +764,10 @@ try {
       });
       return uploadFinalizeUnavailable();
     }
-    const stack = e instanceof Error ? e.stack || null : null;
     console.error("upload_complete_failed", {
       stage,
       code,
       message: msg,
-      stack,
     });
     if (isRouteTimeoutError(e)) {
       await logSecurityEvent({

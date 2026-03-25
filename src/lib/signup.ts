@@ -5,6 +5,7 @@ import { readPreferredEnvBoolean } from "@/lib/envConfig";
 import {
   hashPassword,
   hasUnsupportedPasswordChars,
+  normalizeExactPasswordInput,
   passwordCharLength,
   verifyPassword,
 } from "@/lib/password";
@@ -156,7 +157,7 @@ export async function createOrRefreshManualSignup(input: ManualSignupInput): Pro
   const company = normalizeTextField(input.company, MAX_SIGNUP_COMPANY_LEN);
   const jobTitle = normalizeOptionalTextField(input.jobTitle, MAX_SIGNUP_JOB_TITLE_LEN);
   const country = normalizeTextField(input.country, MAX_SIGNUP_COUNTRY_LEN);
-  const password = String(input.password || "");
+  const password = normalizeExactPasswordInput(input.password, MAX_COMPLEXITY_PASSWORD_LEN);
   if (!email || !firstName || !lastName || !company || !country || !password) {
     throw new Error("INVALID_SIGNUP_INPUT");
   }
@@ -331,11 +332,11 @@ export async function resetManualPassword(args: {
 }): Promise<{ ok: true; email: string }> {
   const email = normalizeEmail(args.email);
   const token = String(args.token || "");
-  const password = String(args.password || "");
+  const password = normalizeExactPasswordInput(args.password, MAX_COMPLEXITY_PASSWORD_LEN);
   if (!email || !token || token.length > MAX_ACTIVATION_TOKEN_LEN || /[\r\n\0]/.test(token)) {
     throw new Error("INVALID_TOKEN");
   }
-  if (validatePasswordComplexity(password)) {
+  if (!password || validatePasswordComplexity(password)) {
     throw new Error("INVALID_PASSWORD");
   }
 
@@ -384,8 +385,8 @@ export async function resetManualPassword(args: {
 export async function verifyManualCredentials(emailRaw: string, password: string): Promise<null | { email: string; name: string }> {
   if (!(await signupTablesReady())) return null;
   const email = normalizeEmail(emailRaw);
-  const rawPassword = String(password || "");
-  if (!email || !rawPassword || hasUnsupportedPasswordChars(rawPassword) || passwordCharLength(rawPassword) > 4096) return null;
+  const rawPassword = normalizeExactPasswordInput(password, 4096);
+  if (!email || !rawPassword) return null;
 
   const rows = (await sql`
     select

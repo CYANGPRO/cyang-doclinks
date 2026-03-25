@@ -79,6 +79,10 @@ function toLatencyDetails(startedAt: number, details?: Record<string, unknown>) 
   };
 }
 
+function failureDetails(startedAt: number, reason: string) {
+  return toLatencyDetails(startedAt, { reason });
+}
+
 function externalSummaryText(status: HealthSummary["status"]) {
   if (status === "ok") return "Core service readiness is operating normally.";
   if (status === "degraded") return "Core service readiness is degraded.";
@@ -171,15 +175,13 @@ async function probeDatabase(): Promise<HealthCheck> {
         usersTableReady: Boolean(row.users),
       }),
     };
-  } catch (error: unknown) {
+  } catch {
     return {
       name: "database",
       state: "down",
       critical: true,
       summary: "Database dependency is unavailable.",
-      details: toLatencyDetails(startedAt, {
-        error: error instanceof Error ? error.message.slice(0, 120) : "db_error",
-      }),
+      details: failureDetails(startedAt, "db_error"),
     };
   }
 }
@@ -201,20 +203,15 @@ async function probeStorage(): Promise<HealthCheck> {
       state: "ok",
       critical: true,
       summary: "Object storage reachable.",
-      details: toLatencyDetails(startedAt, {
-        bucket,
-        prefix,
-      }),
+      details: toLatencyDetails(startedAt),
     };
-  } catch (error: unknown) {
+  } catch {
     return {
       name: "storage",
       state: "down",
       critical: true,
       summary: "Object storage dependency is unavailable.",
-      details: toLatencyDetails(startedAt, {
-        error: error instanceof Error ? error.message.slice(0, 120) : "storage_error",
-      }),
+      details: failureDetails(startedAt, "storage_error"),
     };
   }
 }
@@ -234,7 +231,7 @@ async function probeScanQueue(): Promise<HealthCheck> {
         state: "down",
         critical: true,
         summary: "Malware scan queue schema is missing.",
-        details: toLatencyDetails(startedAt),
+        details: failureDetails(startedAt, "scan_queue_schema_missing"),
       };
     }
 
@@ -291,15 +288,13 @@ async function probeScanQueue(): Promise<HealthCheck> {
         runningTimeoutMinutes,
       }),
     };
-  } catch (error: unknown) {
+  } catch {
     return {
       name: "scan_queue",
       state: "down",
       critical: true,
       summary: "Malware scan queue health could not be determined.",
-      details: toLatencyDetails(startedAt, {
-        error: error instanceof Error ? error.message.slice(0, 120) : "scan_queue_error",
-      }),
+      details: failureDetails(startedAt, "scan_queue_error"),
     };
   }
 }
@@ -324,15 +319,13 @@ async function probeBackupRecovery(): Promise<HealthCheck> {
         recoveryDrillDue: summary.recoveryDrillDue,
       }),
     };
-  } catch (error: unknown) {
+  } catch {
     return {
       name: "backup_recovery",
       state: "degraded",
       critical: false,
       summary: "Backup health summary is unavailable.",
-      details: toLatencyDetails(startedAt, {
-        error: error instanceof Error ? error.message.slice(0, 120) : "backup_error",
-      }),
+      details: failureDetails(startedAt, "backup_error"),
     };
   }
 }
@@ -355,15 +348,13 @@ async function probeKeyRotation(): Promise<HealthCheck> {
         failed: summary.failed,
       }),
     };
-  } catch (error: unknown) {
+  } catch {
     return {
       name: "key_rotation",
       state: "degraded",
       critical: false,
       summary: "Key rotation summary is unavailable.",
-      details: toLatencyDetails(startedAt, {
-        error: error instanceof Error ? error.message.slice(0, 120) : "key_rotation_error",
-      }),
+      details: failureDetails(startedAt, "key_rotation_error"),
     };
   }
 }
@@ -543,7 +534,7 @@ export async function getCachedPublicHealthSnapshot(): Promise<PublicHealthSnaps
         expiresAt: Date.now() + getPublicHealthCacheMs(),
       };
       return snapshot;
-    } catch (error: unknown) {
+    } catch {
       if (publicHealthCache) {
         return publicHealthCache.snapshot;
       }

@@ -9,6 +9,7 @@ import { sql } from "@/lib/db";
 import { getHashingSalt, readEnvInt } from "@/lib/envConfig";
 import { resolveShareGateMeta } from "@/lib/shareGateMeta";
 import { rateLimit, stableHash } from "@/lib/rateLimit";
+import { normalizeExactPasswordInput } from "@/lib/password";
 
 const UNLOCK_HOURS = 8;
 const RATE_LIMIT_PER_MIN = 10;
@@ -25,6 +26,10 @@ function cleanText(raw: unknown, maxLen: number): string {
     const trimmed = value.trim();
     if (trimmed.length > maxLen) return "";
     return trimmed;
+}
+
+function readExactPassword(raw: unknown): string {
+    return normalizeExactPasswordInput(raw, MAX_PASSWORD_LEN) ?? "";
 }
 
 function isShareToken(value: string): boolean {
@@ -143,7 +148,7 @@ export async function verifySharePasswordCore(
     formData: FormData
 ): Promise<VerifySharePasswordResult> {
     const token = cleanText(formData.get("token"), MAX_TOKEN_LEN);
-    const password = cleanText(formData.get("password"), MAX_PASSWORD_LEN);
+    const password = readExactPassword(formData.get("password"));
     const emailInput = cleanText(formData.get("email"), MAX_EMAIL_LEN).toLowerCase();
 
     if (!token || !isShareToken(token)) return { ok: false, error: "not_found", message: "Missing token." };

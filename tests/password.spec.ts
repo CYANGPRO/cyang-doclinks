@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { hashPassword, verifyPassword } from "../src/lib/password";
+import { hashPassword, normalizeExactPasswordInput, parseOptionalExactPasswordInput, verifyPassword } from "../src/lib/password";
 
 test.describe("password helpers", () => {
   test("hashes password with scrypt format and verifies correct secret", () => {
@@ -43,5 +43,28 @@ test.describe("password helpers", () => {
     const hash = hashPassword(password);
     expect(verifyPassword(password, hash)).toBeTruthy();
     expect(verifyPassword(password.trim(), hash)).toBeFalsy();
+  });
+
+  test("does not normalize canonically equivalent unicode forms", () => {
+    const nfc = "Caf\u00e9🔒StrongPass123!";
+    const nfd = "Cafe\u0301🔒StrongPass123!";
+    const hash = hashPassword(nfc);
+    expect(verifyPassword(nfc, hash)).toBeTruthy();
+    expect(verifyPassword(nfd, hash)).toBeFalsy();
+  });
+
+  test("normalizes exact password input without trimming or unicode folding", () => {
+    expect(normalizeExactPasswordInput("  Pa\u00df🔒word123!  ", 64)).toBe("  Pa\u00df🔒word123!  ");
+    expect(normalizeExactPasswordInput("Pass\u0000word", 64)).toBeNull();
+    expect(normalizeExactPasswordInput("x".repeat(65), 64)).toBeNull();
+  });
+
+  test("parses optional exact password input consistently for share-style passwords", () => {
+    expect(parseOptionalExactPasswordInput(undefined, 32)).toBeNull();
+    expect(parseOptionalExactPasswordInput("", 32)).toBeNull();
+    expect(parseOptionalExactPasswordInput("   ", 32)).toBe("   ");
+    expect(parseOptionalExactPasswordInput("🔐AccéntedПароль", 32)).toBe("🔐AccéntedПароль");
+    expect(parseOptionalExactPasswordInput("bad\tpassword", 32)).toBe("INVALID");
+    expect(parseOptionalExactPasswordInput("x".repeat(33), 32)).toBe("INVALID");
   });
 });
