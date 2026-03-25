@@ -3,7 +3,7 @@
 import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, rmSync } from "node:fs";
 import { runCheckPlan } from "./lib/check-runner.mjs";
-import { assertProofToolingInstalled } from "./lib/proof-install.mjs";
+import { assertProofCliEntrypointsWork, assertProofToolingInstalled } from "./lib/proof-install.mjs";
 import { evaluateProofRuntime } from "./lib/proof-baseline.mjs";
 import { withProofLock } from "./lib/proof-lock.mjs";
 
@@ -78,6 +78,7 @@ await withProofLock({ label: "prove:build" }, async () => {
   ensureBaselineVersions();
   try {
     assertProofToolingInstalled();
+    assertProofCliEntrypointsWork();
   } catch (error) {
     fail(error instanceof Error ? error.message : String(error));
   }
@@ -85,15 +86,16 @@ await withProofLock({ label: "prove:build" }, async () => {
   ensureProofEnv();
 
   const commands = [
-    { label: "Lint", command: "npm", args: ["run", "lint"] },
-    { label: "Typecheck", command: "npm", args: ["run", "typecheck"] },
-    { label: "Production build", command: "npm", args: ["run", "build"] },
+    { label: "Lint", command: "npm", args: ["run", "lint"], timeoutMs: 10 * 60 * 1000 },
+    { label: "Typecheck", command: "npm", args: ["run", "typecheck"], timeoutMs: 15 * 60 * 1000 },
+    { label: "Production build", command: "npm", args: ["run", "build"], timeoutMs: 30 * 60 * 1000 },
     {
       label: "Regression tests",
       command: "npm",
       args: ["test", "--", "--runInBand", "--require-existing-build"],
+      timeoutMs: 45 * 60 * 1000,
     },
-    { label: "Bundle budget audit", command: "npm", args: ["run", "audit:bundle-budgets"] },
+    { label: "Bundle budget audit", command: "npm", args: ["run", "audit:bundle-budgets"], timeoutMs: 10 * 60 * 1000 },
     {
       label: "Production readiness",
       command: "node",
@@ -104,10 +106,11 @@ await withProofLock({ label: "prove:build" }, async () => {
         "--skip-build",
         "--skip-bundle-budgets",
       ],
+      timeoutMs: 20 * 60 * 1000,
     },
   ];
 
-  runCheckPlan({
+  await runCheckPlan({
     title: "Build proof",
     steps: commands.map((step) => ({
       ...step,
@@ -118,4 +121,6 @@ await withProofLock({ label: "prove:build" }, async () => {
   });
 
   console.log("\nBuild proof sequence passed.");
+  console.log("Locally proven: lint, typecheck, production build, deterministic regression tests, bundle budgets, and repo release/readiness audits.");
+  console.log("Not proven here: live Postgres, R2, Stripe delivery, email providers, malware scanning endpoints, or deployed-secret wiring.");
 });

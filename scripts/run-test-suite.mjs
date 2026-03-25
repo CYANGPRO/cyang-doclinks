@@ -2,6 +2,7 @@
 
 import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync } from "node:fs";
+import { getPlaywrightInstallInvocation } from "./lib/playwright-runtime.mjs";
 import { listSuiteFiles } from "./lib/test-suites.mjs";
 import { withProofLock } from "./lib/proof-lock.mjs";
 
@@ -90,6 +91,10 @@ await withProofLock({ label: "run-test-suite" }, async () => {
     copyFileSync(".env.example", ".env.local");
     console.log("Prepared .env.local from .env.example for the test run.");
   }
+
+  const playwrightInstall = getPlaywrightInstallInvocation();
+  console.log(`Ensuring ${playwrightInstall.scope} is installed before the Playwright-backed suite.`);
+  run(playwrightInstall.command, playwrightInstall.args);
 
   const buildState = getProductionBuildState();
   if (!buildState.usable) {

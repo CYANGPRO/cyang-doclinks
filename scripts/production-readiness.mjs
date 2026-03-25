@@ -20,18 +20,18 @@ await withProofLock({ label: "production-readiness" }, async () => {
   }
 
   const commands = [
-    { label: "Env template audit", command: "npm", args: ["run", "audit:env-example"] },
-    { label: "Migration manifest verify", command: "node", args: ["scripts/migrate.mjs", "verify"] },
-    { label: "Admin route audit", command: "npm", args: ["run", "audit:admin-routes"] },
-    { label: "Admin polling audit", command: "npm", args: ["run", "audit:admin-polling"] },
-    { label: "Public rendering audit", command: "npm", args: ["run", "audit:public-rendering"] },
-    { label: "Route-handler audit", command: "npm", args: ["run", "audit:route-handlers"] },
-    { label: "Polling audit", command: "npm", args: ["run", "audit:polling"] },
-    ...(skipLint ? [] : [{ label: "Lint", command: "npm", args: ["run", "lint"] }]),
-    ...(skipTypecheck ? [] : [{ label: "Typecheck", command: "npm", args: ["run", "typecheck"] }]),
-    ...(skipBuild ? [] : [{ label: "Production build", command: "npm", args: ["run", "build"] }]),
-    ...(skipBundleBudgets ? [] : [{ label: "Bundle budget audit", command: "npm", args: ["run", "audit:bundle-budgets"] }]),
-    { label: "Production dependency audit", command: "npm", args: ["audit", "--omit=dev", "--audit-level=high"] },
+    { label: "Env template audit", command: "npm", args: ["run", "audit:env-example"], timeoutMs: 5 * 60 * 1000 },
+    { label: "Migration manifest verify", command: "node", args: ["scripts/migrate.mjs", "verify"], timeoutMs: 5 * 60 * 1000 },
+    { label: "Admin route audit", command: "npm", args: ["run", "audit:admin-routes"], timeoutMs: 5 * 60 * 1000 },
+    { label: "Admin polling audit", command: "npm", args: ["run", "audit:admin-polling"], timeoutMs: 5 * 60 * 1000 },
+    { label: "Public rendering audit", command: "npm", args: ["run", "audit:public-rendering"], timeoutMs: 5 * 60 * 1000 },
+    { label: "Route-handler audit", command: "npm", args: ["run", "audit:route-handlers"], timeoutMs: 5 * 60 * 1000 },
+    { label: "Polling audit", command: "npm", args: ["run", "audit:polling"], timeoutMs: 5 * 60 * 1000 },
+    ...(skipLint ? [] : [{ label: "Lint", command: "npm", args: ["run", "lint"], timeoutMs: 10 * 60 * 1000 }]),
+    ...(skipTypecheck ? [] : [{ label: "Typecheck", command: "npm", args: ["run", "typecheck"], timeoutMs: 15 * 60 * 1000 }]),
+    ...(skipBuild ? [] : [{ label: "Production build", command: "npm", args: ["run", "build"], timeoutMs: 30 * 60 * 1000 }]),
+    ...(skipBundleBudgets ? [] : [{ label: "Bundle budget audit", command: "npm", args: ["run", "audit:bundle-budgets"], timeoutMs: 10 * 60 * 1000 }]),
+    { label: "Production dependency audit", command: "npm", args: ["audit", "--omit=dev", "--audit-level=high"], timeoutMs: 10 * 60 * 1000 },
     {
       label: "Release gate",
       command: "node",
@@ -41,10 +41,11 @@ await withProofLock({ label: "production-readiness" }, async () => {
         "--summary-json",
         RELEASE_GATE_SUMMARY_PATH,
       ],
+      timeoutMs: 10 * 60 * 1000,
     },
   ];
 
-  runCheckPlan({
+  await runCheckPlan({
     title: "Production readiness",
     steps: commands,
   });

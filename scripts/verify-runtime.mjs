@@ -17,7 +17,7 @@ await withProofLock({ label: "verify:runtime" }, async () => {
   console.log("- health: injectable dependency summary adapter");
   console.log("- audit + restore: deterministic in-memory/script adapters");
 
-  runCheckPlan({
+  await runCheckPlan({
     title: "Local runtime verification",
     env,
     steps: [
@@ -31,6 +31,7 @@ await withProofLock({ label: "verify:runtime" }, async () => {
           ...(requireExistingBuild ? ["--require-existing-build"] : []),
           ...files,
         ],
+        timeoutMs: 45 * 60 * 1000,
         spawnFailureMessage:
           "could not spawn the deterministic runtime proof suite in the current Windows sandbox. " +
           "Rerun verify:runtime outside the sandbox or grant broader process-spawn permissions.",

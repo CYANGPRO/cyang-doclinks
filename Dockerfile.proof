@@ -1,0 +1,17 @@
+# syntax=docker/dockerfile:1.7
+
+FROM node:22.16.0-bookworm AS proof
+
+ENV CI=1 \
+    NEXT_TELEMETRY_DISABLED=1 \
+    PROOF_PLAYWRIGHT_INSTALL_WITH_DEPS=1 \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+WORKDIR /app
+
+COPY package.json package-lock.json .npmrc ./
+RUN npm ci
+
+COPY . .
+
+RUN npm run prove:build

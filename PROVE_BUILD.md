@@ -54,13 +54,29 @@ Notes:
 - The committed `.npmrc` forces proof installs to include devDependencies even if the ambient environment sets production-leaning npm defaults.
 - `npm run prove:build` prefers the pinned baseline and warns when the runtime is only engine-compatible; it fails if Node/npm are outside the repo engine range.
 - `npm run prove:build` now fails fast with an explicit install message if repo-local proof tooling such as `eslint`, `typescript`, `next`, Playwright, or `start-server-and-test` is missing after install.
+- Before lint starts, the wrapper also verifies that repo-local CLI entrypoints such as `eslint`, `next`, `tsc`, and `playwright` actually launch through `npm exec`, so partial installs fail immediately instead of surfacing later as `eslint: not found`.
 - The wrapper removes any existing `.next` directory first so the proof always rebuilds from a clean production artifact state.
 - If `.env.local` is missing, the wrapper prepares it from the committed `.env.example`.
 - The wrapper now builds before running the Playwright-backed regression suite, and the test step is told to reuse that exact production artifact instead of silently rebuilding.
+- The Playwright-backed regression step now provisions the repo-local Chromium runtime itself, so a fresh checkout does not depend on a reviewer already having Playwright browsers installed.
 - The proof and readiness wrappers serialize through a shared repo lock, so concurrent proof invocations wait instead of racing on `.next`, local servers, or proof artifacts.
 - Real production secrets are not required for the proof sequence.
 - `production-readiness` and `release:gate` already degrade safely when real deployment infrastructure is not configured.
 - The proof wrappers now end with an explicit pass/fail step summary so reviewers can see which exact proof stage failed.
+- Long-running proof phases emit periodic "still running" progress logs and terminate with explicit timeout errors if they exceed the proof budget, so a stuck `next build` does not look like a silent hang.
+
+## Docker Proof Path
+
+The isolated container proof is intentionally the same contract, just run inside the pinned Linux baseline with Playwright Linux dependencies enabled:
+
+```bash
+docker build --no-cache -f Dockerfile.proof -t cyang-doclinks-proof .
+```
+
+What Docker adds, and only why:
+- `Dockerfile.proof` uses the pinned baseline image `node:22.16.0-bookworm`.
+- It sets `PROOF_PLAYWRIGHT_INSTALL_WITH_DEPS=1` so the same repo proof wrapper installs Chromium together with the Linux OS packages Playwright needs in a clean container.
+- It still runs the exact same top-level repo contract: `npm ci` followed by `npm run prove:build`.
 
 ## Exact Wrapped Sequence
 
@@ -88,6 +104,7 @@ What each command verifies:
   - Next.js production build correctness
 - `npm test -- --runInBand --require-existing-build`
   - Playwright-based regression coverage against the exact production artifact built earlier in the proof flow, failing clearly if the required `.next` manifests are absent
+  - repo-local Playwright Chromium runtime provisioning before the suite starts, so the proof does not rely on a pre-warmed browser cache
 - `npm run audit:bundle-budgets`
   - route-level client bundle budget checks
 - `node scripts/production-readiness.mjs --skip-lint --skip-typecheck --skip-build --skip-bundle-budgets`
@@ -109,6 +126,7 @@ The proof and test wrappers now surface that case explicitly so reviewers know t
 - `.env.example` intentionally keeps a small explicit set of documented extra keys. See `docs/environment-ownership.md` and `scripts/lib/env-example-manifest.mjs`.
 - `production-readiness` skips live migration-status validation when `DATABASE_URL` is not configured with a real database. Migration manifest verification still runs and must pass.
 - The proof path validates build, type safety, tests, and repo guardrails. It does not claim live third-party integrations are reachable with placeholder secrets.
+- The Docker proof validates the same contract inside the pinned Linux baseline, but it still does not claim live third-party integrations are reachable.
 
 ## Real Infrastructure Boundaries
 
