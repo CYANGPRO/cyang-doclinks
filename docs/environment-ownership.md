@@ -19,6 +19,8 @@ You do not need live third-party credentials for:
 - `npm run production-readiness`
 - local UI development against placeholder values
 
+`prove:build` prefers the pinned Volta baseline, but it now accepts any Node/npm pair that satisfies the repo engine range. The pinned baseline remains the recommended reproducible proof runtime.
+
 ## 2. Deploy Required
 
 Real staging/production deployments must replace the placeholders for:

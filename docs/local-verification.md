@@ -17,6 +17,8 @@ This command loads `.env.example`, overlays `.env.local.verify.example`, and the
 - `npm run build`
 - deterministic runtime-proof suites through `npm run verify:runtime`
 
+The proof entrypoints now share a repo-level proof lock. If another proof command is already active, the next one waits instead of racing on `.next`, the local server, or proof artifacts.
+
 ## Test Command Split
 
 The repo test entrypoints now separate deterministic and environment-gated behavior:

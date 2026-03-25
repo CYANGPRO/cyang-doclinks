@@ -10,6 +10,8 @@ Run this on a fresh machine or CI worker:
 npm run production-readiness
 ```
 
+Proof and readiness entrypoints are serialized through a shared repo-level lock, so concurrent proof commands wait rather than colliding with each other.
+
 It validates:
 
 - `.env.example` completeness

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { runLiveRuntimeProof } from "./lib/live-runtime-proof.mjs";
+import { withProofLock } from "./lib/proof-lock.mjs";
 
 function argValue(flag) {
   const index = process.argv.indexOf(flag);
@@ -10,7 +11,9 @@ function argValue(flag) {
 
 async function main() {
   const summaryPath = argValue("--summary-json");
-  await runLiveRuntimeProof({ summaryPath });
+  await withProofLock({ label: "runtime:proof:live" }, async () => {
+    await runLiveRuntimeProof({ summaryPath });
+  });
 }
 
 main().catch((error) => {

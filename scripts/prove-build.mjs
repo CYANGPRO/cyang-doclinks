@@ -3,9 +3,13 @@
 import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, rmSync } from "node:fs";
 import { runCheckPlan } from "./lib/check-runner.mjs";
+import { evaluateProofRuntime } from "./lib/proof-baseline.mjs";
+import { withProofLock } from "./lib/proof-lock.mjs";
 
 const REQUIRED_NODE = "22.16.0";
 const REQUIRED_NPM = "10.9.2";
+const PACKAGE_NODE_ENGINE = ">=22.16.0 <25";
+const PACKAGE_NPM_ENGINE = ">=10.9.2 <12";
 
 function fail(message) {
   console.error(`Build proof preflight failed: ${message}`);
@@ -14,9 +18,6 @@ function fail(message) {
 
 function ensureBaselineVersions() {
   const nodeVersion = process.version.replace(/^v/, "");
-  if (nodeVersion !== REQUIRED_NODE) {
-    fail(`expected Node.js ${REQUIRED_NODE} but found ${nodeVersion}. Use the pinned proof baseline before running prove:build.`);
-  }
 
   const npmVersionResult = spawnSync(process.platform === "win32" ? "cmd.exe" : "npm", process.platform === "win32" ? ["/d", "/s", "/c", "npm", "--version"] : ["--version"], {
     stdio: ["ignore", "pipe", "pipe"],
@@ -32,8 +33,28 @@ function ensureBaselineVersions() {
   }
 
   const npmVersion = String(npmVersionResult.stdout || "").trim();
-  if (npmVersion !== REQUIRED_NPM) {
-    fail(`expected npm ${REQUIRED_NPM} but found ${npmVersion}. Use the pinned proof baseline before running prove:build.`);
+  const evaluation = evaluateProofRuntime({
+    actualNodeVersion: nodeVersion,
+    actualNpmVersion: npmVersion,
+    requiredNodeVersion: REQUIRED_NODE,
+    requiredNpmVersion: REQUIRED_NPM,
+    nodeEngineRange: PACKAGE_NODE_ENGINE,
+    npmEngineRange: PACKAGE_NPM_ENGINE,
+  });
+
+  if (!evaluation.engineCompatible) {
+    fail(
+      `expected Node.js ${PACKAGE_NODE_ENGINE} and npm ${PACKAGE_NPM_ENGINE}, ` +
+      `but found Node.js ${nodeVersion} and npm ${npmVersion}. ` +
+      "Use an engine-compatible runtime before running prove:build."
+    );
+  }
+
+  if (!evaluation.exactPinned) {
+    console.warn(
+      `Build proof preflight warning: running on Node.js ${nodeVersion} / npm ${npmVersion} instead of the pinned baseline ` +
+      `${REQUIRED_NODE} / ${REQUIRED_NPM}. The proof run will continue because the runtime is engine-compatible.`
+    );
   }
 }
 
@@ -52,41 +73,43 @@ function cleanProofArtifacts() {
   console.log("Removed existing .next so prove:build runs from a clean production build.");
 }
 
-ensureBaselineVersions();
-cleanProofArtifacts();
-ensureProofEnv();
+await withProofLock({ label: "prove:build" }, async () => {
+  ensureBaselineVersions();
+  cleanProofArtifacts();
+  ensureProofEnv();
 
-const commands = [
-  { label: "Lint", command: "npm", args: ["run", "lint"] },
-  { label: "Typecheck", command: "npm", args: ["run", "typecheck"] },
-  { label: "Production build", command: "npm", args: ["run", "build"] },
-  {
-    label: "Regression tests",
-    command: "npm",
-    args: ["test", "--", "--runInBand", "--require-existing-build"],
-  },
-  { label: "Bundle budget audit", command: "npm", args: ["run", "audit:bundle-budgets"] },
-  {
-    label: "Production readiness",
-    command: "node",
-    args: [
-      "scripts/production-readiness.mjs",
-      "--skip-lint",
-      "--skip-typecheck",
-      "--skip-build",
-      "--skip-bundle-budgets",
-    ],
-  },
-];
+  const commands = [
+    { label: "Lint", command: "npm", args: ["run", "lint"] },
+    { label: "Typecheck", command: "npm", args: ["run", "typecheck"] },
+    { label: "Production build", command: "npm", args: ["run", "build"] },
+    {
+      label: "Regression tests",
+      command: "npm",
+      args: ["test", "--", "--runInBand", "--require-existing-build"],
+    },
+    { label: "Bundle budget audit", command: "npm", args: ["run", "audit:bundle-budgets"] },
+    {
+      label: "Production readiness",
+      command: "node",
+      args: [
+        "scripts/production-readiness.mjs",
+        "--skip-lint",
+        "--skip-typecheck",
+        "--skip-build",
+        "--skip-bundle-budgets",
+      ],
+    },
+  ];
 
-runCheckPlan({
-  title: "Build proof",
-  steps: commands.map((step) => ({
-    ...step,
-    spawnFailureMessage:
-      `could not spawn "${step.command} ${step.args.join(" ")}" in the current Windows sandbox. ` +
-      "Rerun prove:build outside the sandbox or grant broader process-spawn permissions.",
-  })),
+  runCheckPlan({
+    title: "Build proof",
+    steps: commands.map((step) => ({
+      ...step,
+      spawnFailureMessage:
+        `could not spawn "${step.command} ${step.args.join(" ")}" in the current Windows sandbox. ` +
+        "Rerun prove:build outside the sandbox or grant broader process-spawn permissions.",
+    })),
+  });
+
+  console.log("\nBuild proof sequence passed.");
 });
-
-console.log("\nBuild proof sequence passed.");
