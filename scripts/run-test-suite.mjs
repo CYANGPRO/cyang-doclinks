@@ -6,7 +6,7 @@ import { listSuiteFiles } from "./lib/test-suites.mjs";
 import { withProofLock } from "./lib/proof-lock.mjs";
 
 function resolveSpawn(command, args) {
-  if (process.platform === "win32" && (command === "npm" || command === "npx")) {
+  if (process.platform === "win32" && command === "npm") {
     return {
       command: "cmd.exe",
       args: ["/d", "/s", "/c", command, ...args],
@@ -20,13 +20,18 @@ function quoteArg(arg) {
   return `"${arg.replace(/(["\\])/g, "\\$1")}"`;
 }
 
-function hasUsableProductionBuild() {
-  return [
+function getProductionBuildState() {
+  const requiredFiles = [
     ".next/BUILD_ID",
     ".next/build-manifest.json",
     ".next/server/app-paths-manifest.json",
     ".next/server/pages-manifest.json",
-  ].every((file) => existsSync(file));
+  ];
+  const missingFiles = requiredFiles.filter((file) => !existsSync(file));
+  return {
+    usable: missingFiles.length === 0,
+    missingFiles,
+  };
 }
 
 function failSpawn(error, command, args) {
@@ -86,15 +91,21 @@ await withProofLock({ label: "run-test-suite" }, async () => {
     console.log("Prepared .env.local from .env.example for the test run.");
   }
 
-  if (!hasUsableProductionBuild()) {
+  const buildState = getProductionBuildState();
+  if (!buildState.usable) {
     if (requireExistingBuild) {
       console.error(
         "No reusable production build detected and --require-existing-build was set. " +
+          `Missing build artifacts: ${buildState.missingFiles.join(", ")}. ` +
           "Run `npm run build` first so the test run reuses the exact artifact under proof."
       );
       process.exit(1);
     }
-    console.log("No reusable production build detected. Running `npm run build` before Playwright.");
+    console.log(
+      "No reusable production build detected. " +
+        `Missing build artifacts: ${buildState.missingFiles.join(", ")}. ` +
+        "Running `npm run build` before the Playwright-backed suite."
+    );
     run("npm", ["run", "build"]);
   } else {
     console.log("Using existing production build for the Playwright-backed test run.");
@@ -104,7 +115,10 @@ await withProofLock({ label: "run-test-suite" }, async () => {
     console.log(`Running Playwright suite profile: ${profile}`);
   }
 
-  run("npx", [
+  run("npm", [
+    "exec",
+    "--no",
+    "--",
     "start-server-and-test",
     "npm run start",
     "http://127.0.0.1:3000",

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
 function resolveSpawn(command, args) {
-  if (process.platform === "win32" && (command === "npm" || command === "npx")) {
+  if (process.platform === "win32" && command === "npm") {
     return {
       command: "cmd.exe",
       args: ["/d", "/s", "/c", command, ...args],
@@ -31,8 +31,8 @@ const nextTypeValidator = join(".next", "types", "validator.ts");
 const nextDevTypeValidator = join(".next", "dev", "types", "validator.ts");
 
 if (!existsSync(nextTypeValidator) && !existsSync(nextDevTypeValidator)) {
-  console.log("Next type manifests missing. Running npx next typegen before tsc...");
-  run("npx", ["next", "typegen"]);
+  console.log("Next type manifests missing. Running repo-local `next typegen` before `tsc`...");
+  run("npm", ["exec", "--no", "--", "next", "typegen"]);
 }
 
-run("npx", ["tsc", "--noEmit", "-p", "tsconfig.json"]);
+run("npm", ["exec", "--no", "--", "tsc", "--noEmit", "-p", "tsconfig.json"]);

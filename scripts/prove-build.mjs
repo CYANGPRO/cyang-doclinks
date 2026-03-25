@@ -3,6 +3,7 @@
 import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, rmSync } from "node:fs";
 import { runCheckPlan } from "./lib/check-runner.mjs";
+import { assertProofToolingInstalled } from "./lib/proof-install.mjs";
 import { evaluateProofRuntime } from "./lib/proof-baseline.mjs";
 import { withProofLock } from "./lib/proof-lock.mjs";
 
@@ -75,6 +76,11 @@ function cleanProofArtifacts() {
 
 await withProofLock({ label: "prove:build" }, async () => {
   ensureBaselineVersions();
+  try {
+    assertProofToolingInstalled();
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
+  }
   cleanProofArtifacts();
   ensureProofEnv();
 

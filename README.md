@@ -171,7 +171,7 @@ If Volta is installed but your current shell has not refreshed PATH yet, you can
 & "C:\Program Files\Volta\volta.exe" run --node 22.16.0 --npm 10.9.2 npm run prove:build
 ```
 
-See [PROVE_BUILD.md](PROVE_BUILD.md) for the container proof path and command-by-command rationale.
+See [PROVE_BUILD.md](PROVE_BUILD.md) for the command-by-command proof rationale.
 
 `npm run typecheck` is the canonical proof command for this repo because Next App Router route validators are generated into `.next/types` on demand in a clean checkout.
 
@@ -199,37 +199,7 @@ npm run fire-drill:staging
 
 ## Reproducible Build and Test Paths
 
-This repo does not commit `node_modules` or `.next`. Reproducibility comes from the lockfile, pinned runtime metadata, CI validation, and the container proof paths below.
-
-### Production image
-
-```bash
-docker build -t cyang-doclinks-app .
-docker run --rm -p 3000:3000 --env-file .env.local cyang-doclinks-app
-```
-
-### Test image
-
-```bash
-docker build -f Dockerfile.test -t cyang-doclinks-test .
-docker run --rm --env-file .env.local cyang-doclinks-test
-```
-
-### Proof image
-
-```bash
-docker build --no-cache -f Dockerfile.proof -t cyang-doclinks-proof .
-```
-
-That image copies `.env.example` into a local proof env and runs the full release-proof sequence in isolation.
-
-Convenience scripts:
-
-```bash
-npm run docker:build
-npm run docker:test:image
-npm run docker:proof:image
-```
+This repo does not commit `node_modules` or `.next`. Reproducibility comes from the lockfile, pinned runtime metadata, and CI/local proof validation.
 
 ## Project Status
 

@@ -51,10 +51,13 @@ npm run prove:build
 ```
 
 Notes:
-- `npm run prove:build` now fails fast if the runtime is not exactly Node `22.16.0` and npm `10.9.2`.
+- The committed `.npmrc` forces proof installs to include devDependencies even if the ambient environment sets production-leaning npm defaults.
+- `npm run prove:build` prefers the pinned baseline and warns when the runtime is only engine-compatible; it fails if Node/npm are outside the repo engine range.
+- `npm run prove:build` now fails fast with an explicit install message if repo-local proof tooling such as `eslint`, `typescript`, `next`, Playwright, or `start-server-and-test` is missing after install.
 - The wrapper removes any existing `.next` directory first so the proof always rebuilds from a clean production artifact state.
 - If `.env.local` is missing, the wrapper prepares it from the committed `.env.example`.
 - The wrapper now builds before running the Playwright-backed regression suite, and the test step is told to reuse that exact production artifact instead of silently rebuilding.
+- The proof and readiness wrappers serialize through a shared repo lock, so concurrent proof invocations wait instead of racing on `.next`, local servers, or proof artifacts.
 - Real production secrets are not required for the proof sequence.
 - `production-readiness` and `release:gate` already degrade safely when real deployment infrastructure is not configured.
 - The proof wrappers now end with an explicit pass/fail step summary so reviewers can see which exact proof stage failed.
@@ -76,39 +79,24 @@ If you want to inspect the wrapper step-by-step, this is the same sequence after
 
 What each command verifies:
 - `npm ci`
-  - lockfile fidelity and reproducible dependency install
+  - lockfile fidelity and reproducible dependency install, including proof-required devDependencies
 - `npm run lint`
   - static linting and repo guardrails
 - `npm run typecheck`
-  - Next-aware TypeScript correctness, including `next typegen` when route validators have not been generated yet in a clean checkout
-- `npm test -- --runInBand`
-  - Playwright-based regression coverage against the exact production artifact built earlier in the proof flow
+  - Next-aware TypeScript correctness, including repo-local `next typegen` when route validators have not been generated yet in a clean checkout
 - `npm run build`
   - Next.js production build correctness
+- `npm test -- --runInBand --require-existing-build`
+  - Playwright-based regression coverage against the exact production artifact built earlier in the proof flow, failing clearly if the required `.next` manifests are absent
 - `npm run audit:bundle-budgets`
   - route-level client bundle budget checks
-- `npm run production-readiness`
+- `node scripts/production-readiness.mjs --skip-lint --skip-typecheck --skip-build --skip-bundle-budgets`
   - env-template audit, migration manifest verification, route-handler/polling/render audits, dependency audit, and release gate checks
 
-Why not raw `npx tsc --noEmit -p tsconfig.json` here:
+Why not raw `tsc --noEmit -p tsconfig.json` here:
 - This App Router repo relies on Next-generated route validator types under `.next/types`.
-- `npm run typecheck` is the truthful repo-safe proof command because it generates those files when they are missing, then runs `tsc`.
-- If you want to run raw `tsc` manually, run `npx next typegen` first in the same checkout.
-
-## Container Proof Path
-
-The repo includes a dedicated proof image:
-
-```bash
-docker build --no-cache -f Dockerfile.proof -t cyang-doclinks-proof .
-```
-
-What this does:
-- installs dependencies from `package-lock.json`
-- installs the local Playwright Chromium runtime
-- runs the same `npm run prove:build` wrapper used for local proof
-
-A successful image build is a self-contained proof that the repo can pass its release-proof path in an isolated environment.
+- `npm run typecheck` is the truthful repo-safe proof command because it generates those files when they are missing, then runs repo-local `tsc`.
+- If you want to run raw `tsc` manually, run `npm exec --no -- next typegen` first in the same checkout.
 
 ## Windows Sandbox Note
 
