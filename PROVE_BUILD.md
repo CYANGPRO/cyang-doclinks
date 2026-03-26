@@ -52,11 +52,11 @@ npm run prove:build
 
 Notes:
 - The committed `.npmrc` forces proof installs to include devDependencies even if the ambient environment sets production-leaning npm defaults.
-- `npm ci` now runs a proof-install verification hook. If devDependencies or repo-local proof CLIs are omitted, install fails immediately instead of letting proof continue into a half-installed state.
-- Proof-critical scripts now resolve `eslint`, `tsc`, `next`, `playwright`, and `start-server-and-test` directly from the repo's installed packages instead of depending on PATH or npm cache fallback behavior.
+- `npm ci` runs the committed `postinstall` hook `node scripts/verify-proof-install.mjs`. That install-time verifier fails immediately if proof-critical packages are missing or if the core repo-local CLI entrypoints cannot launch.
+- Proof-critical scripts now resolve `eslint`, `tsc`, `next`, `playwright`, and `start-server-and-test` through `scripts/run-repo-tool.mjs` and `scripts/lib/repo-tooling.mjs`, which launch the repo's installed toolchain directly instead of depending on PATH or npm cache fallback behavior.
 - `npm run prove:build` prefers the pinned baseline and warns when the runtime is only engine-compatible; it fails if Node/npm are outside the repo engine range.
 - `npm run prove:build` now fails fast with an explicit install message if repo-local proof tooling such as `eslint`, `typescript`, `next`, Playwright, or `start-server-and-test` is missing after install.
-- Before lint starts, the wrapper also verifies that repo-local CLI entrypoints such as `eslint`, `next`, `tsc`, and `playwright` actually launch through `npm exec`, so partial installs fail immediately instead of surfacing later as `eslint: not found`.
+- Before lint starts, the wrapper reruns the same repo-local tooling check used by `postinstall`, so partial installs fail immediately instead of surfacing later as `eslint: not found`.
 - The wrapper removes any existing `.next` directory first so the proof always rebuilds from a clean production artifact state.
 - If `.env.local` is missing, the wrapper prepares it from the committed `.env.example`.
 - The wrapper now builds before running the Playwright-backed regression suite, and the test step is told to reuse that exact production artifact instead of silently rebuilding.
@@ -77,6 +77,7 @@ docker build --no-cache -f Dockerfile.proof -t cyang-doclinks-proof .
 
 What Docker adds, and only why:
 - `Dockerfile.proof` uses the pinned baseline image `node:22.16.0-bookworm`.
+- It copies the proof-install verifier and repo-tooling helper into the image before `npm ci`, so the container install enforces the same install-time proof gate as a local checkout.
 - It sets `PROOF_PLAYWRIGHT_INSTALL_WITH_DEPS=1` so the same repo proof wrapper installs Chromium together with the Linux OS packages Playwright needs in a clean container.
 - It still runs the exact same top-level repo contract: `npm ci` followed by `npm run prove:build`.
 
@@ -98,6 +99,7 @@ If you want to inspect the wrapper step-by-step, this is the same sequence after
 What each command verifies:
 - `npm ci`
   - lockfile fidelity and reproducible dependency install, including proof-required devDependencies
+  - install-time proof verification that repo-local tooling exists and the core proof CLI entrypoints actually launch
 - `npm run lint`
   - static linting and repo guardrails
 - `npm run typecheck`
@@ -115,7 +117,7 @@ What each command verifies:
 Why not raw `tsc --noEmit -p tsconfig.json` here:
 - This App Router repo relies on Next-generated route validator types under `.next/types`.
 - `npm run typecheck` is the truthful repo-safe proof command because it generates those files when they are missing, then runs repo-local `tsc`.
-- If you want to run raw `tsc` manually, run `npm exec --no -- next typegen` first in the same checkout.
+- If you want to run raw `tsc` manually, run `node scripts/run-repo-tool.mjs next typegen` first in the same checkout.
 
 ## Windows Sandbox Note
 
