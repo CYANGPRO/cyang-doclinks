@@ -66,6 +66,33 @@ Notes:
 - `production-readiness` and `release:gate` already degrade safely when real deployment infrastructure is not configured.
 - The proof wrappers now end with an explicit pass/fail step summary so reviewers can see which exact proof stage failed.
 - Long-running proof phases emit periodic "still running" progress logs and terminate with explicit timeout errors if they exceed the proof budget, so a stuck `next build` does not look like a silent hang.
+- Each proof run writes durable evidence under `.artifacts/proof/` so a repo zip can be inspected after the run without depending on console scrollback.
+
+## Proof Artifacts
+
+After `npm run prove:build`, inspect:
+
+- `.artifacts/proof/proof-report.json`
+  - machine-readable proof metadata, phase results, durations, final status, and failure details
+- `.artifacts/proof/proof-summary.md`
+  - human-readable PASS/FAIL summary with the exact failing phase when relevant
+- `.artifacts/proof/prove-build.log`
+  - durable console-equivalent log with stdout/stderr from the proof run
+
+Interpretation:
+- `proof-report.json` is the source of truth for phase-by-phase status.
+- `proof-summary.md` is the fastest reviewer view for PASS/FAIL.
+- `prove-build.log` is the detailed transcript for debugging or later inspection.
+
+The proof report explicitly records:
+- install verification result
+- preflight result
+- lint, typecheck, build, regression tests, audits, and production-readiness outcomes
+- per-phase durations
+- final PASS/FAIL
+- the exact failure message and failing phase when something breaks
+- whether the run happened inside the Docker proof image
+- what is still not proven without live infrastructure
 
 ## Docker Proof Path
 
@@ -78,8 +105,17 @@ docker build --no-cache -f Dockerfile.proof -t cyang-doclinks-proof .
 What Docker adds, and only why:
 - `Dockerfile.proof` uses the pinned baseline image `node:22.16.0-bookworm`.
 - It copies the proof-install verifier and repo-tooling helper into the image before `npm ci`, so the container install enforces the same install-time proof gate as a local checkout.
+- It sets `PROOF_DOCKER_BUILD=1` so the proof report records that the run happened inside the Docker proof path.
 - It sets `PROOF_PLAYWRIGHT_INSTALL_WITH_DEPS=1` so the same repo proof wrapper installs Chromium together with the Linux OS packages Playwright needs in a clean container.
 - It still runs the exact same top-level repo contract: `npm ci` followed by `npm run prove:build`.
+
+If you want to inspect the Docker proof artifacts after the build, create a container from the proof image and copy `.artifacts/proof/` back out:
+
+```bash
+docker create --name cyang-doclinks-proof-artifacts cyang-doclinks-proof
+docker cp cyang-doclinks-proof-artifacts:/app/.artifacts/proof ./docker-proof-artifacts
+docker rm cyang-doclinks-proof-artifacts
+```
 
 ## Exact Wrapped Sequence
 
@@ -131,6 +167,17 @@ The proof and test wrappers now surface that case explicitly so reviewers know t
 - `production-readiness` skips live migration-status validation when `DATABASE_URL` is not configured with a real database. Migration manifest verification still runs and must pass.
 - The proof path validates build, type safety, tests, and repo guardrails. It does not claim live third-party integrations are reachable with placeholder secrets.
 - The Docker proof validates the same contract inside the pinned Linux baseline, but it still does not claim live third-party integrations are reachable.
+
+## Sharing Proof Evidence
+
+For an external reviewer without Docker, the first-class workflow is still:
+
+```bash
+npm ci
+npm run prove:build
+```
+
+After that run, the reviewer can upload or zip the repo together with `.artifacts/proof/`. Those files are the durable proof evidence for what actually executed and whether the proof passed or failed.
 
 ## Real Infrastructure Boundaries
 

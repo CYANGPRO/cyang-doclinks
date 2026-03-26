@@ -10,9 +10,21 @@ function resolveSpawn(command, args) {
   return { command, args };
 }
 
-function fmtDuration(ms) {
+export function fmtDuration(ms) {
   if (ms < 1000) return `${ms}ms`;
   return `${(ms / 1000).toFixed(ms >= 10_000 ? 0 : 1)}s`;
+}
+
+export class CheckPlanError extends Error {
+  constructor(message, options) {
+    super(message);
+    this.name = "CheckPlanError";
+    this.results = options.results;
+    this.failedStep = options.failedStep;
+    this.failureStatus = options.failureStatus;
+    this.failureDetail = options.failureDetail ?? null;
+    this.exitCode = options.failureStatus ?? 1;
+  }
 }
 
 function terminateProcessTree(child) {
@@ -39,7 +51,7 @@ async function runStep(step, env) {
 
   return await new Promise((resolve, reject) => {
     const child = spawn(resolved.command, resolved.args, {
-      stdio: "inherit",
+      stdio: ["ignore", "pipe", "pipe"],
       shell: false,
       env,
     });
@@ -67,6 +79,14 @@ async function runStep(step, env) {
       if (timeoutTimer) clearTimeout(timeoutTimer);
     };
 
+    child.stdout?.on("data", (chunk) => {
+      process.stdout.write(chunk);
+    });
+
+    child.stderr?.on("data", (chunk) => {
+      process.stderr.write(chunk);
+    });
+
     child.on("error", (error) => {
       cleanup();
       reject(error);
@@ -85,7 +105,7 @@ async function runStep(step, env) {
   });
 }
 
-export async function runCheckPlan({ title, steps, env = process.env }) {
+export async function runCheckPlan({ title, steps, env = process.env, exitOnFailure = true }) {
   const results = [];
 
   for (const step of steps) {
@@ -121,7 +141,15 @@ export async function runCheckPlan({ title, steps, env = process.env }) {
         failureStatus: status,
         failureDetail: result.timedOut && result.timeoutMs ? `timed out after ${fmtDuration(result.timeoutMs)}` : null,
       });
-      process.exit(status);
+      if (exitOnFailure) {
+        process.exit(status);
+      }
+      throw new CheckPlanError(`${title} failed at ${step.label}`, {
+        results,
+        failedStep: step.label,
+        failureStatus: status,
+        failureDetail: result.timedOut && result.timeoutMs ? `timed out after ${fmtDuration(result.timeoutMs)}` : null,
+      });
     }
   }
 

@@ -2,19 +2,36 @@
 
 import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, rmSync } from "node:fs";
-import { runCheckPlan } from "./lib/check-runner.mjs";
+import { CheckPlanError, runCheckPlan } from "./lib/check-runner.mjs";
 import { assertProofCliEntrypointsWork, assertProofToolingInstalled } from "./lib/proof-install.mjs";
 import { evaluateProofRuntime } from "./lib/proof-baseline.mjs";
+import {
+  applyPhaseResults,
+  createBaseProofReport,
+  ensureProofArtifactDir,
+  getGitCommitHash,
+  markRemainingPhasesSkipped,
+  PROOF_ARTIFACT_PATHS,
+  startProofLogCapture,
+  writeProofArtifacts,
+} from "./lib/proof-artifacts.mjs";
 import { withProofLock } from "./lib/proof-lock.mjs";
 
 const REQUIRED_NODE = "22.16.0";
 const REQUIRED_NPM = "10.9.2";
 const PACKAGE_NODE_ENGINE = ">=22.16.0 <25";
 const PACKAGE_NPM_ENGINE = ">=10.9.2 <12";
+const NOT_PROVEN = [
+  "live Postgres connectivity",
+  "Cloudflare R2 connectivity",
+  "Stripe delivery from the live service",
+  "email provider delivery",
+  "malware scanning endpoints",
+  "deployed-secret wiring",
+];
 
 function fail(message) {
-  console.error(`Build proof preflight failed: ${message}`);
-  process.exit(1);
+  throw new Error(`Build proof preflight failed: ${message}`);
 }
 
 function ensureBaselineVersions() {
@@ -57,6 +74,8 @@ function ensureBaselineVersions() {
       `${REQUIRED_NODE} / ${REQUIRED_NPM}. The proof run will continue because the runtime is engine-compatible.`
     );
   }
+
+  return { nodeVersion, npmVersion };
 }
 
 function ensureProofEnv() {
@@ -74,53 +93,136 @@ function cleanProofArtifacts() {
   console.log("Removed existing .next so prove:build runs from a clean production build.");
 }
 
-await withProofLock({ label: "prove:build" }, async () => {
-  ensureBaselineVersions();
-  try {
-    assertProofToolingInstalled();
-    assertProofCliEntrypointsWork();
-  } catch (error) {
-    fail(error instanceof Error ? error.message : String(error));
-  }
-  cleanProofArtifacts();
-  ensureProofEnv();
+ensureProofArtifactDir();
+const stopLogCapture = startProofLogCapture(PROOF_ARTIFACT_PATHS.logPath);
+const proofReport = createBaseProofReport({
+  repoName: "cyang-doclinks",
+  proofCommand: "npm run prove:build",
+  dockerProofRun: process.env.PROOF_DOCKER_BUILD === "1",
+  nodeVersion: process.version.replace(/^v/, ""),
+  gitCommitHash: getGitCommitHash(),
+  notProven: NOT_PROVEN,
+});
 
-  const commands = [
-    { label: "Lint", command: "npm", args: ["run", "lint"], timeoutMs: 10 * 60 * 1000 },
-    { label: "Typecheck", command: "npm", args: ["run", "typecheck"], timeoutMs: 15 * 60 * 1000 },
-    { label: "Production build", command: "npm", args: ["run", "build"], timeoutMs: 30 * 60 * 1000 },
-    {
-      label: "Regression tests",
-      command: "npm",
-      args: ["test", "--", "--runInBand", "--require-existing-build"],
-      timeoutMs: 45 * 60 * 1000,
-    },
-    { label: "Bundle budget audit", command: "npm", args: ["run", "audit:bundle-budgets"], timeoutMs: 10 * 60 * 1000 },
-    {
-      label: "Production readiness",
-      command: "node",
-      args: [
-        "scripts/production-readiness.mjs",
-        "--skip-lint",
-        "--skip-typecheck",
-        "--skip-build",
-        "--skip-bundle-budgets",
-      ],
-      timeoutMs: 20 * 60 * 1000,
-    },
-  ];
+let exitCode = 1;
 
-  await runCheckPlan({
-    title: "Build proof",
-    steps: commands.map((step) => ({
-      ...step,
-      spawnFailureMessage:
-        `could not spawn "${step.command} ${step.args.join(" ")}" in the current Windows sandbox. ` +
-        "Rerun prove:build outside the sandbox or grant broader process-spawn permissions.",
-    })),
+try {
+  console.log(`Writing proof artifacts to ${proofReport.artifactPaths.report}, ${proofReport.artifactPaths.summary}, and ${proofReport.artifactPaths.log}`);
+
+  await withProofLock({ label: "prove:build" }, async () => {
+    const installCheckStartedAt = Date.now();
+    try {
+      assertProofToolingInstalled();
+      assertProofCliEntrypointsWork();
+      proofReport.installVerification.status = "passed";
+      proofReport.installVerification.durationMs = Date.now() - installCheckStartedAt;
+    } catch (error) {
+      proofReport.installVerification.status = "failed";
+      proofReport.installVerification.durationMs = Date.now() - installCheckStartedAt;
+      proofReport.installVerification.message = error instanceof Error ? error.message : String(error);
+      throw error;
+    }
+
+    const preflightStartedAt = Date.now();
+    try {
+      const versions = ensureBaselineVersions();
+      proofReport.nodeVersion = versions.nodeVersion;
+      proofReport.npmVersion = versions.npmVersion;
+      cleanProofArtifacts();
+      ensureProofEnv();
+      proofReport.preflight.status = "passed";
+      proofReport.preflight.durationMs = Date.now() - preflightStartedAt;
+    } catch (error) {
+      proofReport.preflight.status = "failed";
+      proofReport.preflight.durationMs = Date.now() - preflightStartedAt;
+      proofReport.preflight.message = error instanceof Error ? error.message : String(error);
+      throw error;
+    }
+
+    const commands = [
+      { label: "Lint", command: "npm", args: ["run", "lint"], timeoutMs: 10 * 60 * 1000 },
+      { label: "Typecheck", command: "npm", args: ["run", "typecheck"], timeoutMs: 15 * 60 * 1000 },
+      { label: "Production build", command: "npm", args: ["run", "build"], timeoutMs: 30 * 60 * 1000 },
+      {
+        label: "Regression tests",
+        command: "npm",
+        args: ["test", "--", "--runInBand", "--require-existing-build"],
+        timeoutMs: 45 * 60 * 1000,
+      },
+      { label: "Bundle budget audit", command: "npm", args: ["run", "audit:bundle-budgets"], timeoutMs: 10 * 60 * 1000 },
+      {
+        label: "Production readiness",
+        command: "node",
+        args: [
+          "scripts/production-readiness.mjs",
+          "--skip-lint",
+          "--skip-typecheck",
+          "--skip-build",
+          "--skip-bundle-budgets",
+        ],
+        timeoutMs: 20 * 60 * 1000,
+      },
+    ];
+
+    const results = await runCheckPlan({
+      title: "Build proof",
+      exitOnFailure: false,
+      steps: commands.map((step) => ({
+        ...step,
+        spawnFailureMessage:
+          `could not spawn "${step.command} ${step.args.join(" ")}" in the current Windows sandbox. ` +
+          "Rerun prove:build outside the sandbox or grant broader process-spawn permissions.",
+      })),
+    });
+
+    applyPhaseResults(proofReport, results);
   });
 
+  proofReport.finalStatus = "passed";
+  exitCode = 0;
   console.log("\nBuild proof sequence passed.");
   console.log("Locally proven: lint, typecheck, production build, deterministic regression tests, bundle budgets, and repo release/readiness audits.");
-  console.log("Not proven here: live Postgres, R2, Stripe delivery, email providers, malware scanning endpoints, or deployed-secret wiring.");
-});
+  console.log(`Not proven here: ${NOT_PROVEN.join(", ")}.`);
+} catch (error) {
+  const message = error instanceof Error ? error.message : String(error);
+  if (error instanceof CheckPlanError) {
+    applyPhaseResults(proofReport, error.results);
+    markRemainingPhasesSkipped(proofReport, error.failedStep, "not run after earlier proof failure");
+    proofReport.failurePhase = error.failedStep;
+    proofReport.failureMessage = error.failureDetail ? `${message}. ${error.failureDetail}` : message;
+    exitCode = error.exitCode ?? 1;
+  } else {
+    proofReport.failureMessage = message;
+    exitCode = 1;
+  }
+
+  if (proofReport.installVerification.status === "pending") {
+    proofReport.installVerification.status = "failed";
+    proofReport.installVerification.message = message;
+  } else if (proofReport.preflight.status === "pending") {
+    proofReport.preflight.status = "failed";
+    proofReport.preflight.message = message;
+  }
+
+  proofReport.finalStatus = "failed";
+  console.error(`Build proof failed: ${message}`);
+} finally {
+  try {
+    writeProofArtifacts(proofReport);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`Failed to write proof artifacts: ${message}`);
+    proofReport.finalStatus = "failed";
+    proofReport.failureMessage = proofReport.failureMessage
+      ? `${proofReport.failureMessage}; artifact write failure: ${message}`
+      : `artifact write failure: ${message}`;
+    exitCode = 1;
+  }
+
+  console.log(`Proof JSON report: ${proofReport.artifactPaths.report}`);
+  console.log(`Proof summary: ${proofReport.artifactPaths.summary}`);
+  console.log(`Proof log: ${proofReport.artifactPaths.log}`);
+
+  await stopLogCapture();
+  process.exit(exitCode);
+}

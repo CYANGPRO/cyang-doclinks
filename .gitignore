@@ -16,6 +16,8 @@
 /playwright-report
 /test-results
 /.tmp/
+/.artifacts/proof/*
+!/.artifacts/proof/.gitkeep
 
 # next.js
 /.next/
