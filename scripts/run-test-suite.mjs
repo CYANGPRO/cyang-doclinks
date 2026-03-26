@@ -3,6 +3,7 @@
 import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync } from "node:fs";
 import { getPlaywrightInstallInvocation } from "./lib/playwright-runtime.mjs";
+import { spawnRepoTool } from "./lib/repo-tooling.mjs";
 import { listSuiteFiles } from "./lib/test-suites.mjs";
 import { withProofLock } from "./lib/proof-lock.mjs";
 
@@ -47,12 +48,20 @@ function failSpawn(error, command, args) {
 }
 
 function run(command, args) {
-  const resolved = resolveSpawn(command, args);
-  const result = spawnSync(resolved.command, resolved.args, {
-    stdio: "inherit",
-    shell: false,
-    env: process.env,
-  });
+  const result =
+    command === "repo-tool"
+      ? spawnRepoTool(args[0], args.slice(1), {
+          stdio: "inherit",
+          env: process.env,
+        })
+      : (() => {
+          const resolved = resolveSpawn(command, args);
+          return spawnSync(resolved.command, resolved.args, {
+            stdio: "inherit",
+            shell: false,
+            env: process.env,
+          });
+        })();
   if (result.error) failSpawn(result.error, command, args);
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
@@ -84,8 +93,8 @@ await withProofLock({ label: "run-test-suite" }, async () => {
 
   const playwrightCommand =
     effectiveArgs.length > 0
-      ? `npm run test:playwright -- ${effectiveArgs.map(quoteArg).join(" ")}`
-      : "npm run test:playwright";
+      ? `node ${quoteArg("scripts/run-repo-tool.mjs")} playwright test ${effectiveArgs.map(quoteArg).join(" ")}`
+      : `node ${quoteArg("scripts/run-repo-tool.mjs")} playwright test`;
 
   if (!existsSync(".env.local") && existsSync(".env.example") && process.env.SKIP_ENV_LOCAL_BOOTSTRAP !== "1") {
     copyFileSync(".env.example", ".env.local");
@@ -120,10 +129,7 @@ await withProofLock({ label: "run-test-suite" }, async () => {
     console.log(`Running Playwright suite profile: ${profile}`);
   }
 
-  run("npm", [
-    "exec",
-    "--no",
-    "--",
+  run("repo-tool", [
     "start-server-and-test",
     "npm run start",
     "http://127.0.0.1:3000",

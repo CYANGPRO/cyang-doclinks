@@ -52,6 +52,8 @@ npm run prove:build
 
 Notes:
 - The committed `.npmrc` forces proof installs to include devDependencies even if the ambient environment sets production-leaning npm defaults.
+- `npm ci` now runs a proof-install verification hook. If devDependencies or repo-local proof CLIs are omitted, install fails immediately instead of letting proof continue into a half-installed state.
+- Proof-critical scripts now resolve `eslint`, `tsc`, `next`, `playwright`, and `start-server-and-test` directly from the repo's installed packages instead of depending on PATH or npm cache fallback behavior.
 - `npm run prove:build` prefers the pinned baseline and warns when the runtime is only engine-compatible; it fails if Node/npm are outside the repo engine range.
 - `npm run prove:build` now fails fast with an explicit install message if repo-local proof tooling such as `eslint`, `typescript`, `next`, Playwright, or `start-server-and-test` is missing after install.
 - Before lint starts, the wrapper also verifies that repo-local CLI entrypoints such as `eslint`, `next`, `tsc`, and `playwright` actually launch through `npm exec`, so partial installs fail immediately instead of surfacing later as `eslint: not found`.

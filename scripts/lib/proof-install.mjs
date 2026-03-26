@@ -1,66 +1,76 @@
-import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { spawnRepoTool } from "./repo-tooling.mjs";
 
-/** @typedef {(specifier: string) => string} PackageResolver */
-/** @typedef {{ label: string, command: string, args: string[] }} ProofCliCheck */
+/** @typedef {{ packageName: string, purpose: string, binName?: string }} ProofTool */
+/** @typedef {{ label: string, toolName: string, args: string[] }} ProofCliCheck */
+/** @typedef {(packageName: string) => boolean} PackageResolver */
+/** @typedef {(tool: ProofTool) => boolean} ToolResolver */
 /** @typedef {(check: ProofCliCheck) => { status?: number | null, error?: unknown }} ProofCliRunner */
 
-/** @type {PackageResolver} */
-const resolveFromRepo = (specifier) => import.meta.resolve(specifier);
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
-const REQUIRED_PROOF_PACKAGES = [
-  { packageName: "eslint", purpose: "lint" },
-  { packageName: "typescript", purpose: "typecheck" },
-  { packageName: "next", purpose: "build/typegen" },
+const REQUIRED_PROOF_TOOLS = [
+  { packageName: "eslint", purpose: "lint", binName: "eslint" },
+  { packageName: "typescript", purpose: "typecheck", binName: "tsc" },
+  { packageName: "next", purpose: "build/typegen", binName: "next" },
   { packageName: "@playwright/test", purpose: "regression tests" },
-  { packageName: "start-server-and-test", purpose: "production-build test harness" },
+  { packageName: "playwright", purpose: "browser installer / CLI", binName: "playwright" },
+  { packageName: "start-server-and-test", purpose: "production-build test harness", binName: "start-server-and-test" },
 ];
 
 const REQUIRED_PROOF_CLI_CHECKS = [
-  { label: "eslint", command: "npm", args: ["exec", "--no", "--", "eslint", "--version"] },
-  { label: "next", command: "npm", args: ["exec", "--no", "--", "next", "--version"] },
-  { label: "tsc", command: "npm", args: ["exec", "--no", "--", "tsc", "--version"] },
-  { label: "playwright", command: "npm", args: ["exec", "--no", "--", "playwright", "--version"] },
+  { label: "eslint", toolName: "eslint", args: ["--version"] },
+  { label: "next", toolName: "next", args: ["--version"] },
+  { label: "tsc", toolName: "tsc", args: ["--version"] },
+  { label: "playwright", toolName: "playwright", args: ["--version"] },
 ];
 
-function resolveSpawn(command, args) {
-  if (process.platform === "win32" && command === "npm") {
-    return {
-      command: "cmd.exe",
-      args: ["/d", "/s", "/c", command, ...args],
-    };
-  }
-  return { command, args };
+function getPackageJsonPath(packageName) {
+  return join(REPO_ROOT, "node_modules", ...packageName.split("/"), "package.json");
+}
+
+function packageExists(packageName) {
+  return existsSync(getPackageJsonPath(packageName));
+}
+
+function getPackageJson(packageName) {
+  return JSON.parse(readFileSync(getPackageJsonPath(packageName), "utf8"));
+}
+
+function toolExists(tool) {
+  if (!packageExists(tool.packageName)) return false;
+  if (!tool.binName) return true;
+
+  const pkg = getPackageJson(tool.packageName);
+  const bins = typeof pkg.bin === "string" ? { [pkg.name]: pkg.bin } : (pkg.bin || {});
+  const relativeBinPath = bins[tool.binName];
+  if (!relativeBinPath) return false;
+  return existsSync(join(dirname(getPackageJsonPath(tool.packageName)), relativeBinPath));
 }
 
 /** @type {ProofCliRunner} */
 function runProofCliCheck(check) {
-  const resolved = resolveSpawn(check.command, check.args);
-  return spawnSync(resolved.command, resolved.args, {
+  return spawnRepoTool(check.toolName, check.args, {
     stdio: "pipe",
-    shell: false,
     env: process.env,
     encoding: "utf8",
   });
 }
 
 /**
- * @param {string} packageName
- * @param {PackageResolver} resolvePackageJson
+ * @param {PackageResolver} [resolvePackage]
  */
-function resolvePackage(packageName, resolvePackageJson) {
-  try {
-    resolvePackageJson(`${packageName}/package.json`);
-    return true;
-  } catch {
-    return false;
-  }
+export function getMissingProofPackages(resolvePackage = packageExists) {
+  return REQUIRED_PROOF_TOOLS.filter(({ packageName }) => !resolvePackage(packageName));
 }
 
 /**
- * @param {PackageResolver} [resolvePackageJson]
+ * @param {ToolResolver} [resolveTool]
  */
-export function getMissingProofPackages(resolvePackageJson = resolveFromRepo) {
-  return REQUIRED_PROOF_PACKAGES.filter(({ packageName }) => !resolvePackage(packageName, resolvePackageJson));
+export function getMissingProofTools(resolveTool = toolExists) {
+  return REQUIRED_PROOF_TOOLS.filter((tool) => !resolveTool(tool));
 }
 
 export function formatMissingProofPackages(missingPackages) {
@@ -68,13 +78,13 @@ export function formatMissingProofPackages(missingPackages) {
 }
 
 /**
- * @param {PackageResolver} [resolvePackageJson]
+ * @param {ToolResolver} [resolveTool]
  */
-export function assertProofToolingInstalled(resolvePackageJson = resolveFromRepo) {
-  const missingPackages = getMissingProofPackages(resolvePackageJson);
-  if (missingPackages.length === 0) return;
+export function assertProofToolingInstalled(resolveTool = toolExists) {
+  const missingTools = getMissingProofTools(resolveTool);
+  if (missingTools.length === 0) return;
 
-  const missingSummary = formatMissingProofPackages(missingPackages);
+  const missingSummary = formatMissingProofPackages(missingTools);
   throw new Error(
     "Proof install is incomplete: repo-local tooling is missing: " +
       `${missingSummary}. ` +
@@ -97,7 +107,7 @@ export function assertProofCliEntrypointsWork(runCliCheck = runProofCliCheck) {
       : "";
     throw new Error(
       `Proof install is incomplete: repo-local CLI resolution failed for ${check.label}. ` +
-        `The proof wrapper could not launch "${check.command} ${check.args.join(" ")}". ` +
+        `The proof wrapper could not launch repo-local tool "${check.toolName} ${check.args.join(" ")}". ` +
         "Rerun `npm ci` and make sure no concurrent install is rewriting node_modules while the proof runs. " +
         `Underlying error: ${stderr || `exit code ${result.status ?? 1}`}.`
     );

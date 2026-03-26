@@ -10,6 +10,9 @@ ENV CI=1 \
 WORKDIR /app
 
 COPY package.json package-lock.json .npmrc ./
+COPY scripts/verify-proof-install.mjs ./scripts/verify-proof-install.mjs
+COPY scripts/lib/proof-install.mjs ./scripts/lib/proof-install.mjs
+COPY scripts/lib/repo-tooling.mjs ./scripts/lib/repo-tooling.mjs
 RUN npm ci
 
 COPY . .

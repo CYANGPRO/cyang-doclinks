@@ -11,14 +11,14 @@ function runNodeModule(source: string) {
 test.describe("proof install preflight", () => {
   test("formats missing proof packages with their proof purpose", () => {
     const result = runNodeModule(`
-      import { getMissingProofPackages, formatMissingProofPackages } from "./scripts/lib/proof-install.mjs";
+      import { getMissingProofTools, formatMissingProofPackages } from "./scripts/lib/proof-install.mjs";
 
-      const missing = getMissingProofPackages((specifier) => {
-        const packageName = specifier.replace(/\\/package\\.json$/u, "");
+      const missing = getMissingProofTools((tool) => {
+        const packageName = tool.packageName;
         if (packageName === "eslint" || packageName === "@playwright/test") {
-          throw new Error("missing");
+          return false;
         }
-        return specifier;
+        return true;
       });
 
       console.log(formatMissingProofPackages(missing));
@@ -34,12 +34,12 @@ test.describe("proof install preflight", () => {
       import { assertProofToolingInstalled } from "./scripts/lib/proof-install.mjs";
 
       try {
-        assertProofToolingInstalled((specifier) => {
-          const packageName = specifier.replace(/\\/package\\.json$/u, "");
+        assertProofToolingInstalled((tool) => {
+          const packageName = tool.packageName;
           if (packageName === "eslint" || packageName === "typescript") {
-            throw new Error("missing");
+            return false;
           }
-          return specifier;
+          return true;
         });
         process.exit(0);
       } catch (error) {

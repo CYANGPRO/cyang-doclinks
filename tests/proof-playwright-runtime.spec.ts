@@ -2,11 +2,11 @@ import { expect, test } from "@playwright/test";
 import { getPlaywrightInstallInvocation } from "../scripts/lib/playwright-runtime.mjs";
 
 test.describe("proof Playwright runtime install", () => {
-  test("uses repo-local npm exec without Linux dependency bootstrapping by default", () => {
+  test("uses the repo-local tool runner without Linux dependency bootstrapping by default", () => {
     const invocation = getPlaywrightInstallInvocation({});
 
-    expect(invocation.command).toBe("npm");
-    expect(invocation.args).toEqual(["exec", "--no", "--", "playwright", "install", "chromium"]);
+    expect(invocation.command).toBe("repo-tool");
+    expect(invocation.args).toEqual(["playwright", "install", "chromium"]);
     expect(invocation.scope).toContain("Chromium browser runtime");
   });
 
@@ -15,7 +15,7 @@ test.describe("proof Playwright runtime install", () => {
       PROOF_PLAYWRIGHT_INSTALL_WITH_DEPS: "1",
     });
 
-    expect(invocation.args).toEqual(["exec", "--no", "--", "playwright", "install", "--with-deps", "chromium"]);
+    expect(invocation.args).toEqual(["playwright", "install", "--with-deps", "chromium"]);
     expect(invocation.scope).toContain("Linux OS dependencies");
   });
 });
