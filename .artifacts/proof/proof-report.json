@@ -1,0 +1,82 @@
+{
+  "repoName": "cyang-doclinks",
+  "timestamp": "2026-03-26T17:28:28.531Z",
+  "proofCommand": "npm run prove:build",
+  "dockerProofRun": false,
+  "gitCommitHash": "891d6b488e0e2749993728bde5c713975b943692",
+  "nodeVersion": "24.13.0",
+  "npmVersion": "11.6.2",
+  "platform": "win32",
+  "arch": "x64",
+  "installVerification": {
+    "status": "passed",
+    "durationMs": 1515,
+    "message": null
+  },
+  "preflight": {
+    "status": "passed",
+    "durationMs": 1343,
+    "message": null
+  },
+  "phases": [
+    {
+      "id": "lint",
+      "label": "Lint",
+      "status": "passed",
+      "durationMs": 17279,
+      "command": "npm run lint"
+    },
+    {
+      "id": "typecheck",
+      "label": "Typecheck",
+      "status": "passed",
+      "durationMs": 4938,
+      "command": "npm run typecheck"
+    },
+    {
+      "id": "build",
+      "label": "Production build",
+      "status": "passed",
+      "durationMs": 25440,
+      "command": "npm run build"
+    },
+    {
+      "id": "tests",
+      "label": "Regression tests",
+      "status": "passed",
+      "durationMs": 35605,
+      "command": "npm test -- --runInBand --require-existing-build",
+      "reusedBuildArtifact": true
+    },
+    {
+      "id": "audits",
+      "label": "Bundle budget audit",
+      "status": "passed",
+      "durationMs": 388,
+      "command": "npm run audit:bundle-budgets"
+    },
+    {
+      "id": "prod-readiness",
+      "label": "Production readiness",
+      "status": "passed",
+      "durationMs": 3789,
+      "command": "node scripts/production-readiness.mjs --skip-lint --skip-typecheck --skip-build --skip-bundle-budgets"
+    }
+  ],
+  "finalStatus": "passed",
+  "failureMessage": null,
+  "failurePhase": null,
+  "notProven": [
+    "live Postgres connectivity",
+    "Cloudflare R2 connectivity",
+    "Stripe delivery from the live service",
+    "email provider delivery",
+    "malware scanning endpoints",
+    "deployed-secret wiring"
+  ],
+  "artifactPaths": {
+    "report": ".artifacts\\proof\\proof-report.json",
+    "summary": ".artifacts\\proof\\proof-summary.md",
+    "log": ".artifacts\\proof\\prove-build.log"
+  }
+}

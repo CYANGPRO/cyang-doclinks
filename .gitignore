@@ -18,6 +18,9 @@
 /.tmp/
 /.artifacts/proof/*
 !/.artifacts/proof/.gitkeep
+!/.artifacts/proof/proof-report.json
+!/.artifacts/proof/proof-summary.md
+!/.artifacts/proof/prove-build.log
 
 # next.js
 /.next/

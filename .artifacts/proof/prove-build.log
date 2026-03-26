@@ -1,0 +1,916 @@
+Writing proof artifacts to .artifacts\proof\proof-report.json, .artifacts\proof\proof-summary.md, and .artifacts\proof\prove-build.log
+Build proof preflight warning: running on Node.js 24.13.0 / npm 11.6.2 instead of the pinned baseline 22.16.0 / 10.9.2. The proof run will continue because the runtime is engine-compatible.
+Removed existing .next so prove:build runs from a clean production build.
+
+==> [Lint] npm run lint
+
+> cyang-doclinks@0.1.0 lint
+> node scripts/run-repo-tool.mjs eslint .
+
+
+==> [Typecheck] npm run typecheck
+
+> cyang-doclinks@0.1.0 typecheck
+> node scripts/typecheck.mjs
+
+Next type manifests missing. Running repo-local `next typegen` before `tsc`...
+Generating route types...
+✓ Types generated successfully
+
+==> [Production build] npm run build
+
+> cyang-doclinks@0.1.0 build
+> node scripts/run-repo-tool.mjs next build
+
+▲ Next.js 16.1.7 (Turbopack)
+- Environments: .env.local
+- Experiments (use with caution):
+  · clientTraceMetadata
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 6.6s
+  Running next.config.js provided runAfterProductionCompile ...
+✓ Completed runAfterProductionCompile in 1440ms
+  Running TypeScript ...
+  Collecting page data using 23 workers ...
+  Generating static pages using 23 workers (0/133) ...
+  Generating static pages using 23 workers (33/133) 
+  Generating static pages using 23 workers (66/133) 
+  Generating static pages using 23 workers (99/133) 
+✓ Generating static pages using 23 workers (133/133) in 549.4ms
+  Finalizing page optimization ...
+
+Route (app)                                   Revalidate  Expire
+┌ ○ /                                                15m      1y
+├ ○ /_not-found
+├ ○ /about
+├ ○ /acceptable-use
+├ ƒ /admin
+├ ƒ /admin/abuse
+├ ƒ /admin/account
+├ ƒ /admin/activity
+├ ƒ /admin/api-keys
+├ ƒ /admin/audit
+├ ƒ /admin/billing
+├ ƒ /admin/billing/stripe
+├ ƒ /admin/branding
+├ ƒ /admin/dashboard
+├ ƒ /admin/dmca
+├ ƒ /admin/docs/[docId]
+├ ƒ /admin/documents
+├ ƒ /admin/documents/[documentId]
+├ ƒ /admin/governance
+├ ƒ /admin/integrations
+├ ƒ /admin/links
+├ ƒ /admin/links/[token]
+├ ƒ /admin/review
+├ ƒ /admin/security
+├ ƒ /admin/settings
+├ ƒ /admin/team
+├ ƒ /admin/upgrade
+├ ƒ /admin/upload
+├ ƒ /admin/uploads
+├ ƒ /admin/viewer-uploads
+├ ƒ /admin/webhooks
+├ ƒ /api/admin/abuse
+├ ƒ /api/admin/analytics/aggregate
+├ ƒ /api/admin/audit/export
+├ ƒ /api/admin/billing
+├ ƒ /api/admin/billing/checkout
+├ ƒ /api/admin/billing/invoices
+├ ƒ /api/admin/billing/portal
+├ ƒ /api/admin/billing/status
+├ ƒ /api/admin/billing/sync
+├ ƒ /api/admin/billing/view-override
+├ ƒ /api/admin/db-index-audit
+├ ƒ /api/admin/dmca
+├ ƒ /api/admin/retention/run
+├ ƒ /api/admin/security/activate
+├ ƒ /api/admin/security/freeze
+├ ƒ /api/admin/security/keys
+├ ƒ /api/admin/security/org-access
+├ ƒ /api/admin/security/rbac
+├ ƒ /api/admin/security/requeue-scans
+├ ƒ /api/admin/security/revoke
+├ ƒ /api/admin/security/rollback
+├ ƒ /api/admin/security/rotate
+├ ƒ /api/admin/security/table-signatures
+├ ƒ /api/admin/security/tenant-freeze
+├ ƒ /api/admin/upload
+├ ƒ /api/admin/upload/abort
+├ ƒ /api/admin/upload/complete
+├ ƒ /api/admin/upload/presign
+├ ƒ /api/auth/[...nextauth]
+├ ƒ /api/auth/manual-password-reset/complete
+├ ƒ /api/auth/manual-password-reset/request
+├ ƒ /api/auth/manual-signup
+├ ƒ /api/auth/signup-consent
+├ ƒ /api/backup/status
+├ ƒ /api/billing/checkout
+├ ƒ /api/cron/aggregate
+├ ƒ /api/cron/billing-sync
+├ ƒ /api/cron/key-rotation
+├ ƒ /api/cron/nightly
+├ ƒ /api/cron/orphan-sweep
+├ ƒ /api/cron/retention
+├ ƒ /api/cron/scan
+├ ƒ /api/cron/webhooks
+├ ƒ /api/d/[alias]/availability
+├ ƒ /api/health
+├ ƒ /api/health/deps
+├ ƒ /api/health/live
+├ ƒ /api/health/public
+├ ƒ /api/health/ready
+├ ƒ /api/status/subscribe
+├ ƒ /api/stripe/webhook
+├ ƒ /api/v1/abuse/report
+├ ƒ /api/v1/aliases
+├ ƒ /api/v1/docs
+├ ƒ /api/v1/public/funnel
+├ ƒ /api/v1/shares
+├ ƒ /api/v1/takedown
+├ ƒ /api/viewer/docs/status
+├ ƒ /api/viewer/office
+├ ƒ /auth/continue
+├ ƒ /auth/continue-admin
+├ ƒ /auth/continue-viewer
+├ ƒ /auth/email/consume
+├ ƒ /auth/email/start
+├ ƒ /auth/google/callback
+├ ƒ /auth/google/start
+├ ○ /contact                                         15m      1y
+├ ƒ /d/[alias]
+├ ƒ /d/[alias]/raw
+├ ○ /data-retention                                   1h      1y
+├ ○ /dmca
+├ ○ /doclinks                                        15m      1y
+├ ○ /legal                                            1h      1y
+├ ● /legal/[slug]                                     1h      1y
+│ ├ /legal/terms-of-service                           1h      1y
+│ ├ /legal/acceptable-use-policy                      1h      1y
+│ ├ /legal/dmca-policy                                1h      1y
+│ └ [+5 more paths]
+├ ○ /login
+├ ƒ /mfa
+├ ƒ /org/[slug]/auth/[provider]
+├ ƒ /org/[slug]/login
+├ ○ /pricing                                          5m      1y
+├ ○ /privacy
+├ ○ /products                                        15m      1y
+├ ○ /projects                                        15m      1y
+├ ○ /projects/doclinks                               15m      1y
+├ ○ /report                                           1h      1y
+├ ƒ /s/[token]
+├ ƒ /s/[token]/download
+├ ƒ /s/[token]/raw
+├ ƒ /s/[token]/view
+├ ○ /security-disclosure                              1h      1y
+├ ƒ /serve/[docId]
+├ ƒ /signin
+├ ƒ /signin/manual
+├ ƒ /signin/reset
+├ ○ /signup
+├ ƒ /signup/activate
+├ ○ /signup/manual
+├ ○ /status                                           1h      1y
+├ ƒ /t/[ticketId]
+├ ○ /terms
+├ ○ /trust
+├ ○ /trust/procurement                                1h      1y
+├ ƒ /viewer
+├ ƒ /viewer/activity
+├ ƒ /viewer/dashboard
+├ ƒ /viewer/docs/[docId]
+├ ƒ /viewer/documents
+├ ƒ /viewer/documents/[documentId]
+├ ƒ /viewer/links
+├ ƒ /viewer/links/[token]
+├ ƒ /viewer/upload
+└ ƒ /viewer/uploads
+
+
+○  (Static)   prerendered as static content
+●  (SSG)      prerendered as static HTML (uses generateStaticParams)
+ƒ  (Dynamic)  server-rendered on demand
+
+
+==> [Regression tests] npm test -- --runInBand --require-existing-build
+
+> cyang-doclinks@0.1.0 test
+> node scripts/run-test-suite.mjs --runInBand --require-existing-build
+
+Ensuring Chromium browser runtime is installed before the Playwright-backed suite.
+Using existing production build for the Playwright-backed test run.
+Running Playwright suite profile: local-safe
+1: starting server using command "npm run start"
+and when url "[ 'http://127.0.0.1:3000' ]" is responding with HTTP status code 200
+running tests using command "node scripts/run-repo-tool.mjs playwright test --workers=1 tests/a11y.spec.ts tests/access-rate-limit-guardrails.spec.ts tests/access-ticket-helpers.spec.ts tests/admin-abuse-route-guardrails.spec.ts tests/admin-audit-export-guardrails.spec.ts tests/admin-auth-owner-lib-guardrails.spec.ts tests/admin-billing-api-guardrails.spec.ts tests/admin-billing-redirect-guardrails.spec.ts tests/admin-client-error-guardrails.spec.ts tests/admin-dmca-route-guardrails.spec.ts tests/admin-doc-detail-guardrails.spec.ts tests/admin-get-rate-limit-runtime.spec.ts tests/admin-layout-guardrails.spec.ts tests/admin-post-rate-limit-runtime.spec.ts tests/admin-security-control-routes-guardrails.spec.ts tests/admin-security-key-api-guardrails.spec.ts tests/alias-raw-log-guardrails.spec.ts tests/analytics-helpers.spec.ts tests/api-keys.spec.ts tests/api-route-access.spec.ts tests/api-route-guardrails.spec.ts tests/api-v1-abuse-report-guardrails.spec.ts tests/api-v1-aliases-guardrails.spec.ts tests/api-v1-auth.spec.ts tests/api-v1-docs-guardrails.spec.ts tests/api-v1-share-url-guardrails.spec.ts tests/api-v1-takedown-guardrails.spec.ts tests/audit-helpers.spec.ts tests/auth-authz-input-guardrails.spec.ts tests/auth-redirect-guardrails.spec.ts tests/auth-signin-guardrails.spec.ts tests/backup-recovery-config.spec.ts tests/backup-status-guardrails.spec.ts tests/billing-flags.spec.ts tests/billing-security-guardrails.spec.ts tests/billing-subscription-helpers.spec.ts tests/ci-workflow-guardrails.spec.ts tests/client-error-guardrails.spec.ts tests/client-ip-helpers.spec.ts tests/config-audit.spec.ts tests/configured-base-url-guardrails.spec.ts tests/cookie-security-policy.spec.ts tests/cron-auth-guardrails.spec.ts tests/cron-auth.spec.ts tests/cron-webhooks-guardrails.spec.ts tests/crypto-secrets.spec.ts tests/crypto-signing.spec.ts tests/d-alias-actions-guardrails.spec.ts tests/db-r2-settings-guardrails.spec.ts tests/db-schema-guardrails.spec.ts tests/device-trust.spec.ts tests/document-status.spec.ts tests/email-guardrails.spec.ts tests/encryption-guardrails.spec.ts tests/env-config.spec.ts tests/env-example-audit.spec.ts tests/file-family.spec.ts tests/final-core-guardrails.spec.ts tests/geo-cookies-view.spec.ts tests/geo-expiration-sharelifecycle-guardrails.spec.ts tests/health-checks.spec.ts tests/immutable-audit-guardrails.spec.ts tests/infra-helper-guardrails.spec.ts tests/key-rotation-config.spec.ts tests/key-rotation-jobs-guardrails.spec.ts tests/legal-docs.spec.ts tests/legal-emails.spec.ts tests/local-verification-profile.spec.ts tests/malware-pdf-retention-usage-guardrails.spec.ts tests/manual-password-reset-guardrails.spec.ts tests/manual-signup-url-guardrails.spec.ts tests/master-key-config.spec.ts tests/master-mfa-guardrails.spec.ts tests/mfa-guardrails.spec.ts tests/migration-orchestration.spec.ts tests/non-api-auth-route-guardrails.spec.ts tests/non-api-oauth-route-guardrails.spec.ts tests/non-api-route-handlers-guardrails.spec.ts tests/non-api-serve-route-guardrails.spec.ts tests/oauth-google-guardrails.spec.ts tests/observability.spec.ts tests/office-preview-source.spec.ts tests/office-preview.spec.ts tests/org-auth-redirect-base-url-guardrails.spec.ts tests/org-invite-url-guardrails.spec.ts tests/org-membership-guardrails.spec.ts tests/orgs-policy.spec.ts tests/password.spec.ts tests/pdf-watermark-guardrails.spec.ts tests/platform-security-config-guardrails.spec.ts tests/proof-artifacts.spec.ts tests/proof-install.spec.ts tests/proof-lock.spec.ts tests/proof-playwright-runtime.spec.ts tests/prove-build-runtime.spec.ts tests/public-base-url-guardrails.spec.ts tests/public-health-runtime-proof.spec.ts tests/public-rate-limit-dast.spec.ts tests/public-redirect-base-url-guardrails.spec.ts tests/public-runtime-config.spec.ts tests/quarantine-override-guardrails.spec.ts tests/rate-limit-hash.spec.ts tests/rbac-guardrails.spec.ts tests/redirects.spec.ts tests/release-gate.spec.ts tests/repo-secrets-audit.spec.ts tests/resend-guardrails.spec.ts tests/restore-verify-runtime-proof.spec.ts tests/route-timeout.spec.ts tests/runtime-env.spec.ts tests/runtime-oversized-payloads.spec.ts tests/scan-queue-guardrails.spec.ts tests/security-hardening-regressions.spec.ts tests/security-policy.spec.ts tests/security-static-audit.spec.ts tests/security-telemetry-helpers.spec.ts tests/security-telemetry-log-guardrails.spec.ts tests/server-actions-guardrails.spec.ts tests/server-actions-input-guardrails.spec.ts tests/share-auth.spec.ts tests/share-password-handling.spec.ts tests/share-runtime-proof.spec.ts tests/signup-input-guardrails.spec.ts tests/signup-password.spec.ts tests/slugify.spec.ts tests/sql-redirect-static-audit.spec.ts tests/stale-admin-actions-removed.spec.ts tests/status-page-scenario.spec.ts tests/stray-surface-removed.spec.ts tests/stripe-redirect-url.spec.ts tests/stripe-stack-guardrails.spec.ts tests/stripe-webhook-runtime-proof.spec.ts tests/stripe-webhook-verify.spec.ts tests/sweep-gaps-remaining.spec.ts tests/sweep-gaps.spec.ts tests/tenant.spec.ts tests/test-suite-profile.spec.ts tests/upload-and-cron-guardrails.spec.ts tests/upload-complete-url-guardrails.spec.ts tests/upload-runtime-proof.spec.ts tests/upload-type-validation.spec.ts tests/view-limit-override-guardrails.spec.ts tests/viewer-office-route-guardrails.spec.ts tests/viewer-shell-separation.spec.ts tests/webhook-events-guardrails.spec.ts tests/webhook-owner-scope-guardrails.spec.ts tests/webhook-secrets.spec.ts tests/webhook-url-guardrails.spec.ts"
+
+
+> cyang-doclinks@0.1.0 start
+> node scripts/run-repo-tool.mjs next start
+
+▲ Next.js 16.1.7
+- Local:         http://localhost:3000
+- Network:       http://192.168.68.50:3000
+
+✓ Starting...
+✓ Ready in 1643ms
+
+Running 565 tests using 1 worker
+
+  ok   1 [chromium] › tests\a11y.spec.ts:7:7 › axe: / (1.4s)
+  ok   2 [chromium] › tests\a11y.spec.ts:7:7 › axe: /projects (1.3s)
+  ok   3 [chromium] › tests\a11y.spec.ts:7:7 › axe: /projects/doclinks (1.4s)
+  ok   4 [chromium] › tests\a11y.spec.ts:7:7 › axe: /about (1.3s)
+  ok   5 [chromium] › tests\a11y.spec.ts:7:7 › axe: /privacy (1.4s)
+  ok   6 [chromium] › tests\a11y.spec.ts:7:7 › axe: /terms (1.4s)
+  ok   7 [chromium] › tests\a11y.spec.ts:7:7 › axe: /login (1.2s)
+  ok   8 [chromium] › tests\a11y.spec.ts:7:7 › axe: /report (1.3s)
+  ok   9 [chromium] › tests\access-rate-limit-guardrails.spec.ts:5:7 › access/rate-limit guardrails › access ticket helpers fail closed on malformed ticket ids and bound replay/ttl windows (3ms)
+  ok  10 [chromium] › tests\access-rate-limit-guardrails.spec.ts:13:7 › access/rate-limit guardrails › rate limiter normalizes scope/id and clamps numeric controls (3ms)
+  ok  11 [chromium] › tests\access-ticket-helpers.spec.ts:34:7 › access ticket helpers › returns null for empty ip/ua inputs (1ms)
+  ok  12 [chromium] › tests\access-ticket-helpers.spec.ts:40:7 › access ticket helpers › hashes ip and user-agent deterministically when secret exists (4ms)
+  ok  13 [chromium] › tests\access-ticket-helpers.spec.ts:52:7 › access ticket helpers › throws without binding secret when fallback is disabled (5ms)
+  ok  14 [chromium] › tests\access-ticket-helpers.spec.ts:60:7 › access ticket helpers › uses dev fallback when explicitly enabled (1ms)
+  ok  15 [chromium] › tests\access-ticket-helpers.spec.ts:69:7 › access ticket helpers › uses NEXTAUTH_SECRET when VIEW_SALT is missing (1ms)
+  ok  16 [chromium] › tests\access-ticket-helpers.spec.ts:78:7 › access ticket helpers › does not allow dev fallback in production (1ms)
+  ok  17 [chromium] › tests\access-ticket-helpers.spec.ts:86:7 › access ticket helpers › reads ticket ttl values from env (2ms)
+  ok  18 [chromium] › tests\access-ticket-helpers.spec.ts:93:7 › access ticket helpers › falls back to safe default ttl for malformed env values (2ms)
+  ok  19 [chromium] › tests\access-ticket-helpers.spec.ts:100:7 › access ticket helpers › clamps ttl values to minimum of 1 second (2ms)
+  ok  20 [chromium] › tests\access-ticket-helpers.spec.ts:107:7 › access ticket helpers › caps ttl values to short-lived maximums (2ms)
+  ok  21 [chromium] › tests\admin-abuse-route-guardrails.spec.ts:5:7 › admin abuse route guardrails › admin abuse actions validate UUID inputs before DB writes (6ms)
+  ok  22 [chromium] › tests\admin-audit-export-guardrails.spec.ts:5:7 › admin audit export guardrails › audit export route does not echo raw DB errors (3ms)
+  ok  23 [chromium] › tests\admin-auth-owner-lib-guardrails.spec.ts:5:7 › admin/auth/owner helper guardrails › legacy admin/auth/owner compatibility shims stay removed (2ms)
+  ok  24 [chromium] › tests\admin-billing-api-guardrails.spec.ts:5:7 › admin billing api guardrails › invoices route sanitizes Stripe invoice links and maps unauthenticated to 401 (4ms)
+  ok  25 [chromium] › tests\admin-billing-api-guardrails.spec.ts:15:7 › admin billing api guardrails › billing status route distinguishes unauthenticated from forbidden (3ms)
+  ok  26 [chromium] › tests\admin-billing-api-guardrails.spec.ts:24:7 › admin billing api guardrails › checkout, portal, and sync routes use auth error classification helper (4ms)
+  ok  27 [chromium] › tests\admin-billing-api-guardrails.spec.ts:37:7 › admin billing api guardrails › billing sync logs a sanitized failure event (1ms)
+  ok  28 [chromium] › tests\admin-billing-redirect-guardrails.spec.ts:5:7 › admin billing redirect guardrails › billing settings POST uses trusted base url resolver (2ms)
+  ok  29 [chromium] › tests\admin-billing-redirect-guardrails.spec.ts:12:7 › admin billing redirect guardrails › billing form routes enforce payload-size checks (4ms)
+  ok  30 [chromium] › tests\admin-client-error-guardrails.spec.ts:5:7 › admin client error guardrails › owner/admin client actions avoid surfacing raw exception messages (5ms)
+  ok  31 [chromium] › tests\admin-dmca-route-guardrails.spec.ts:5:7 › admin dmca route guardrails › dmca admin route validates action, ids, and payload size (5ms)
+  ok  32 [chromium] › tests\admin-doc-detail-guardrails.spec.ts:5:7 › admin doc detail guardrails › admin doc detail route validates UUID params and encodes alias links (2ms)
+  ok  33 [chromium] › tests\admin-get-rate-limit-runtime.spec.ts:100:7 › admin/cron get route runtime rate-limit behavior › admin audit export route rate-limits constrained bursts (12ms)
+  ok  34 [chromium] › tests\admin-get-rate-limit-runtime.spec.ts:108:7 › admin/cron get route runtime rate-limit behavior › admin billing settings route rate-limits constrained bursts (3ms)
+  ok  35 [chromium] › tests\admin-get-rate-limit-runtime.spec.ts:116:7 › admin/cron get route runtime rate-limit behavior › admin billing invoices route rate-limits constrained bursts (3ms)
+  ok  36 [chromium] › tests\admin-get-rate-limit-runtime.spec.ts:124:7 › admin/cron get route runtime rate-limit behavior › admin billing status route rate-limits constrained bursts (2ms)
+  ok  37 [chromium] › tests\admin-get-rate-limit-runtime.spec.ts:133:7 › admin/cron get route runtime rate-limit behavior › admin db-index-audit route rate-limits constrained bursts (3ms)
+  ok  38 [chromium] › tests\admin-get-rate-limit-runtime.spec.ts:141:7 › admin/cron get route runtime rate-limit behavior › admin retention run route rate-limits constrained bursts (1ms)
+  ok  39 [chromium] › tests\admin-get-rate-limit-runtime.spec.ts:149:7 › admin/cron get route runtime rate-limit behavior › admin security freeze route rate-limits constrained bursts (2ms)
+  ok  40 [chromium] › tests\admin-get-rate-limit-runtime.spec.ts:157:7 › admin/cron get route runtime rate-limit behavior › admin security keys route rate-limits constrained bursts (2ms)
+  ok  41 [chromium] › tests\admin-get-rate-limit-runtime.spec.ts:165:7 › admin/cron get route runtime rate-limit behavior › admin security org-access route rate-limits constrained bursts (2ms)
+  ok  42 [chromium] › tests\admin-get-rate-limit-runtime.spec.ts:173:7 › admin/cron get route runtime rate-limit behavior › admin security rbac route rate-limits constrained bursts (2ms)
+  ok  43 [chromium] › tests\admin-get-rate-limit-runtime.spec.ts:181:7 › admin/cron get route runtime rate-limit behavior › admin upload route rate-limits constrained bursts (2ms)
+  ok  44 [chromium] › tests\admin-get-rate-limit-runtime.spec.ts:189:7 › admin/cron get route runtime rate-limit behavior › cron aggregate route rate-limits constrained bursts (1ms)
+  ok  45 [chromium] › tests\admin-get-rate-limit-runtime.spec.ts:197:7 › admin/cron get route runtime rate-limit behavior › cron billing-sync route rate-limits constrained bursts (2ms)
+  ok  46 [chromium] › tests\admin-get-rate-limit-runtime.spec.ts:205:7 › admin/cron get route runtime rate-limit behavior › cron key-rotation route rate-limits constrained bursts (1ms)
+  ok  47 [chromium] › tests\admin-get-rate-limit-runtime.spec.ts:213:7 › admin/cron get route runtime rate-limit behavior › cron nightly route rate-limits constrained bursts (2ms)
+  ok  48 [chromium] › tests\admin-get-rate-limit-runtime.spec.ts:221:7 › admin/cron get route runtime rate-limit behavior › cron orphan-sweep route rate-limits constrained bursts (2ms)
+  ok  49 [chromium] › tests\admin-get-rate-limit-runtime.spec.ts:229:7 › admin/cron get route runtime rate-limit behavior › cron retention route rate-limits constrained bursts (2ms)
+  ok  50 [chromium] › tests\admin-get-rate-limit-runtime.spec.ts:237:7 › admin/cron get route runtime rate-limit behavior › cron scan route rate-limits constrained bursts (2ms)
+  ok  51 [chromium] › tests\admin-get-rate-limit-runtime.spec.ts:245:7 › admin/cron get route runtime rate-limit behavior › cron webhooks route rate-limits constrained bursts (2ms)
+  ok  52 [chromium] › tests\admin-layout-guardrails.spec.ts:5:7 › admin layout guardrails › /admin layout enforces authenticated session (1ms)
+  ok  53 [chromium] › tests\admin-layout-guardrails.spec.ts:13:7 › admin layout guardrails › /admin/(owner) layout enforces owner role (1ms)
+  ok  54 [chromium] › tests\admin-post-rate-limit-runtime.spec.ts:96:7 › admin post route runtime rate-limit behavior › security activate route returns RATE_LIMIT for constrained burst (2ms)
+  ok  55 [chromium] › tests\admin-post-rate-limit-runtime.spec.ts:131:7 › admin post route runtime rate-limit behavior › security freeze route redirects with RATE_LIMIT for constrained burst (2ms)
+  ok  56 [chromium] › tests\admin-post-rate-limit-runtime.spec.ts:156:7 › admin post route runtime rate-limit behavior › admin billing settings route redirects with RATE_LIMIT for constrained burst (2ms)
+  ok  57 [chromium] › tests\admin-post-rate-limit-runtime.spec.ts:181:7 › admin post route runtime rate-limit behavior › upload abort route returns RATE_LIMIT for constrained burst (2ms)
+  ok  58 [chromium] › tests\admin-post-rate-limit-runtime.spec.ts:208:7 › admin post route runtime rate-limit behavior › admin abuse route returns RATE_LIMIT for constrained burst (2ms)
+  ok  59 [chromium] › tests\admin-post-rate-limit-runtime.spec.ts:234:7 › admin post route runtime rate-limit behavior › admin dmca route returns RATE_LIMITED for constrained burst (2ms)
+  ok  60 [chromium] › tests\admin-post-rate-limit-runtime.spec.ts:260:7 › admin post route runtime rate-limit behavior › upload presign route returns RATE_LIMIT for constrained burst (3ms)
+  ok  61 [chromium] › tests\admin-post-rate-limit-runtime.spec.ts:286:7 › admin post route runtime rate-limit behavior › upload complete route returns RATE_LIMIT for constrained burst (3ms)
+  ok  62 [chromium] › tests\admin-post-rate-limit-runtime.spec.ts:312:7 › admin post route runtime rate-limit behavior › admin billing checkout route redirects with RATE_LIMIT for constrained burst (2ms)
+  ok  63 [chromium] › tests\admin-post-rate-limit-runtime.spec.ts:320:7 › admin post route runtime rate-limit behavior › admin billing portal route redirects with RATE_LIMIT for constrained burst (2ms)
+  ok  64 [chromium] › tests\admin-post-rate-limit-runtime.spec.ts:328:7 › admin post route runtime rate-limit behavior › admin billing sync route redirects with RATE_LIMIT for constrained burst (2ms)
+  ok  65 [chromium] › tests\admin-post-rate-limit-runtime.spec.ts:336:7 › admin post route runtime rate-limit behavior › admin billing view-override route redirects with RATE_LIMIT for constrained burst (2ms)
+  ok  66 [chromium] › tests\admin-post-rate-limit-runtime.spec.ts:344:7 › admin post route runtime rate-limit behavior › viewer billing checkout route redirects with RATE_LIMIT for constrained burst (2ms)
+  ok  67 [chromium] › tests\admin-post-rate-limit-runtime.spec.ts:352:7 › admin post route runtime rate-limit behavior › security org-access route redirects with RATE_LIMIT for constrained burst (2ms)
+  ok  68 [chromium] › tests\admin-post-rate-limit-runtime.spec.ts:360:7 › admin post route runtime rate-limit behavior › security rbac route returns RATE_LIMIT for constrained burst (2ms)
+  ok  69 [chromium] › tests\admin-post-rate-limit-runtime.spec.ts:368:7 › admin post route runtime rate-limit behavior › security requeue-scans route redirects with RATE_LIMIT for constrained burst (2ms)
+  ok  70 [chromium] › tests\admin-post-rate-limit-runtime.spec.ts:376:7 › admin post route runtime rate-limit behavior › security revoke route returns RATE_LIMIT for constrained burst (2ms)
+  ok  71 [chromium] › tests\admin-post-rate-limit-runtime.spec.ts:384:7 › admin post route runtime rate-limit behavior › security rotate route returns RATE_LIMIT for constrained burst (2ms)
+  ok  72 [chromium] › tests\admin-post-rate-limit-runtime.spec.ts:392:7 › admin post route runtime rate-limit behavior › security rollback route returns RATE_LIMIT for constrained burst (2ms)
+  ok  73 [chromium] › tests\admin-post-rate-limit-runtime.spec.ts:400:7 › admin post route runtime rate-limit behavior › security tenant-freeze route returns RATE_LIMIT for constrained burst (2ms)
+  ok  74 [chromium] › tests\admin-security-control-routes-guardrails.spec.ts:5:7 › admin security control route guardrails › freeze/rbac/tenant-freeze routes enforce payload-size checks (6ms)
+  ok  75 [chromium] › tests\admin-security-control-routes-guardrails.spec.ts:19:7 › admin security control route guardrails › requeue-scans route enforces payload-size checks (2ms)
+  ok  76 [chromium] › tests\admin-security-key-api-guardrails.spec.ts:5:7 › admin security key api guardrails › security key routes distinguish unauthenticated vs forbidden (7ms)
+  ok  77 [chromium] › tests\admin-security-key-api-guardrails.spec.ts:19:7 › admin security key api guardrails › revoke and rotate routes validate key-id shape and reject unknown keys in payload (2ms)
+  ok  78 [chromium] › tests\admin-security-key-api-guardrails.spec.ts:30:7 › admin security key api guardrails › rotate route blocks noop rotations (0ms)
+  ok  79 [chromium] › tests\admin-security-key-api-guardrails.spec.ts:35:7 › admin security key api guardrails › security key mutation routes enforce payload-size limits (7ms)
+  ok  80 [chromium] › tests\alias-raw-log-guardrails.spec.ts:5:7 › alias raw log guardrails › public alias raw route avoids dumping raw error objects in production logs (1ms)
+  ok  81 [chromium] › tests\analytics-helpers.spec.ts:18:7 › analytics env helpers › returns fallback for missing, invalid, and non-positive values (3ms)
+  ok  82 [chromium] › tests\analytics-helpers.spec.ts:32:7 › analytics env helpers › parses positive integer-like values and floors decimals (1ms)
+  ok  83 [chromium] › tests\analytics-helpers.spec.ts:43:7 › analytics env helpers › fails closed for malformed env values (2ms)
+  ok  84 [chromium] › tests\analytics-helpers.spec.ts:50:7 › analytics env helpers › aggregate helper clamps daysBack bounds when DB is unavailable (3ms)
+  ok  85 [chromium] › tests\api-keys.spec.ts:34:7 › api key helpers › generates API key with expected format and prefix (3ms)
+  ok  86 [chromium] › tests\api-keys.spec.ts:41:7 › api key helpers › hashes deterministically with API_KEY_SALT (3ms)
+  ok  87 [chromium] › tests\api-keys.spec.ts:54:7 › api key helpers › falls back from API_KEY_SALT to NEXTAUTH_SECRET then VIEW_SALT (1ms)
+  ok  88 [chromium] › tests\api-keys.spec.ts:68:7 › api key helpers › throws when no salt sources are available (2ms)
+  ok  89 [chromium] › tests\api-keys.spec.ts:75:7 › api key helpers › constantTimeEqual handles equal, unequal, and length mismatch values (2ms)
+  ok  90 [chromium] › tests\api-keys.spec.ts:81:7 › api key helpers › hash and compare helpers bound oversized plaintext inputs (2ms)
+  ok  91 [chromium] › tests\api-route-access.spec.ts:5:7 › api route access controls (static) › health endpoints remain publicly readable but throttled (6ms)
+  ok  92 [chromium] › tests\api-route-access.spec.ts:19:7 › api route access controls (static) › repo no longer includes stray public debug alias endpoint (1ms)
+  ok  93 [chromium] › tests\api-route-access.spec.ts:23:7 › api route access controls (static) › repo no longer includes owner debug inspection endpoints (2ms)
+  ok  94 [chromium] › tests\api-route-guardrails.spec.ts:50:7 › api route guardrails › admin routes are authenticated (56ms)
+  ok  95 [chromium] › tests\api-route-guardrails.spec.ts:70:7 › api route guardrails › cron routes enforce secret authorization (45ms)
+  ok  96 [chromium] › tests\api-route-guardrails.spec.ts:84:7 › api route guardrails › public report/takedown endpoints are rate-limited (1ms)
+  ok  97 [chromium] › tests\api-route-guardrails.spec.ts:91:7 › api route guardrails › public unauthenticated POST endpoints include abuse throttling (3ms)
+  ok  98 [chromium] › tests\api-route-guardrails.spec.ts:104:7 › api route guardrails › admin analytics aggregate route is rate-limited (2ms)
+  ok  99 [chromium] › tests\api-route-guardrails.spec.ts:111:7 › api route guardrails › sensitive admin GET routes include explicit rate limiting (11ms)
+  ok 100 [chromium] › tests\api-route-guardrails.spec.ts:132:7 › api route guardrails › cron unauthorized responses do not include setup hints (47ms)
+  ok 101 [chromium] › tests\api-route-guardrails.spec.ts:144:7 › api route guardrails › viewer office preview fetch stays scoped to raw document paths (3ms)
+  ok 102 [chromium] › tests\api-route-guardrails.spec.ts:153:7 › api route guardrails › all POST routes have an explicit security control (49ms)
+  ok 103 [chromium] › tests\api-route-guardrails.spec.ts:183:7 › api route guardrails › database metadata/debug queries require admin auth (53ms)
+  ok 104 [chromium] › tests\api-route-guardrails.spec.ts:203:7 › api route guardrails › api redirects avoid request-host-derived absolute URLs (53ms)
+  ok 105 [chromium] › tests\api-route-guardrails.spec.ts:217:7 › api route guardrails › high-cost metadata/debug routes use route timeout guards (12ms)
+  ok 106 [chromium] › tests\api-route-guardrails.spec.ts:235:7 › api route guardrails › health routes expose only external summaries on public endpoints (3ms)
+  ok 107 [chromium] › tests\api-route-guardrails.spec.ts:244:7 › api route guardrails › admin control-plane routes use route timeout guards (13ms)
+  ok 108 [chromium] › tests\api-route-guardrails.spec.ts:264:7 › api route guardrails › public abuse and webhook intake routes use route timeout guards (6ms)
+  ok 109 [chromium] › tests\api-route-guardrails.spec.ts:279:7 › api route guardrails › critical cron scan route uses route timeout guards (1ms)
+  ok 110 [chromium] › tests\api-route-guardrails.spec.ts:286:7 › api route guardrails › stray debug and test-only routes remain removed (45ms)
+  ok 111 [chromium] › tests\api-route-guardrails.spec.ts:301:7 › api route guardrails › .env.example includes timeout env keys used by route guards (84ms)
+  ok 112 [chromium] › tests\api-route-guardrails.spec.ts:308:7 › api route guardrails › .env.example includes RATE_LIMIT env keys used in process.env (82ms)
+  ok 113 [chromium] › tests\api-route-guardrails.spec.ts:315:7 › api route guardrails › .env.example includes ABUSE_BLOCK env keys used in process.env (70ms)
+  ok 114 [chromium] › tests\api-route-guardrails.spec.ts:322:7 › api route guardrails › auth email start route enforces form body bounds before parsing (2ms)
+  ok 115 [chromium] › tests\api-route-guardrails.spec.ts:329:7 › api route guardrails › auth and share-download throttles are strict fail-closed (6ms)
+  ok 116 [chromium] › tests\api-route-guardrails.spec.ts:345:7 › api route guardrails › global api rate limiter defaults to fail-closed when strict is omitted (1ms)
+  ok 117 [chromium] › tests\api-route-guardrails.spec.ts:350:7 › api route guardrails › share raw per-IP and per-token rate limits fail closed (1ms)
+  ok 118 [chromium] › tests\api-route-guardrails.spec.ts:357:7 › api route guardrails › monetization soft-cap rate-limit gates fail closed (4ms)
+  ok 119 [chromium] › tests\api-route-guardrails.spec.ts:374:7 › api route guardrails › auth entry routes set no-store cache headers (5ms)
+  ok 120 [chromium] › tests\api-v1-abuse-report-guardrails.spec.ts:5:7 › api v1 abuse report guardrails › abuse report route guards decode failures and payload bounds (2ms)
+  ok 121 [chromium] › tests\api-v1-aliases-guardrails.spec.ts:5:7 › api v1 aliases guardrails › alias creation route validates doc UUIDs and payload shape/size (3ms)
+  ok 122 [chromium] › tests\api-v1-auth.spec.ts:6:7 › api auth guard primitives › rejects missing API key (2ms)
+  ok 123 [chromium] › tests\api-v1-auth.spec.ts:16:7 › api auth guard primitives › rejects malformed Authorization key format (2ms)
+  ok 124 [chromium] › tests\api-v1-auth.spec.ts:28:7 › api auth guard primitives › rejects malformed x-api-key format (1ms)
+  ok 125 [chromium] › tests\api-v1-auth.spec.ts:40:7 › api auth guard primitives › rejects api keys with empty random suffix (1ms)
+  ok 126 [chromium] › tests\api-v1-auth.spec.ts:52:7 › api auth guard primitives › x-api-key takes precedence over Authorization (2ms)
+  ok 127 [chromium] › tests\api-v1-auth.spec.ts:67:7 › api auth guard primitives › rejects oversized API key header values (1ms)
+  ok 128 [chromium] › tests\api-v1-auth.spec.ts:81:7 › api auth guard primitives › api auth helper includes control-character filtering (2ms)
+  ok 129 [chromium] › tests\api-v1-docs-guardrails.spec.ts:5:7 › api v1 docs guardrails › docs listing route enforces query limit bounds and timeout handling (3ms)
+  ok 130 [chromium] › tests\api-v1-share-url-guardrails.spec.ts:5:7 › api v1 share URL guardrails › share creation route uses trusted base-url resolver (2ms)
+  ok 131 [chromium] › tests\api-v1-share-url-guardrails.spec.ts:13:7 › api v1 share URL guardrails › share creation route enforces payload and input guardrails (2ms)
+  ok 132 [chromium] › tests\api-v1-takedown-guardrails.spec.ts:5:7 › api v1 takedown guardrails › takedown route validates doc_id shape before uuid casting (2ms)
+  ok 133 [chromium] › tests\audit-helpers.spec.ts:22:7 › audit helper primitives › extracts client IP with expected header precedence (3ms)
+  ok 134 [chromium] › tests\audit-helpers.spec.ts:46:7 › audit helper primitives › extracts user agent and trims whitespace (1ms)
+  ok 135 [chromium] › tests\audit-helpers.spec.ts:52:7 › audit helper primitives › caps oversized user-agent header values (1ms)
+  ok 136 [chromium] › tests\audit-helpers.spec.ts:58:7 › audit helper primitives › deviceHashFrom is deterministic and requires configured salt (2ms)
+  ok 137 [chromium] › tests\audit-helpers.spec.ts:74:7 › audit helper primitives › deviceHashFrom returns null when both ip and user-agent are empty (1ms)
+  ok 138 [chromium] › tests\audit-helpers.spec.ts:80:7 › audit helper primitives › device trust and audit writers fail closed on malformed identifiers (3ms)
+  ok 139 [chromium] › tests\auth-authz-input-guardrails.spec.ts:5:7 › auth/authz input guardrails › auth sign-in path validates manual credential email and password bounds (1ms)
+  ok 140 [chromium] › tests\auth-authz-input-guardrails.spec.ts:13:7 › auth/authz input guardrails › authz validates org slugs, invite tokens, and uuid doc ids (2ms)
+  ok 141 [chromium] › tests\auth-redirect-guardrails.spec.ts:15:7 › auth redirect guardrails › forces dashboard for external callback URLs (0ms)
+  ok 142 [chromium] › tests\auth-redirect-guardrails.spec.ts:21:7 › auth redirect guardrails › allows safe internal routes only (2ms)
+  ok 143 [chromium] › tests\auth-signin-guardrails.spec.ts:5:7 › auth sign-in guardrails › oauth sign-in enforces verified email checks (2ms)
+  ok 144 [chromium] › tests\backup-recovery-config.spec.ts:20:7 › backup recovery config parsing › reports disabled when automation is not explicitly enabled (2ms)
+  ok 145 [chromium] › tests\backup-recovery-config.spec.ts:33:7 › backup recovery config parsing › clamps numeric config values through the public status summary (2ms)
+  ok 146 [chromium] › tests\backup-recovery-config.spec.ts:46:7 › backup recovery config parsing › trims webhook input before the public backup check emits a ping (2ms)
+  ok 147 [chromium] › tests\backup-status-guardrails.spec.ts:5:7 › backup status guardrails › backup status webhook route enforces constant-time auth and abuse throttling (4ms)
+  ok 148 [chromium] › tests\billing-flags.spec.ts:36:7 › billing flag helpers › uses secure defaults when env vars are missing (2ms)
+  ok 149 [chromium] › tests\billing-flags.spec.ts:43:7 › billing flag helpers › parses explicit truthy and falsy values (2ms)
+  ok 150 [chromium] › tests\billing-flags.spec.ts:52:7 › billing flag helpers › falls back to defaults for unknown env tokens (2ms)
+  ok 151 [chromium] › tests\billing-flags.spec.ts:61:7 › billing flag helpers › fails closed on malformed env values (2ms)
+  ok 152 [chromium] › tests\billing-security-guardrails.spec.ts:5:7 › billing security guardrails › webhook identity binding is enforced before subscription upsert (2ms)
+  ok 153 [chromium] › tests\billing-security-guardrails.spec.ts:13:7 › billing security guardrails › subscription upsert does not clear existing user binding when incoming user is null (1ms)
+  ok 154 [chromium] › tests\billing-security-guardrails.spec.ts:18:7 › billing security guardrails › billing snapshot webhook events are scoped to the requesting user/subscription (1ms)
+  ok 155 [chromium] › tests\billing-security-guardrails.spec.ts:26:7 › billing security guardrails › billing maintenance uses a rolling cursor instead of fixed first-N scan (1ms)
+  ok 156 [chromium] › tests\billing-subscription-helpers.spec.ts:25:7 › billing subscription helper primitives › unixToIso validates and converts unix timestamps (1ms)
+  ok 157 [chromium] › tests\billing-subscription-helpers.spec.ts:32:7 › billing subscription helper primitives › classifyBillingEntitlement handles canonical states (3ms)
+  ok 158 [chromium] › tests\billing-subscription-helpers.spec.ts:45:7 › billing subscription helper primitives › classifyBillingEntitlement fails closed for expired/unknown states (1ms)
+  ok 159 [chromium] › tests\billing-subscription-helpers.spec.ts:55:7 › billing subscription helper primitives › helpers fail closed on invalid user ids before db lookups (1ms)
+  ok 160 [chromium] › tests\ci-workflow-guardrails.spec.ts:5:7 › ci workflow guardrails › CI pipeline enforces lint, build, and security jobs (8ms)
+  ok 161 [chromium] › tests\client-error-guardrails.spec.ts:5:7 › client error guardrails › client forms and viewers avoid exposing raw exception messages in production paths (12ms)
+  ok 162 [chromium] › tests\client-ip-helpers.spec.ts:33:7 › client ip trust model › uses platform headers before generic proxy headers (2ms)
+  ok 163 [chromium] › tests\client-ip-helpers.spec.ts:46:7 › client ip trust model › ignores forwarded headers in production unless explicitly trusted (2ms)
+  ok 164 [chromium] › tests\client-ip-helpers.spec.ts:63:7 › client ip trust model › respects TRUST_PROXY_HEADERS for generic forwarded headers in production (1ms)
+  ok 165 [chromium] › tests\client-ip-helpers.spec.ts:74:7 › client ip trust model › treats managed platform env as trusted platform proxy in production (1ms)
+  ok 166 [chromium] › tests\client-ip-helpers.spec.ts:85:7 › client ip trust model › normalizes forwarded IPv4 values with ports and rejects malformed values (1ms)
+  ok 167 [chromium] › tests\client-ip-helpers.spec.ts:95:7 › client ip trust model › rejects malformed forwarded values and falls back safely (1ms)
+  ok 168 [chromium] › tests\config-audit.spec.ts:13:7 › production config audit › fails production-like environments when critical settings are missing or insecure (4ms)
+  ok 169 [chromium] › tests\config-audit.spec.ts:49:7 › production config audit › passes a coherent staging/production-style configuration (2ms)
+  ok 170 [chromium] › tests\config-audit.spec.ts:87:7 › production config audit › warns when deprecated env aliases are used without preferred names (1ms)
+  ok 171 [chromium] › tests\configured-base-url-guardrails.spec.ts:10:7 › configured base url guardrails › fails closed in production when base URL config is missing (1ms)
+  ok 172 [chromium] › tests\configured-base-url-guardrails.spec.ts:14:7 › configured base url guardrails › allows localhost fallback only outside production (1ms)
+  ok 173 [chromium] › tests\configured-base-url-guardrails.spec.ts:18:7 › configured base url guardrails › rejects malformed configured values with control characters (1ms)
+  ok 174 [chromium] › tests\configured-base-url-guardrails.spec.ts:27:7 › configured base url guardrails › server-side link builders use configured base-url resolver (2ms)
+  ok 175 [chromium] › tests\cookie-security-policy.spec.ts:10:7 › cookie security policy › enables secure cookies in production-like environments (2ms)
+  ok 176 [chromium] › tests\cookie-security-policy.spec.ts:18:7 › cookie security policy › keeps secure cookies off by default in local non-production mode (1ms)
+  ok 177 [chromium] › tests\cookie-security-policy.spec.ts:28:7 › cookie security policy › google oauth routes use shared secure-cookie policy (1ms)
+  ok 178 [chromium] › tests\cron-auth-guardrails.spec.ts:5:7 › cron auth guardrails › cron unauthorized response is cloaked by default (1ms)
+  ok 179 [chromium] › tests\cron-auth-guardrails.spec.ts:11:7 › cron auth guardrails › all cron routes use shared unauthorized response helper (10ms)
+  ok 180 [chromium] › tests\cron-auth.spec.ts:17:7 › cron auth › fails closed when CRON_SECRET is missing (1ms)
+  ok 181 [chromium] › tests\cron-auth.spec.ts:23:7 › cron auth › accepts exact secret and bearer secret (2ms)
+  ok 182 [chromium] › tests\cron-auth.spec.ts:33:7 › cron auth › accepts bearer case-insensitively and trims token (1ms)
+  ok 183 [chromium] › tests\cron-auth.spec.ts:39:7 › cron auth › rejects wrong or missing authorization values (1ms)
+  ok 184 [chromium] › tests\cron-auth.spec.ts:49:7 › cron auth › rejects oversized authorization header payloads (1ms)
+  ok 185 [chromium] › tests\cron-webhooks-guardrails.spec.ts:5:7 › cron webhooks guardrails › cron webhooks route fails closed when delivery processing returns ok=false (2ms)
+  ok 186 [chromium] › tests\crypto-secrets.spec.ts:18:7 › crypto secret helpers › round-trips encrypted secrets (2ms)
+  ok 187 [chromium] › tests\crypto-secrets.spec.ts:25:7 › crypto secret helpers › produces different ciphertexts for same plaintext due to random IV (1ms)
+  ok 188 [chromium] › tests\crypto-secrets.spec.ts:34:7 › crypto secret helpers › fails closed for missing key (2ms)
+  ok 189 [chromium] › tests\crypto-secrets.spec.ts:40:7 › crypto secret helpers › fails closed for invalid key length (1ms)
+  ok 190 [chromium] › tests\crypto-secrets.spec.ts:45:7 › crypto secret helpers › rejects invalid and tampered ciphertext (2ms)
+  ok 191 [chromium] › tests\crypto-secrets.spec.ts:60:7 › crypto secret helpers › rejects malformed iv/tag and oversized plaintext (3ms)
+  ok 192 [chromium] › tests\crypto-signing.spec.ts:9:7 › crypto signing helpers › signs and verifies payload round-trip (2ms)
+  ok 193 [chromium] › tests\crypto-signing.spec.ts:17:7 › crypto signing helpers › rejects tampered signed payload (1ms)
+  ok 194 [chromium] › tests\crypto-signing.spec.ts:24:7 › crypto signing helpers › rejects malformed signed payload format (1ms)
+  ok 195 [chromium] › tests\crypto-signing.spec.ts:29:7 › crypto signing helpers › hmac helper is deterministic for same input (1ms)
+  ok 196 [chromium] › tests\crypto-signing.spec.ts:36:7 › crypto signing helpers › randomToken returns non-empty base64url-like values (1ms)
+  ok 197 [chromium] › tests\crypto-signing.spec.ts:42:7 › crypto signing helpers › token helpers clamp invalid randomToken sizes and reject malformed signed input (2ms)
+  ok 198 [chromium] › tests\crypto-signing.spec.ts:53:7 › crypto signing helpers › signPayload enforces payload size bound (2ms)
+  ok 199 [chromium] › tests\d-alias-actions-guardrails.spec.ts:5:7 › d/[alias] action and raw route guardrails › share action validates doc ids and token formats before UUID-cast SQL (3ms)
+  ok 200 [chromium] › tests\d-alias-actions-guardrails.spec.ts:13:7 › d/[alias] action and raw route guardrails › alias raw route normalizes aliases with decode failure handling (1ms)
+  ok 201 [chromium] › tests\db-r2-settings-guardrails.spec.ts:21:7 › db/r2/settings guardrails › db helper validates DATABASE_URL format and protocol (1ms)
+  ok 202 [chromium] › tests\db-r2-settings-guardrails.spec.ts:27:7 › db/r2/settings guardrails › r2 helpers fail closed on dangerous prefixes and bucket names (3ms)
+  ok 203 [chromium] › tests\db-r2-settings-guardrails.spec.ts:38:7 › db/r2/settings guardrails › settings helper maps raw failures to safe error codes (1ms)
+  ok 204 [chromium] › tests\db-schema-guardrails.spec.ts:5:7 › db schema helper guardrails › fails closed for invalid table identifiers (1ms)
+  ok 205 [chromium] › tests\db-schema-guardrails.spec.ts:10:7 › db schema helper guardrails › normalizes and filters malformed required column names (1ms)
+  ok 206 [chromium] › tests\device-trust.spec.ts:14:7 › device trust cookie helpers › normalizes alias for cookie naming (1ms)
+  ok 207 [chromium] › tests\device-trust.spec.ts:21:7 › device trust cookie helpers › accepts a freshly signed trust cookie for the same alias (1ms)
+  ok 208 [chromium] › tests\device-trust.spec.ts:28:7 › device trust cookie helpers › rejects trust cookie for a different alias (1ms)
+  ok 209 [chromium] › tests\device-trust.spec.ts:34:7 › device trust cookie helpers › rejects expired trust cookie (2ms)
+  ok 210 [chromium] › tests\device-trust.spec.ts:38:7 › device trust cookie helpers › rejects invalid alias and malformed expiry when creating cookie value (2ms)
+  ok 211 [chromium] › tests\device-trust.spec.ts:46:7 › device trust cookie helpers › rejects tampered trust cookie (1ms)
+  ok 212 [chromium] › tests\document-status.spec.ts:12:7 › document status helpers › normalizes doc state aliases (1ms)
+  ok 213 [chromium] › tests\document-status.spec.ts:19:7 › document status helpers › normalizes scan state with moderation overrides (1ms)
+  ok 214 [chromium] › tests\document-status.spec.ts:25:7 › document status helpers › derives restrictive share policy for risky states (2ms)
+  ok 215 [chromium] › tests\document-status.spec.ts:35:7 › document status helpers › blocks link creation while scans are pending or running (1ms)
+  ok 216 [chromium] › tests\document-status.spec.ts:42:7 › document status helpers › sanitizes invalid state inputs and upload errors (2ms)
+  ok 217 [chromium] › tests\document-status.spec.ts:54:7 › document status helpers › returns stable ui status labels (2ms)
+  ok 218 [chromium] › tests\email-guardrails.spec.ts:17:7 › email helper guardrails › rejects malformed recipient and subject inputs before delivery (3ms)
+  ok 219 [chromium] › tests\email-guardrails.spec.ts:26:7 › email helper guardrails › rejects malformed activation URLs (1ms)
+  ok 220 [chromium] › tests\email-guardrails.spec.ts:35:7 › email helper guardrails › rejects malformed password reset URLs (1ms)
+  ok 221 [chromium] › tests\encryption-guardrails.spec.ts:19:7 › encryption guardrails › rejects invalid master-key ids and oversized key lists (2ms)
+  ok 222 [chromium] › tests\encryption-guardrails.spec.ts:28:7 › encryption guardrails › validates AES buffer lengths before crypto operations (3ms)
+  ok 223 [chromium] › tests\env-config.spec.ts:34:5 › preferred env helpers honor preferred names before legacy aliases (4ms)
+  ok 224 [chromium] › tests\env-config.spec.ts:53:5 › preferred env helpers fall back to legacy aliases when needed (2ms)
+  ok 225 [chromium] › tests\env-example-audit.spec.ts:5:7 › env example audit › captures shared env helper patterns used across the repo (1ms)
+  ok 226 [chromium] › tests\env-example-audit.spec.ts:29:7 › env example audit › accepts only documented intentional extras in .env.example (99ms)
+  ok 227 [chromium] › tests\file-family.spec.ts:5:7 › file family classifier › detects archive family from extension and MIME (1ms)
+  ok 228 [chromium] › tests\file-family.spec.ts:10:7 › file family classifier › detects office family for ODF and Microsoft office formats (1ms)
+  ok 229 [chromium] › tests\file-family.spec.ts:25:7 › file family classifier › detects media families (1ms)
+  ok 230 [chromium] › tests\file-family.spec.ts:31:7 › file family classifier › detects pdf by extension and normalizes case/whitespace (1ms)
+  ok 231 [chromium] › tests\file-family.spec.ts:38:7 › file family classifier › falls back to generic file for unknown type (0ms)
+  ok 232 [chromium] › tests\file-family.spec.ts:42:7 › file family classifier › detects Microsoft Office docs specifically (2ms)
+  ok 233 [chromium] › tests\file-family.spec.ts:58:7 › file family classifier › maps display labels (2ms)
+  ok 234 [chromium] › tests\final-core-guardrails.spec.ts:5:7 › final core guardrails › monetization normalizes uuid contexts and non-positive usage deltas (2ms)
+  ok 235 [chromium] › tests\final-core-guardrails.spec.ts:12:7 › final core guardrails › resolveDoc validates alias/doc/token input formats and decode failures (3ms)
+  ok 236 [chromium] › tests\final-core-guardrails.spec.ts:21:7 › final core guardrails › security telemetry sanitizes ids, text fields, and meta payloads (1ms)
+  ok 237 [chromium] › tests\final-core-guardrails.spec.ts:28:7 › final core guardrails › webhook delivery applies bounded body size, timeout, and batch controls (2ms)
+  ok 238 [chromium] › tests\final-core-guardrails.spec.ts:35:7 › final core guardrails › attack sim ticket check treats 404 as blocked (1ms)
+  ok 239 [chromium] › tests\geo-cookies-view.spec.ts:7:7 › geo, cookie, and view helpers › extracts and normalizes country from headers (1ms)
+  ok 240 [chromium] › tests\geo-cookies-view.spec.ts:21:7 › geo, cookie, and view helpers › evaluates country allow/block lists (3ms)
+  ok 241 [chromium] › tests\geo-cookies-view.spec.ts:31:7 › geo, cookie, and view helpers › builds and parses cookie headers (6ms)
+  ok 242 [chromium] › tests\geo-cookies-view.spec.ts:50:7 › geo, cookie, and view helpers › supports cookie header opt-outs and custom path (2ms)
+  ok 243 [chromium] › tests\geo-cookies-view.spec.ts:64:7 › geo, cookie, and view helpers › rejects invalid cookie names and CRLF cookie values (4ms)
+  ok 244 [chromium] › tests\geo-cookies-view.spec.ts:73:7 › geo, cookie, and view helpers › parses cookie values containing equals sign (1ms)
+  ok 245 [chromium] › tests\geo-cookies-view.spec.ts:80:7 › geo, cookie, and view helpers › clamps oversized max-age values to a safe upper bound (1ms)
+  ok 246 [chromium] › tests\geo-cookies-view.spec.ts:85:7 › geo, cookie, and view helpers › extracts client IP and hashes it (4ms)
+  ok 247 [chromium] › tests\geo-cookies-view.spec.ts:121:7 › geo, cookie, and view helpers › view hashIp returns null for empty values (1ms)
+  ok 248 [chromium] › tests\geo-cookies-view.spec.ts:127:7 › geo, cookie, and view helpers › view hashIp output changes with VIEW_SALT (2ms)
+  ok 249 [chromium] › tests\geo-cookies-view.spec.ts:137:7 › geo, cookie, and view helpers › view hashIp falls back to NEXTAUTH_SECRET and rejects malformed ip values (1ms)
+  ok 250 [chromium] › tests\geo-expiration-sharelifecycle-guardrails.spec.ts:6:7 › geo/expiration/shareLifecycle guardrails › geo decision validates doc ids and share tokens (2ms)
+  ok 251 [chromium] › tests\geo-expiration-sharelifecycle-guardrails.spec.ts:13:7 › geo/expiration/shareLifecycle guardrails › expiration alerts sanitize errors and mask share tokens (2ms)
+  ok 252 [chromium] › tests\geo-expiration-sharelifecycle-guardrails.spec.ts:20:7 › geo/expiration/shareLifecycle guardrails › share lifecycle clamps invalid limits safely (1ms)
+  ok 253 [chromium] › tests\health-checks.spec.ts:11:7 › health readiness aggregation › fails readiness when a critical dependency is down (2ms)
+  ok 254 [chromium] › tests\health-checks.spec.ts:24:7 › health readiness aggregation › keeps readiness passing when only non-critical checks are degraded (1ms)
+  ok 255 [chromium] › tests\health-checks.spec.ts:38:7 › health readiness aggregation › ignores disabled checks when computing readiness (1ms)
+  ok 256 [chromium] › tests\health-checks.spec.ts:50:7 › health readiness aggregation › keeps backup recovery healthy when the latest attempt failed but a recent success is still fresh (1ms)
+  ok 257 [chromium] › tests\health-checks.spec.ts:66:7 › health readiness aggregation › keeps backup recovery degraded when restore drill cadence is overdue (1ms)
+  ok 258 [chromium] › tests\health-checks.spec.ts:82:7 › health readiness aggregation › sanitizes external health summaries so raw details are not exposed (3ms)
+  ok 259 [chromium] › tests\health-checks.spec.ts:117:7 › health readiness aggregation › builds dependency summaries from injectable probes so local verification can simulate failures safely (2ms)
+  ok 260 [chromium] › tests\immutable-audit-guardrails.spec.ts:5:7 › immutable audit guardrails › sanitizes ids, bounded text fields, and payload shape before writing (2ms)
+  ok 261 [chromium] › tests\infra-helper-guardrails.spec.ts:5:7 › infra helper guardrails › cookies and redirects enforce bounded defensive parsing (2ms)
+  ok 262 [chromium] › tests\infra-helper-guardrails.spec.ts:14:7 › infra helper guardrails › cron auth/telemetry and base-url helpers clamp risky inputs (2ms)
+  ok 263 [chromium] › tests\key-rotation-config.spec.ts:9:7 › automated key rotation config parsing › parses enable flag and from-id list (2ms)
+  ok 264 [chromium] › tests\key-rotation-config.spec.ts:19:7 › automated key rotation config parsing › disables for unknown enable value (1ms)
+  ok 265 [chromium] › tests\key-rotation-config.spec.ts:27:7 › automated key rotation config parsing › clamps batch size and falls back on invalid numbers (2ms)
+  ok 266 [chromium] › tests\key-rotation-config.spec.ts:38:7 › automated key rotation config parsing › filters invalid key ids, normalizes case, and caps list size (2ms)
+  ok 267 [chromium] › tests\key-rotation-config.spec.ts:51:7 › automated key rotation config parsing › fails closed when control characters are present in config values (1ms)
+  ok 268 [chromium] › tests\key-rotation-jobs-guardrails.spec.ts:5:7 › key rotation jobs guardrails › normalizes key ids, actor id, numeric bounds, and error length (3ms)
+  ok 269 [chromium] › tests\legal-docs.spec.ts:5:7 › legal docs helpers › returns known docs by slug and null for unknown (2ms)
+  ok 270 [chromium] › tests\legal-docs.spec.ts:14:7 › legal docs helpers › reads markdown for known legal docs (2ms)
+  ok 271 [chromium] › tests\legal-docs.spec.ts:20:7 › legal docs helpers › rejects path traversal and invalid filenames (4ms)
+  ok 272 [chromium] › tests\legal-emails.spec.ts:49:7 › legal email helpers › defaults to support@cyang.io when no env emails are valid (3ms)
+  ok 273 [chromium] › tests\legal-emails.spec.ts:57:7 › legal email helpers › normalizes support/contact emails and prefers SUPPORT_EMAIL (1ms)
+  ok 274 [chromium] › tests\legal-emails.spec.ts:63:7 › legal email helpers › uses CONTACT_EMAIL when SUPPORT_EMAIL is invalid (1ms)
+  ok 275 [chromium] › tests\legal-emails.spec.ts:69:7 › legal email helpers › resolves DMCA, privacy, and security env precedence with fallback to support (1ms)
+  ok 276 [chromium] › tests\legal-emails.spec.ts:82:7 › legal email helpers › falls back to secondary/ support emails when primary values are invalid (1ms)
+  ok 277 [chromium] › tests\legal-emails.spec.ts:95:7 › legal email helpers › rejects control characters and overlong email env values (2ms)
+  ok 278 [chromium] › tests\local-verification-profile.spec.ts:9:7 › local verification profile › stays production-shaped unless the dedicated verification flag is enabled (1ms)
+  ok 279 [chromium] › tests\local-verification-profile.spec.ts:15:7 › local verification profile › describes the deterministic adapters used in local verification mode (3ms)
+  ok 280 [chromium] › tests\malware-pdf-retention-usage-guardrails.spec.ts:7:7 › malware/pdf/retention/usage guardrails › pdf safety normalizes numeric scan limits (2ms)
+  ok 281 [chromium] › tests\malware-pdf-retention-usage-guardrails.spec.ts:17:7 › malware/pdf/retention/usage guardrails › malware scan validates scanner URL and max bytes (1ms)
+  ok 282 [chromium] › tests\malware-pdf-retention-usage-guardrails.spec.ts:23:7 › malware/pdf/retention/usage guardrails › retention and usage maintenance fail closed with sanitized fallbacks (227ms)
+  ok 283 [chromium] › tests\manual-password-reset-guardrails.spec.ts:5:7 › manual password reset guardrails › request and complete routes enforce throttling, payload bounds, and shared helpers (5ms)
+  ok 284 [chromium] › tests\manual-signup-url-guardrails.spec.ts:5:7 › manual signup URL guardrails › manual signup activation link uses trusted base-url resolver (1ms)
+  ok 285 [chromium] › tests\manual-signup-url-guardrails.spec.ts:11:7 › manual signup URL guardrails › manual signup and consent routes enforce strict terms parsing and payload limits (3ms)
+  ok 286 [chromium] › tests\master-key-config.spec.ts:14:7 › master key config validation › accepts a valid master-key JSON array (1ms)
+  ok 287 [chromium] › tests\master-key-config.spec.ts:21:7 › master key config validation › rejects duplicate ids and multiple active keys (1ms)
+  ok 288 [chromium] › tests\master-key-config.spec.ts:37:7 › master key config validation › fails closed for malformed or invalid-length keys (1ms)
+  ok 289 [chromium] › tests\master-mfa-guardrails.spec.ts:5:7 › master key and mfa guardrails › master keys normalize key/user identifiers and clamp rotation limits (3ms)
+  ok 290 [chromium] › tests\master-mfa-guardrails.spec.ts:14:7 › master key and mfa guardrails › mfa normalizes user/email/code and bounds cookie payload parsing (3ms)
+  ok 291 [chromium] › tests\mfa-guardrails.spec.ts:6:7 › mfa guardrails › enforcement toggle applies only to privileged roles (3ms)
+  ok 292 [chromium] › tests\mfa-guardrails.spec.ts:20:7 › mfa guardrails › authz enforces MFA gate for requireUser (1ms)
+  ok 293 [chromium] › tests\mfa-guardrails.spec.ts:26:7 › mfa guardrails › mfa route and SQL migration are present (4ms)
+  ok 294 [chromium] › tests\migration-orchestration.spec.ts:6:7 › migration orchestration › ordered migration wrappers exist and point at concrete SQL sources (88ms)
+  ok 295 [chromium] › tests\migration-orchestration.spec.ts:28:7 › migration orchestration › user ownership baseline migration requires OWNER_EMAIL at apply time (2ms)
+  ok 296 [chromium] › tests\migration-orchestration.spec.ts:35:7 › migration orchestration › migration runner creates a schema_migrations ledger and supports verification/apply commands (3ms)
+  ok 297 [chromium] › tests\non-api-auth-route-guardrails.spec.ts:5:7 › non-api auth route guardrails › /auth/email/start has throttling and input/output hardening (3ms)
+  ok 298 [chromium] › tests\non-api-auth-route-guardrails.spec.ts:14:7 › non-api auth route guardrails › /auth/email/consume has throttling and token/alias validation (1ms)
+  ok 299 [chromium] › tests\non-api-oauth-route-guardrails.spec.ts:5:7 › non-api oauth route guardrails › /auth/google/start is rate-limited and validates alias format (2ms)
+  ok 300 [chromium] › tests\non-api-oauth-route-guardrails.spec.ts:12:7 › non-api oauth route guardrails › /auth/google/callback is rate-limited and fails closed on oauth exchange errors (2ms)
+  ok 301 [chromium] › tests\non-api-oauth-route-guardrails.spec.ts:22:7 › non-api oauth route guardrails › /org/[slug]/auth/[provider] start route is rate-limited and validates slug (3ms)
+  ok 302 [chromium] › tests\non-api-route-handlers-guardrails.spec.ts:15:7 › non-api route handler guardrails › every non-api route handler includes explicit security controls (54ms)
+  ok 303 [chromium] › tests\non-api-serve-route-guardrails.spec.ts:9:7 › non-api serving route guardrails › /serve/[docId] enforces abuse and plan controls (3ms)
+  ok 304 [chromium] › tests\non-api-serve-route-guardrails.spec.ts:20:7 › non-api serving route guardrails › /s/[token]/raw enforces token consumption, unlock checks, and rate limits (3ms)
+  ok 305 [chromium] › tests\non-api-serve-route-guardrails.spec.ts:29:7 › non-api serving route guardrails › /d/[alias]/raw enforces alias trust and rate limits (1ms)
+  ok 306 [chromium] › tests\non-api-serve-route-guardrails.spec.ts:36:7 › non-api serving route guardrails › /t/[ticketId] consumes ticket and enforces ticket/IP controls (3ms)
+  ok 307 [chromium] › tests\non-api-serve-route-guardrails.spec.ts:46:7 › non-api serving route guardrails › /s/[token]/download is rate-limited before metadata lookups (1ms)
+  ok 308 [chromium] › tests\non-api-serve-route-guardrails.spec.ts:52:7 › non-api serving route guardrails › /s/[token]/view download action uses a plain anchor (no prefetch) (1ms)
+  ok 309 [chromium] › tests\oauth-google-guardrails.spec.ts:14:7 › oauth google helper guardrails › throws when APP_URL is missing (2ms)
+  ok 310 [chromium] › tests\oauth-google-guardrails.spec.ts:19:7 › oauth google helper guardrails › normalizes APP_URL and avoids double slashes (1ms)
+  ok 311 [chromium] › tests\oauth-google-guardrails.spec.ts:24:7 › oauth google helper guardrails › rejects malformed APP_URL values (2ms)
+  ok 312 [chromium] › tests\observability.spec.ts:7:7 › observability structured logging › logs info/debug to console.log as JSON (4ms)
+  ok 313 [chromium] › tests\observability.spec.ts:41:7 › observability structured logging › routes warn and error severities to matching console methods (1ms)
+  ok 314 [chromium] › tests\observability.spec.ts:65:7 › observability structured logging › sanitizes invalid severity and trims unsafe payload fields (2ms)
+  ok 315 [chromium] › tests\office-preview-source.spec.ts:6:7 › office preview source › parses only supported raw source paths (2ms)
+  ok 316 [chromium] › tests\office-preview-source.spec.ts:16:7 › office preview source › stays in-process and does not loop back over HTTP (2ms)
+  ok 317 [chromium] › tests\office-preview.spec.ts:5:7 › office preview conversion › rejects unsupported mime types (2ms)
+  ok 318 [chromium] › tests\office-preview.spec.ts:14:7 › office preview conversion › escapes CSV cells and wraps result in shell html (3ms)
+  ok 319 [chromium] › tests\office-preview.spec.ts:36:7 › office preview conversion › limits CSV render size by row/column budget (16ms)
+  ok 320 [chromium] › tests\office-preview.spec.ts:53:7 › office preview conversion › rejects legacy xls preview explicitly (1ms)
+  ok 321 [chromium] › tests\office-preview.spec.ts:65:7 › office preview conversion › fails closed on invalid xlsx payload (1ms)
+  ok 322 [chromium] › tests\office-preview.spec.ts:74:7 › office preview conversion › rejects oversized office payloads (2ms)
+  ok 323 [chromium] › tests\office-preview.spec.ts:83:7 › office preview conversion › accepts mime values with parameters after normalization (0ms)
+  ok 324 [chromium] › tests\org-auth-redirect-base-url-guardrails.spec.ts:5:7 › org auth redirect base URL guardrails › org auth start route resolves redirects from trusted app base URL (2ms)
+  ok 325 [chromium] › tests\org-invite-url-guardrails.spec.ts:5:7 › org invite URL guardrails › org invite route uses trusted base url resolver (1ms)
+  ok 326 [chromium] › tests\org-invite-url-guardrails.spec.ts:11:7 › org invite URL guardrails › org invite route enforces payload-size checks before form parsing (3ms)
+  ok 327 [chromium] › tests\org-membership-guardrails.spec.ts:5:7 › org membership guardrails › normalizes IDs, role/email, and invite token input (3ms)
+  ok 328 [chromium] › tests\orgs-policy.spec.ts:27:7 › org policy helpers › orgAllowsEmail allows all when allowedDomains is empty (3ms)
+  ok 329 [chromium] › tests\orgs-policy.spec.ts:35:7 › org policy helpers › orgAllowsEmail enforces explicit domain allow-list (2ms)
+  ok 330 [chromium] › tests\orgs-policy.spec.ts:42:7 › org policy helpers › decrypts configured OIDC client secret and returns null when missing (1ms)
+  ok 331 [chromium] › tests\orgs-policy.spec.ts:51:7 › org policy helpers › returns null for malformed encrypted secrets and ignores invalid domains (2ms)
+  ok 332 [chromium] › tests\password.spec.ts:5:7 › password helpers › hashes password with scrypt format and verifies correct secret (72ms)
+  ok 333 [chromium] › tests\password.spec.ts:12:7 › password helpers › rejects wrong password for a valid hash (72ms)
+  ok 334 [chromium] › tests\password.spec.ts:17:7 › password helpers › produces unique hashes for same password due to per-hash salt (137ms)
+  ok 335 [chromium] › tests\password.spec.ts:25:7 › password helpers › fails closed on malformed stored hash (1ms)
+  ok 336 [chromium] › tests\password.spec.ts:32:7 › password helpers › rejects oversized or null-byte password inputs (111ms)
+  ok 337 [chromium] › tests\password.spec.ts:41:7 › password helpers › supports unicode-rich passwords and preserves exact byte-for-byte comparison (104ms)
+  ok 338 [chromium] › tests\password.spec.ts:48:7 › password helpers › does not normalize canonically equivalent unicode forms (107ms)
+  ok 339 [chromium] › tests\password.spec.ts:56:7 › password helpers › normalizes exact password input without trimming or unicode folding (1ms)
+  ok 340 [chromium] › tests\password.spec.ts:62:7 › password helpers › parses optional exact password input consistently for share-style passwords (3ms)
+  ok 341 [chromium] › tests\pdf-watermark-guardrails.spec.ts:15:7 › pdf watermark guardrails › rejects empty and oversized inputs before parsing (10ms)
+... [Regression tests] still running after 30s
+  ok 342 [chromium] › tests\pdf-watermark-guardrails.spec.ts:20:7 › pdf watermark guardrails › rejects PDFs with excessive page counts (514ms)
+  ok 343 [chromium] › tests\platform-security-config-guardrails.spec.ts:5:7 › platform security config guardrails › next.config defines strict global security headers (3ms)
+  ok 344 [chromium] › tests\platform-security-config-guardrails.spec.ts:15:7 › platform security config guardrails › viewer surfaces use SAMEORIGIN framing while other routes are DENY (3ms)
+  ok 345 [chromium] › tests\platform-security-config-guardrails.spec.ts:25:7 › platform security config guardrails › CSP connect-src env tokens are sanitized to prevent directive injection (2ms)
+  ok 346 [chromium] › tests\proof-artifacts.spec.ts:10:7 › proof artifact reporting › renders a human-readable passing summary with durable artifact paths (4ms)
+  ok 347 [chromium] › tests\proof-artifacts.spec.ts:44:7 › proof artifact reporting › marks later phases skipped after an earlier failure (2ms)
+  ok 348 [chromium] › tests\proof-install.spec.ts:12:7 › proof install preflight › formats missing proof packages with their proof purpose (58ms)
+  ok 349 [chromium] › tests\proof-install.spec.ts:32:7 › proof install preflight › fails with an actionable devDependency install message (55ms)
+  ok 350 [chromium] › tests\proof-install.spec.ts:56:7 › proof install preflight › fails with an actionable repo-local CLI resolution message (54ms)
+Waiting for shared proof lock held by first-proof (pid 34696)...
+  ok 351 [chromium] › tests\proof-lock.spec.ts:12:7 › proof lock › serializes overlapping proof invocations (71ms)
+  ok 352 [chromium] › tests\proof-lock.spec.ts:48:7 › proof lock › reuses inherited lock context for nested proof steps (5ms)
+  ok 353 [chromium] › tests\proof-playwright-runtime.spec.ts:5:7 › proof Playwright runtime install › uses the repo-local tool runner without Linux dependency bootstrapping by default (2ms)
+  ok 354 [chromium] › tests\proof-playwright-runtime.spec.ts:13:7 › proof Playwright runtime install › adds Linux dependency bootstrapping when Docker proof requests it (1ms)
+  ok 355 [chromium] › tests\prove-build-runtime.spec.ts:5:7 › prove build runtime policy › accepts engine-compatible versions even when they do not match the pinned baseline exactly (2ms)
+  ok 356 [chromium] › tests\prove-build-runtime.spec.ts:20:7 › prove build runtime policy › rejects versions outside the declared engine range (2ms)
+  ok 357 [chromium] › tests\public-base-url-guardrails.spec.ts:10:7 › public base url guardrails › uses configured https base url in production (1ms)
+  ok 358 [chromium] › tests\public-base-url-guardrails.spec.ts:18:7 › public base url guardrails › fails closed in production when configured base url is missing (1ms)
+  ok 359 [chromium] › tests\public-base-url-guardrails.spec.ts:24:7 › public base url guardrails › allows localhost http fallback only in non-production (0ms)
+  ok 360 [chromium] › tests\public-base-url-guardrails.spec.ts:32:7 › public base url guardrails › falls back to localhost in non-production when req url is malformed (0ms)
+  ok 361 [chromium] › tests\public-base-url-guardrails.spec.ts:40:7 › public base url guardrails › billing routes use trusted base-url resolver (2ms)
+  ok 362 [chromium] › tests\public-health-runtime-proof.spec.ts:26:7 › public health runtime proofs › returns sanitized public health snapshots with public cache headers (4ms)
+  ok 363 [chromium] › tests\public-health-runtime-proof.spec.ts:39:7 › public health runtime proofs › rate limits safely without exposing internal dependency detail (2ms)
+  ok 364 [chromium] › tests\public-health-runtime-proof.spec.ts:51:7 › public health runtime proofs › summarizes internal helper failures as sanitized server errors (2ms)
+  ok 365 [chromium] › tests\public-rate-limit-dast.spec.ts:27:7 › staged DAST rate-limit audit › manual signup endpoint throttles burst traffic (3ms)
+  ok 366 [chromium] › tests\public-rate-limit-dast.spec.ts:49:7 › staged DAST rate-limit audit › signup consent endpoint throttles burst traffic (3ms)
+  ok 367 [chromium] › tests\public-redirect-base-url-guardrails.spec.ts:9:7 › public redirect base URL guardrails › public redirect routes do not derive absolute redirect host from req.url (5ms)
+  ok 368 [chromium] › tests\public-runtime-config.spec.ts:9:7 › public runtime config guardrails › public runtime config stays env-backed and db-free (2ms)
+  ok 369 [chromium] › tests\public-runtime-config.spec.ts:17:7 › public runtime config guardrails › public shell and marketing pages do not read billing flags directly (9ms)
+  ok 370 [chromium] › tests\quarantine-override-guardrails.spec.ts:5:7 › quarantine override guardrails › normalizes uuid inputs and ttl/reason values (2ms)
+  ok 371 [chromium] › tests\rate-limit-hash.spec.ts:25:7 › rate limit stableHash › uses configured salt and is deterministic (1ms)
+  ok 372 [chromium] › tests\rate-limit-hash.spec.ts:34:7 › rate limit stableHash › uses insecure fallback hash only in non-production when enabled (1ms)
+  ok 373 [chromium] › tests\rate-limit-hash.spec.ts:43:7 › rate limit stableHash › throws when no secret is present and fallback disabled (2ms)
+  ok 374 [chromium] › tests\rate-limit-hash.spec.ts:51:7 › rate limit stableHash › falls back to NEXTAUTH_SECRET when VIEW_SALT is missing (1ms)
+  ok 375 [chromium] › tests\rate-limit-hash.spec.ts:60:7 › rate limit stableHash › uses explicit salt env key when provided (1ms)
+  ok 376 [chromium] › tests\rate-limit-hash.spec.ts:71:7 › rate limit stableHash › does not allow insecure fallback in production (1ms)
+  ok 377 [chromium] › tests\rbac-guardrails.spec.ts:19:7 › rbac guardrails › fails closed on invalid runtime role/permission values (3ms)
+  ok 378 [chromium] › tests\rbac-guardrails.spec.ts:29:7 › rbac guardrails › validates upsert payload and returns empty list when table unavailable (3ms)
+  ok 379 [chromium] › tests\redirects.spec.ts:5:7 › internal redirect sanitizer › allows safe internal paths (1ms)
+  ok 380 [chromium] › tests\redirects.spec.ts:12:7 › internal redirect sanitizer › rejects external, protocol-relative, and malformed values (3ms)
+  ok 381 [chromium] › tests\release-gate.spec.ts:8:7 › release gate summaries › writes a truthful skipped summary when deployment env is absent (89ms)
+  ok 382 [chromium] › tests\repo-secrets-audit.spec.ts:19:7 › repo secrets audit › tracked source/config files do not include obvious live credentials (149ms)
+  ok 383 [chromium] › tests\resend-guardrails.spec.ts:17:7 › resend sign-in guardrails › rejects malformed recipient and sign-in URL inputs (3ms)
+  ok 384 [chromium] › tests\restore-verify-runtime-proof.spec.ts:9:7 › restore verification runtime proofs › reads restore verification counts and readiness flags deterministically (1ms)
+  ok 385 [chromium] › tests\restore-verify-runtime-proof.spec.ts:37:7 › restore verification runtime proofs › fails loudly when migrations are not current (1ms)
+  ok 386 [chromium] › tests\restore-verify-runtime-proof.spec.ts:50:7 › restore verification runtime proofs › records recovery drill results with actionable metadata (3ms)
+  ok 387 [chromium] › tests\route-timeout.spec.ts:10:7 › route timeout helpers › getRouteTimeoutMs uses fallback on invalid values (1ms)
+  ok 388 [chromium] › tests\route-timeout.spec.ts:17:7 › route timeout helpers › getRouteTimeoutMs clamps bounds (1ms)
+  ok 389 [chromium] › tests\route-timeout.spec.ts:24:7 › route timeout helpers › getRouteTimeoutMs uses fallback when env is missing (0ms)
+  ok 390 [chromium] › tests\route-timeout.spec.ts:29:7 › route timeout helpers › getRouteTimeoutMs clamps fallback and ignores unsafe env names (1ms)
+  ok 391 [chromium] › tests\route-timeout.spec.ts:35:7 › route timeout helpers › withRouteTimeout resolves when work finishes first (0ms)
+  ok 392 [chromium] › tests\route-timeout.spec.ts:40:7 › route timeout helpers › withRouteTimeout rejects with RouteTimeoutError (22ms)
+  ok 393 [chromium] › tests\route-timeout.spec.ts:45:7 › route timeout helpers › withRouteTimeout preserves underlying work errors (1ms)
+  ok 394 [chromium] › tests\route-timeout.spec.ts:50:7 › route timeout helpers › withRouteTimeout uses safe default when timeout is invalid (1ms)
+  ok 395 [chromium] › tests\route-timeout.spec.ts:55:7 › route timeout helpers › isRouteTimeoutError identifies class and message variants (1ms)
+  ok 396 [chromium] › tests\runtime-env.spec.ts:58:7 › runtime env validation › does nothing when strict validation is disabled (1ms)
+  ok 397 [chromium] › tests\runtime-env.spec.ts:65:7 › runtime env validation › throws RuntimeEnvError with missing keys when strict mode is enabled (3ms)
+  ok 398 [chromium] › tests\runtime-env.spec.ts:90:7 › runtime env validation › passes when required vars for stripe_webhook are set (1ms)
+  ok 399 [chromium] › tests\runtime-env.spec.ts:99:7 › runtime env validation › rejects newline-polluted required env values (1ms)
+  ok 400 [chromium] › tests\runtime-env.spec.ts:108:7 › runtime env validation › enforces upload_presign required envs (2ms)
+  ok 401 [chromium] › tests\runtime-env.spec.ts:125:7 › runtime env validation › enforces upload_complete required envs including PDF_MAX_PAGES (2ms)
+  ok 402 [chromium] › tests\runtime-env.spec.ts:143:7 › runtime env validation › enforces stripe_admin required envs (2ms)
+  ok 403 [chromium] › tests\runtime-env.spec.ts:155:7 › runtime env validation › flags malformed DOC_MASTER_KEYS JSON in strict mode (2ms)
+  ok 404 [chromium] › tests\runtime-env.spec.ts:175:7 › runtime env validation › fails closed when runtime scope is invalid at runtime (1ms)
+  ok 405 [chromium] › tests\runtime-oversized-payloads.spec.ts:40:7 › runtime oversized payload handling › v1 abuse report rejects oversized payloads at runtime (2ms)
+  ok 406 [chromium] › tests\runtime-oversized-payloads.spec.ts:45:7 › runtime oversized payload handling › v1 takedown rejects oversized payloads at runtime (1ms)
+  ok 407 [chromium] › tests\runtime-oversized-payloads.spec.ts:50:7 › runtime oversized payload handling › v1 aliases rejects oversized payloads at runtime (2ms)
+  ok 408 [chromium] › tests\runtime-oversized-payloads.spec.ts:55:7 › runtime oversized payload handling › v1 shares rejects oversized payloads at runtime (2ms)
+  ok 409 [chromium] › tests\runtime-oversized-payloads.spec.ts:60:7 › runtime oversized payload handling › backup status rejects oversized payloads at runtime (2ms)
+  ok 410 [chromium] › tests\runtime-oversized-payloads.spec.ts:79:7 › runtime oversized payload handling › viewer office rejects oversized payloads at runtime (2ms)
+  ok 411 [chromium] › tests\runtime-oversized-payloads.spec.ts:86:7 › runtime oversized payload handling › stripe webhook rejects oversized payloads at runtime (2ms)
+  ok 412 [chromium] › tests\scan-queue-guardrails.spec.ts:5:7 › scan queue guardrails › validates doc/bucket/key inputs and clamps queue tuning values (2ms)
+  ok 413 [chromium] › tests\security-hardening-regressions.spec.ts:5:7 › security hardening regressions › aliases v1 route fails closed instead of rethrowing raw errors (2ms)
+  ok 414 [chromium] › tests\security-hardening-regressions.spec.ts:13:7 › security hardening regressions › stripe webhook route fails closed on unhandled errors (1ms)
+  ok 415 [chromium] › tests\security-hardening-regressions.spec.ts:20:7 › security hardening regressions › share raw route blocks non-initial range probes (1ms)
+  ok 416 [chromium] › tests\security-hardening-regressions.spec.ts:26:7 › security hardening regressions › access ticket replay defaults to disabled (1ms)
+  ok 417 [chromium] › tests\security-hardening-regressions.spec.ts:31:7 › security hardening regressions › encryption key metadata route requires manage permission (1ms)
+  ok 418 [chromium] › tests\security-hardening-regressions.spec.ts:36:7 › security hardening regressions › paid entitlement defaults to active status only (1ms)
+  ok 419 [chromium] › tests\security-policy.spec.ts:13:7 › security policy primitives › unencrypted serving is always disabled by invariant (1ms)
+  ok 420 [chromium] › tests\security-policy.spec.ts:17:7 › security policy primitives › security test no-db mode parses truthy values (2ms)
+  ok 421 [chromium] › tests\security-policy.spec.ts:30:7 › security policy primitives › security test no-db mode parses falsy/empty values (2ms)
+  ok 422 [chromium] › tests\security-policy.spec.ts:43:7 › security policy primitives › security test no-db mode ignores malformed values (1ms)
+  ok 423 [chromium] › tests\security-static-audit.spec.ts:25:7 › security static audit › no dangerous dynamic code execution sinks are present (80ms)
+  ok 424 [chromium] › tests\security-static-audit.spec.ts:41:7 › security static audit › no secrets-like hardcoded keys are committed in source (75ms)
+  ok 425 [chromium] › tests\security-static-audit.spec.ts:62:7 › security static audit › scripts avoid shell=true process spawning (44ms)
+  ok 426 [chromium] › tests\security-telemetry-helpers.spec.ts:5:7 › security telemetry helper primitives › hashIp is deterministic and non-empty (1ms)
+  ok 427 [chromium] › tests\security-telemetry-helpers.spec.ts:12:7 › security telemetry helper primitives › clientIpKey prefers Cloudflare header (1ms)
+  ok 428 [chromium] › tests\security-telemetry-helpers.spec.ts:24:7 › security telemetry helper primitives › clientIpKey falls back to first x-forwarded-for ip (1ms)
+  ok 429 [chromium] › tests\security-telemetry-helpers.spec.ts:35:7 › security telemetry helper primitives › clientIpKey falls back to x-real-ip then to 0.0.0.0 (3ms)
+  ok 430 [chromium] › tests\security-telemetry-helpers.spec.ts:51:7 › security telemetry helper primitives › clientIpKey ignores generic proxy headers in production unless explicitly trusted (1ms)
+  ok 431 [chromium] › tests\security-telemetry-log-guardrails.spec.ts:5:7 › security telemetry log guardrails › security telemetry uses redacted failure logs (1ms)
+  ok 432 [chromium] › tests\server-actions-guardrails.spec.ts:14:7 › server actions guardrails › every "use server" action file has explicit auth or abuse controls (53ms)
+  ok 433 [chromium] › tests\server-actions-input-guardrails.spec.ts:5:7 › server action input guardrails › admin actions bound bulk and text form inputs (3ms)
+  ok 434 [chromium] › tests\server-actions-input-guardrails.spec.ts:13:7 › server action input guardrails › share creation actions bound token/password/email input lengths (2ms)
+  ok 435 [chromium] › tests\server-actions-input-guardrails.spec.ts:26:7 › server action input guardrails › mfa, billing, and webhook actions bound form field sizes (2ms)
+  ok 436 [chromium] › tests\share-auth.spec.ts:31:7 › share auth helpers › fails closed when no signing secret is configured (3ms)
+  ok 437 [chromium] › tests\share-auth.spec.ts:40:7 › share auth helpers › exposes expected cookie names and options (2ms)
+  ok 438 [chromium] › tests\share-auth.spec.ts:49:7 › share auth helpers › round-trips unlock cookie value (1ms)
+  ok 439 [chromium] › tests\share-auth.spec.ts:57:7 › share auth helpers › rejects expired unlock cookie value (2ms)
+  ok 440 [chromium] › tests\share-auth.spec.ts:65:7 › share auth helpers › rejects tampered unlock cookie signature (2ms)
+  ok 441 [chromium] › tests\share-auth.spec.ts:72:7 › share auth helpers › rejects malformed unlock cookie format (1ms)
+  ok 442 [chromium] › tests\share-auth.spec.ts:78:7 › share auth helpers › rejects invalid unlock token components at creation time (1ms)
+  ok 443 [chromium] › tests\share-auth.spec.ts:82:7 › share auth helpers › round-trips device trust cookie value (2ms)
+  ok 444 [chromium] › tests\share-auth.spec.ts:92:7 › share auth helpers › rejects malformed device trust cookie (1ms)
+  ok 445 [chromium] › tests\share-auth.spec.ts:98:7 › share auth helpers › round-trips email proof token with normalized email (2ms)
+  ok 446 [chromium] › tests\share-auth.spec.ts:110:7 › share auth helpers › rejects invalid email proof inputs at creation time (1ms)
+  ok 447 [chromium] › tests\share-auth.spec.ts:120:7 › share auth helpers › rejects expired email proof token (1ms)
+  ok 448 [chromium] › tests\share-auth.spec.ts:133:7 › share auth helpers › rejects malformed email proof token format (1ms)
+  ok 449 [chromium] › tests\share-auth.spec.ts:139:7 › share auth helpers › rejects tampered email proof token signature (1ms)
+  ok 450 [chromium] › tests\share-auth.spec.ts:151:7 › share auth helpers › rejects malformed cookie payloads with control characters (2ms)
+  ok 451 [chromium] › tests\share-password-handling.spec.ts:5:7 › share password handling › share password create and unlock paths use exact-input password normalization (3ms)
+  ok 452 [chromium] › tests\share-runtime-proof.spec.ts:15:7 › share runtime proofs › creates password-protected shares without trimming exact unicode input (819ms)
+  ok 453 [chromium] › tests\share-runtime-proof.spec.ts:36:7 › share runtime proofs › rejects invalid share passwords at creation time and allows empty password as no-password share (2ms)
+  ok 454 [chromium] › tests\share-runtime-proof.spec.ts:60:7 › share runtime proofs › grants access only to the exact share password and records failed attempts without leaking internals (207ms)
+  ok 455 [chromium] › tests\share-runtime-proof.spec.ts:106:7 › share runtime proofs › requires both recipient email and password when that share policy is enabled (136ms)
+  ok 456 [chromium] › tests\share-runtime-proof.spec.ts:153:7 › share runtime proofs › fails safely for invalid, expired, and revoked share tokens (2ms)
+  ok 457 [chromium] › tests\share-runtime-proof.spec.ts:228:7 › share runtime proofs › unlocks password-protected aliases and blocks revoked or expired aliases safely (135ms)
+  ok 458 [chromium] › tests\signup-input-guardrails.spec.ts:5:7 › signup input guardrails › accept-terms parsing is strict and fails closed on unsafe values (3ms)
+  ok 459 [chromium] › tests\signup-input-guardrails.spec.ts:16:7 › signup input guardrails › manual signup helper rejects invalid input before DB operations (3ms)
+  ok 460 [chromium] › tests\signup-input-guardrails.spec.ts:66:7 › signup input guardrails › manual password reset helpers fail closed on invalid input before DB work (2ms)
+  ok 461 [chromium] › tests\signup-password.spec.ts:5:7 › signup password complexity › rejects too-short passwords (1ms)
+  ok 462 [chromium] › tests\signup-password.spec.ts:9:7 › signup password complexity › rejects when required character classes are missing (1ms)
+  ok 463 [chromium] › tests\signup-password.spec.ts:16:7 › signup password complexity › accepts strong password (1ms)
+  ok 464 [chromium] › tests\signup-password.spec.ts:20:7 › signup password complexity › accepts unicode-rich passwords without mutating them (1ms)
+  ok 465 [chromium] › tests\signup-password.spec.ts:25:7 › signup password complexity › treats canonically equivalent unicode forms as distinct but valid inputs (1ms)
+  ok 466 [chromium] › tests\signup-password.spec.ts:30:7 › signup password complexity › rejects oversized and unsafe control-character passwords (2ms)
+  ok 467 [chromium] › tests\slugify.spec.ts:6:7 › slug sanitization helpers › alias slugify normalizes unsafe input and fails closed to doc (3ms)
+  ok 468 [chromium] › tests\slugify.spec.ts:14:7 › slug sanitization helpers › doc slugify strips .pdf suffix and clamps length (2ms)
+  ok 469 [chromium] › tests\sql-redirect-static-audit.spec.ts:15:7 › sql and redirect static audit › no string-built sql() calls are present (76ms)
+  ok 470 [chromium] › tests\sql-redirect-static-audit.spec.ts:28:7 › sql and redirect static audit › no query-parameter based open redirects are introduced (70ms)
+  ok 471 [chromium] › tests\stale-admin-actions-removed.spec.ts:5:7 › stale admin actions removed › unused stale admin action exports are removed from admin actions module (5ms)
+  ok 472 [chromium] › tests\status-page-scenario.spec.ts:14:7 › status page live scenario mapping › shows degraded when readiness returns a degraded payload (0ms)
+  ok 473 [chromium] › tests\status-page-scenario.spec.ts:19:7 › status page live scenario mapping › shows partial outage when readiness is explicitly down (1ms)
+  ok 474 [chromium] › tests\status-page-scenario.spec.ts:24:7 › status page live scenario mapping › keeps rate-limited telemetry in degraded fallback posture (0ms)
+  ok 475 [chromium] › tests\status-page-scenario.spec.ts:29:7 › status page live scenario mapping › shows snapshot unavailable when live snapshot is missing (1ms)
+  ok 476 [chromium] › tests\status-page-scenario.spec.ts:34:7 › status page live scenario mapping › shows snapshot unavailable when freshness timestamp is missing (1ms)
+  ok 477 [chromium] › tests\status-page-scenario.spec.ts:39:7 › status page live scenario mapping › shows snapshot unavailable when the public snapshot is stale (0ms)
+  ok 478 [chromium] › tests\stray-surface-removed.spec.ts:5:7 › stray surfaces removed › dead UI files stay removed (3ms)
+  ok 479 [chromium] › tests\stray-surface-removed.spec.ts:18:7 › stray surfaces removed › stray debug and test-only endpoints stay removed (4ms)
+  ok 480 [chromium] › tests\stray-surface-removed.spec.ts:32:7 › stray surfaces removed › stray support libs stay removed (4ms)
+  ok 481 [chromium] › tests\stripe-redirect-url.spec.ts:6:7 › stripe redirect url guardrails › allows only https stripe.com hosted urls (2ms)
+  ok 482 [chromium] › tests\stripe-redirect-url.spec.ts:11:7 › stripe redirect url guardrails › rejects non-https and non-stripe hosts (4ms)
+  ok 483 [chromium] › tests\stripe-redirect-url.spec.ts:20:7 › stripe redirect url guardrails › checkout and portal routes validate stripe redirect urls (2ms)
+  ok 484 [chromium] › tests\stripe-stack-guardrails.spec.ts:5:7 › stripe stack guardrails › stripe webhook route fails closed on oversized payloads (1ms)
+  ok 485 [chromium] › tests\stripe-stack-guardrails.spec.ts:12:7 › stripe stack guardrails › stripe webhook verifier validates signature/event formats (2ms)
+  ok 486 [chromium] › tests\stripe-stack-guardrails.spec.ts:19:7 › stripe stack guardrails › billing subscription binding rejects invalid metadata user ids (1ms)
+  ok 487 [chromium] › tests\stripe-stack-guardrails.spec.ts:25:7 › stripe stack guardrails › stripe client sanitizes API paths and request form bounds (2ms)
+  ok 488 [chromium] › tests\stripe-webhook-runtime-proof.spec.ts:11:7 › stripe webhook runtime proofs › accepts valid signed webhook requests and applies billing state transitions (5ms)
+  ok 489 [chromium] › tests\stripe-webhook-runtime-proof.spec.ts:45:7 › stripe webhook runtime proofs › rejects invalid signatures and malformed payloads without leaking internal detail (4ms)
+  ok 490 [chromium] › tests\stripe-webhook-runtime-proof.spec.ts:72:7 › stripe webhook runtime proofs › handles duplicate events safely and rejects oversized payloads before processing (4ms)
+  ok 491 [chromium] › tests\stripe-webhook-verify.spec.ts:11:7 › stripe webhook signature verifier › rejects when webhook secret is missing (1ms)
+  ok 492 [chromium] › tests\stripe-webhook-verify.spec.ts:21:7 › stripe webhook signature verifier › rejects when signature header is missing (1ms)
+  ok 493 [chromium] › tests\stripe-webhook-verify.spec.ts:31:7 › stripe webhook signature verifier › rejects malformed signature header (1ms)
+  ok 494 [chromium] › tests\stripe-webhook-verify.spec.ts:41:7 › stripe webhook signature verifier › rejects signature header with non-numeric timestamp token (1ms)
+  ok 495 [chromium] › tests\stripe-webhook-verify.spec.ts:51:7 › stripe webhook signature verifier › rejects timestamp outside tolerance (1ms)
+  ok 496 [chromium] › tests\stripe-webhook-verify.spec.ts:65:7 › stripe webhook signature verifier › rejects signature mismatch (1ms)
+  ok 497 [chromium] › tests\stripe-webhook-verify.spec.ts:79:7 › stripe webhook signature verifier › rejects signed invalid JSON (1ms)
+  ok 498 [chromium] › tests\stripe-webhook-verify.spec.ts:93:7 › stripe webhook signature verifier › rejects signed malformed event payload (1ms)
+  ok 499 [chromium] › tests\stripe-webhook-verify.spec.ts:107:7 › stripe webhook signature verifier › rejects signed payload with invalid event id format (1ms)
+  ok 500 [chromium] › tests\stripe-webhook-verify.spec.ts:121:7 › stripe webhook signature verifier › rejects signed payload with invalid event type format (1ms)
+  ok 501 [chromium] › tests\stripe-webhook-verify.spec.ts:135:7 › stripe webhook signature verifier › accepts valid signature and payload (2ms)
+  ok 502 [chromium] › tests\stripe-webhook-verify.spec.ts:153:7 › stripe webhook signature verifier › accepts multi-signature header when one v1 matches (1ms)
+  ok 503 [chromium] › tests\sweep-gaps-remaining.spec.ts:71:7 › remaining module sweep › auth/admin/owner exports and role helpers are wired (2ms)
+  ok 504 [chromium] › tests\sweep-gaps-remaining.spec.ts:79:7 › remaining module sweep › db and r2 helpers fail closed without required env (3ms)
+  ok 505 [chromium] › tests\sweep-gaps-remaining.spec.ts:93:7 › remaining module sweep › encryption helpers round-trip and enforce toggles (3ms)
+  ok 506 [chromium] › tests\sweep-gaps-remaining.spec.ts:120:7 › remaining module sweep › alerts/key-rotation/master-keys fallback safely when DB is unavailable (6ms)
+  ok 507 [chromium] › tests\sweep-gaps-remaining.spec.ts:142:7 › remaining module sweep › quarantine/share/db-writer helpers fail closed without DB (3ms)
+  ok 508 [chromium] › tests\sweep-gaps-remaining.spec.ts:154:7 › remaining module sweep › cron/audit helpers no-op on safe branches and strict mode propagates (3ms)
+  ok 509 [chromium] › tests\sweep-gaps-remaining.spec.ts:171:7 › remaining module sweep › pdf/org/google modules enforce local validation (57ms)
+  ok 510 [chromium] › tests\sweep-gaps.spec.ts:43:7 › gap sweep fallback behavior › monetization normalizers enforce free-tier invariants (3ms)
+  ok 511 [chromium] › tests\sweep-gaps.spec.ts:71:7 › gap sweep fallback behavior › resolve helpers fail closed for blank identifiers (3ms)
+  ok 512 [chromium] › tests\sweep-gaps.spec.ts:79:7 › gap sweep fallback behavior › resend helper validates env and sends with expected payload (3ms)
+  ok 513 [chromium] › tests\sweep-gaps.spec.ts:107:7 › gap sweep fallback behavior › settings fall back to env/defaults when DB is unavailable (3ms)
+  ok 514 [chromium] › tests\sweep-gaps.spec.ts:123:7 › gap sweep fallback behavior › stripe helper handles missing key, request formatting, and existing customer short-circuit (3ms)
+  ok 515 [chromium] › tests\sweep-gaps.spec.ts:152:7 › gap sweep fallback behavior › rbac defaults fail closed without override table (2ms)
+  ok 516 [chromium] › tests\sweep-gaps.spec.ts:169:7 › gap sweep fallback behavior › override/webhook/queue maintenance helpers fail closed without DB (8ms)
+  ok 517 [chromium] › tests\tenant.spec.ts:5:7 › tenant org slug normalization › accepts valid slugs and normalizes case/whitespace (2ms)
+  ok 518 [chromium] › tests\tenant.spec.ts:11:7 › tenant org slug normalization › rejects invalid slug formats (4ms)
+  ok 519 [chromium] › tests\tenant.spec.ts:22:7 › tenant org slug normalization › rejects overlong slugs (1ms)
+  ok 520 [chromium] › tests\test-suite-profile.spec.ts:5:7 › test suite profile routing › local-safe suite excludes env-gated live-ish files (13ms)
+  ok 521 [chromium] › tests\test-suite-profile.spec.ts:12:7 › test suite profile routing › live-ish suite returns exactly the env-gated smoke files (1ms)
+  ok 522 [chromium] › tests\upload-and-cron-guardrails.spec.ts:5:7 › upload and cron guardrails › upload presign route maps auth failures and avoids persisting raw error text (2ms)
+  ok 523 [chromium] › tests\upload-and-cron-guardrails.spec.ts:15:7 › upload and cron guardrails › upload abort route enforces payload-size limits (2ms)
+  ok 524 [chromium] › tests\upload-and-cron-guardrails.spec.ts:23:7 › upload and cron guardrails › upload complete route returns opaque internal failure codes without schema leakage (2ms)
+  ok 525 [chromium] › tests\upload-and-cron-guardrails.spec.ts:34:7 › upload and cron guardrails › viewer billing checkout route uses auth error classification helper (1ms)
+  ok 526 [chromium] › tests\upload-and-cron-guardrails.spec.ts:41:7 › upload and cron guardrails › cron aggregate validates daysBack and fails closed on invalid values (2ms)
+  ok 527 [chromium] › tests\upload-and-cron-guardrails.spec.ts:49:7 › upload and cron guardrails › cron billing sync fails closed when maintenance result is not ok (2ms)
+  ok 528 [chromium] › tests\upload-and-cron-guardrails.spec.ts:56:7 › upload and cron guardrails › nightly cron telemetry avoids raw exception text (2ms)
+  ok 529 [chromium] › tests\upload-complete-url-guardrails.spec.ts:5:7 › upload complete URL guardrails › upload complete route uses trusted base-url resolver for view_url (2ms)
+  ok 530 [chromium] › tests\upload-complete-url-guardrails.spec.ts:14:7 › upload complete URL guardrails › upload complete route avoids logging raw usage increment errors (1ms)
+  ok 531 [chromium] › tests\upload-runtime-proof.spec.ts:35:7 › upload runtime proofs › runs upload init -> finalize -> scan cron -> release/serve in deterministic local verification mode (22ms)
+  ok 532 [chromium] › tests\upload-runtime-proof.spec.ts:69:7 › upload runtime proofs › fails closed when the scanner is unavailable and keeps the document unservable (5ms)
+  ok 533 [chromium] › tests\upload-runtime-proof.spec.ts:89:7 › upload runtime proofs › blocks unknown or infected scan outcomes at serve time without silently releasing access (12ms)
+  ok 534 [chromium] › tests\upload-runtime-proof.spec.ts:124:7 › upload runtime proofs › blocks legacy unencrypted docs at finalize time and deletes the plaintext object (3ms)
+  ok 535 [chromium] › tests\upload-type-validation.spec.ts:5:7 › upload type validation › rejects invalid/path-traversal filenames (1ms)
+  ok 536 [chromium] › tests\upload-type-validation.spec.ts:14:7 › upload type validation › rejects control characters and trailing dots in filenames (2ms)
+  ok 537 [chromium] › tests\upload-type-validation.spec.ts:30:7 › upload type validation › blocks executable extensions (0ms)
+  ok 538 [chromium] › tests\upload-type-validation.spec.ts:39:7 › upload type validation › blocks executable MIME prefixes even for allowed extension (1ms)
+  ok 539 [chromium] › tests\upload-type-validation.spec.ts:48:7 › upload type validation › blocks dangerous exact MIME types even when extension is allowed (0ms)
+  ok 540 [chromium] › tests\upload-type-validation.spec.ts:57:7 › upload type validation › rejects extension and declared MIME mismatch (1ms)
+  ok 541 [chromium] › tests\upload-type-validation.spec.ts:66:7 › upload type validation › rejects malformed declared MIME values (1ms)
+  ok 542 [chromium] › tests\upload-type-validation.spec.ts:75:7 › upload type validation › rejects executable binary signature in bytes (1ms)
+  ok 543 [chromium] › tests\upload-type-validation.spec.ts:85:7 › upload type validation › rejects unknown binary signature for non-text formats (1ms)
+  ok 544 [chromium] › tests\upload-type-validation.spec.ts:95:7 › upload type validation › rejects invalid text file payload (1ms)
+  ok 545 [chromium] › tests\upload-type-validation.spec.ts:105:7 › upload type validation › validates RTF signatures (1ms)
+  ok 546 [chromium] › tests\upload-type-validation.spec.ts:123:7 › upload type validation › accepts valid PDF signature (1ms)
+  ok 547 [chromium] › tests\upload-type-validation.spec.ts:137:7 › upload type validation › accepts OOXML docx files with ZIP signature (1ms)
+  ok 548 [chromium] › tests\view-limit-override-guardrails.spec.ts:5:7 › view limit override guardrails › normalizes owner/actor ids and clamps override inputs (1ms)
+  ok 549 [chromium] › tests\viewer-office-route-guardrails.spec.ts:5:7 › viewer office route guardrails › office preview route enforces payload, mime, and timeout controls (4ms)
+  ok 550 [chromium] › tests\viewer-shell-separation.spec.ts:9:7 › viewer shell separation › viewer layout no longer depends on admin shell orchestration (2ms)
+  ok 551 [chromium] › tests\viewer-shell-separation.spec.ts:18:7 › viewer shell separation › viewer shell uses viewer-specific navigation (1ms)
+  ok 552 [chromium] › tests\webhook-events-guardrails.spec.ts:6:7 › webhook event guardrails › normalizes to known events only and deduplicates (1ms)
+  ok 553 [chromium] › tests\webhook-events-guardrails.spec.ts:17:7 › webhook event guardrails › webhook event list remains explicit and non-empty (1ms)
+  ok 554 [chromium] › tests\webhook-events-guardrails.spec.ts:23:7 › webhook event guardrails › admin webhook actions normalize selected event values (2ms)
+  ok 555 [chromium] › tests\webhook-events-guardrails.spec.ts:30:7 › webhook event guardrails › webhook delivery worker sanitizes errors before persisting (1ms)
+  ok 556 [chromium] › tests\webhook-owner-scope-guardrails.spec.ts:5:7 › webhook owner scoping guardrails › webhook listing query is owner-scoped (1ms)
+  ok 557 [chromium] › tests\webhook-owner-scope-guardrails.spec.ts:10:7 › webhook owner scoping guardrails › emitWebhook fails closed when owner cannot be resolved (1ms)
+  ok 558 [chromium] › tests\webhook-secrets.spec.ts:5:7 › webhook secret helpers › legacy plaintext secrets are still readable for backward compatibility (1ms)
+  ok 559 [chromium] › tests\webhook-secrets.spec.ts:9:7 › webhook secret helpers › rejects malformed plaintext and encrypted secret values (1ms)
+  ok 560 [chromium] › tests\webhook-secrets.spec.ts:15:7 › webhook secret helpers › encrypts and decrypts webhook secret when OIDC_SECRETS_KEY is configured (1ms)
+  ok 561 [chromium] › tests\webhook-url-guardrails.spec.ts:10:7 › webhook url guardrails › accepts public https webhook URLs (1ms)
+  ok 562 [chromium] › tests\webhook-url-guardrails.spec.ts:15:7 › webhook url guardrails › blocks insecure and private webhook URLs by default (7ms)
+  ok 563 [chromium] › tests\webhook-url-guardrails.spec.ts:27:7 › webhook url guardrails › allows localhost http only outside production (1ms)
+  ok 564 [chromium] › tests\webhook-url-guardrails.spec.ts:36:7 › webhook url guardrails › webhook actions normalize and validate URL input (1ms)
+  ok 565 [chromium] › tests\webhook-url-guardrails.spec.ts:42:7 › webhook url guardrails › webhook edit page does not render stored secret values (1ms)
+
+  565 passed (28.6s)
+
+==> [Bundle budget audit] npm run audit:bundle-budgets
+
+> cyang-doclinks@0.1.0 audit:bundle-budgets
+> node scripts/audit-bundle-budgets.mjs
+
+home: 3.7 KiB route-specific client JS
+pricing: 3.7 KiB route-specific client JS
+status: 3.7 KiB route-specific client JS
+signin: 0.0 KiB route-specific client JS
+signup: 0.0 KiB route-specific client JS
+admin-dashboard: 0.0 KiB route-specific client JS
+viewer-dashboard: 0.0 KiB route-specific client JS
+Bundle budget audit passed.
+
+==> [Production readiness] node scripts/production-readiness.mjs --skip-lint --skip-typecheck --skip-build --skip-bundle-budgets
+
+==> [Env template audit] npm run audit:env-example
+
+> cyang-doclinks@0.1.0 audit:env-example
+> node scripts/check-env-example.mjs
+
+Intentional extra keys in .env.example:
+  compatibilityAliases: Legacy aliases kept only to support controlled migration windows and env-name transitions.
+    - AUTH_SECRET
+    - CUSTOM_HASH_SALT
+    - FORCE_R2_SSE
+    - RESEND_FROM
+    - SHARE_SALT
+  publicBrandAndProductShell: Public-shell and pricing flags that may be consumed at runtime or deployment boundaries rather than static imports.
+    - BRAND_NAME
+    - BRAND_PRIMARY_COLOR
+    - NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+  deployOnlyProviderInputs: Provider or deployment metadata required for real environments even when a local proof run uses placeholders.
+    - ADMIN_COOKIE_SECRET
+    - ADMIN_PASSWORD
+    - LIVE_RESTORE_TARGET_BASE_URL
+    - LIVE_RUNTIME_BASE_URL
+    - LIVE_RUNTIME_STRIPE_PRICE_ID
+    - LIVE_RUNTIME_STRIPE_TIMEOUT_SECONDS
+    - LIVE_RUNTIME_UPLOAD_SCAN_TIMEOUT_SECONDS
+    - R2_ACCOUNT_ID
+  optionalOpsTuning: Operational knobs that are intentionally available for tuning, incident response, or deploy-specific caching behavior.
+    - ANALYTICS_AGGREGATE_DAYS_BACK
+.env.example check passed. Keys referenced: 292. Keys in template: 309. Intentional extras: 17.
+
+==> [Migration manifest verify] node scripts/migrate.mjs verify
+Migration manifest verified: 39 ordered files (0001__user_ownership_layer.sql -> 0039__free_plan_policy_update.sql).
+
+==> [Admin route audit] npm run audit:admin-routes
+
+> cyang-doclinks@0.1.0 audit:admin-routes
+> node scripts/audit-admin-route-guards.mjs
+
+Admin route guard audit passed (28 route files checked).
+
+==> [Admin polling audit] npm run audit:admin-polling
+
+> cyang-doclinks@0.1.0 audit:admin-polling
+> node scripts/audit-admin-polling-targets.mjs
+
+Admin polling audit passed.
+
+==> [Public rendering audit] npm run audit:public-rendering
+
+> cyang-doclinks@0.1.0 audit:public-rendering
+> node scripts/audit-public-rendering.mjs
+
+Public rendering audit passed.
+
+==> [Route-handler audit] npm run audit:route-handlers
+
+> cyang-doclinks@0.1.0 audit:route-handlers
+> node scripts/audit-route-handler-rendering.mjs
+
+Route handler rendering audit passed.
+
+==> [Polling audit] npm run audit:polling
+
+> cyang-doclinks@0.1.0 audit:polling
+> node scripts/audit-polling-discipline.mjs
+
+Polling discipline audit passed.
+
+==> [Production dependency audit] npm audit --omit=dev --audit-level=high
+found 0 vulnerabilities
+
+==> [Release gate] node scripts/release-gate.mjs --allow-missing-env --summary-json C:\Users\tsaab\Projects\cyang-doclinks\.tmp\release-gate-summary.json
+Release gate: runtime env audit skipped (no deployment env detected).
+Release gate summary: repo/build proof can still pass, but live deployment configuration was not verified.
+
+Production readiness summary: PASSED
+- PASS Env template audit (476ms)
+- PASS Migration manifest verify (74ms)
+- PASS Admin route audit (382ms)
+- PASS Admin polling audit (387ms)
+- PASS Public rendering audit (375ms)
+- PASS Route-handler audit (430ms)
+- PASS Polling audit (384ms)
+- PASS Production dependency audit (1.2s)
+- PASS Release gate (67ms)
+- Total duration: 3.7s
+
+Production readiness verdict:
+- Repo/build proof: passed
+- Reused prior proof steps: lint, typecheck, build, bundle-budgets
+- Live runtime gate: skipped (deployment env not detected)
+- What was not proven: live runtime configuration and live migration status
+
+Production readiness validation passed.
+
+Build proof summary: PASSED
+- PASS Lint (17s)
+- PASS Typecheck (4.9s)
+- PASS Production build (25s)
+- PASS Regression tests (36s)
+- PASS Bundle budget audit (388ms)
+- PASS Production readiness (3.8s)
+- Total duration: 87s
+
+Build proof sequence passed.
+Locally proven: lint, typecheck, production build, deterministic regression tests, bundle budgets, and repo release/readiness audits.
+Not proven here: live Postgres connectivity, Cloudflare R2 connectivity, Stripe delivery from the live service, email provider delivery, malware scanning endpoints, deployed-secret wiring.
+Proof JSON report: .artifacts\proof\proof-report.json
+Proof summary: .artifacts\proof\proof-summary.md
+Proof log: .artifacts\proof\prove-build.log
