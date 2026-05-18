@@ -6,19 +6,13 @@ import { useEffect, useState } from "react";
 import type { PublicRuntimeConfig } from "@/lib/publicRuntimeConfig";
 
 const PRIMARY_NAV = [
-  { href: "/products", label: "Products" },
   { href: "/doclinks", label: "Doclinks" },
   { href: "/pricing", label: "Pricing", when: "pricing" as const },
   { href: "/trust", label: "Trust" },
-  { href: "/about", label: "About" },
   { href: "/contact", label: "Contact" },
 ];
 
 function isCurrent(pathname: string, href: string) {
-  if (href === "/products") {
-    return pathname === "/products" || pathname.startsWith("/products/") || pathname === "/projects" || pathname.startsWith("/projects/");
-  }
-
   if (href === "/doclinks") {
     return pathname === "/doclinks" || pathname.startsWith("/doclinks/") || pathname === "/projects/doclinks" || pathname.startsWith("/projects/doclinks/");
   }
@@ -63,7 +57,7 @@ export default function SiteHeaderClient({ config }: { config: PublicRuntimeConf
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold tracking-tight text-slate-950 sm:text-base">cyang.io</div>
               <div className="truncate text-[10px] uppercase tracking-[0.24em] text-[var(--text-faint)] sm:text-[11px]">
-                Secure workflow software
+                Secure document sharing
               </div>
             </div>
           </Link>

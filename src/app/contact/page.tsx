@@ -10,6 +10,7 @@ import {
   Section,
 } from "@/app/components/PublicPrimitives";
 import { SiteShell } from "@/app/components/SiteShell";
+import InquiryForm from "./InquiryForm";
 import { getPublicRuntimeConfig } from "@/lib/publicRuntimeConfig";
 
 export const runtime = "nodejs";
@@ -44,6 +45,11 @@ export default function ContactPage() {
                   className="mt-8"
                   actions={[
                     {
+                      href: "#contact-form",
+                      label: "Start a request",
+                      tone: "primary",
+                    },
+                    {
                       href: `mailto:${publicConfig.supportEmail}`,
                       label: "Email support",
                       tone: "primary",
@@ -74,6 +80,16 @@ export default function ContactPage() {
 
       <SectionTransition label="Contact routes" />
 
+      <Section id="contact-form" className="pt-4 sm:pt-8">
+        <ScrollRevealFrame>
+          <InquiryForm
+            source="contact"
+            title="Start a request without leaving the site."
+            body="Use this path for demos, procurement follow-up, support, and general questions. Direct email routes stay available for anyone who prefers them."
+          />
+        </ScrollRevealFrame>
+      </Section>
+
       <Section className="pt-4 sm:pt-8">
         <ScrollRevealFrame>
           <StoryBand
@@ -99,25 +115,25 @@ export default function ContactPage() {
         <ScrollRevealFrame delay={120} className="mt-10">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <LinkTile
-              href={`mailto:${publicConfig.supportEmail}`}
+              href="/contact?topic=product_support#contact-form"
               title="Product and support"
               body="Accounts, onboarding, active product usage, and customer support questions."
               meta={publicConfig.supportEmail}
             />
             <LinkTile
-              href={`mailto:${publicConfig.securityEmail}`}
+              href="/contact?topic=security_disclosure#contact-form"
               title="Security disclosures"
               body="Private vulnerability reporting and security review follow-up."
               meta={publicConfig.securityEmail}
             />
             <LinkTile
-              href={`mailto:${publicConfig.privacyEmail}`}
+              href="/contact?topic=privacy_legal#contact-form"
               title="Privacy and legal"
               body="Privacy requests, DPA questions, subprocessors, retention, and legal routing."
               meta={publicConfig.privacyEmail}
             />
             <LinkTile
-              href={`mailto:${publicConfig.legalEmail}`}
+              href="/contact?topic=general#contact-form"
               title="General inquiries"
               body="Commercial conversations, partnerships, company questions, and broader outreach."
               meta={publicConfig.legalEmail}
@@ -180,7 +196,8 @@ export default function ContactPage() {
                 <CTAGroup
                   className="mt-8"
                   actions={[
-                    { href: "/trust", label: "Trust Center", tone: "primary" },
+                    { href: "#contact-form", label: "Start a request", tone: "primary" },
+                    { href: "/trust", label: "Trust Center", tone: "secondary" },
                     { href: "/status", label: "Status", tone: "secondary" },
                   ]}
                 />

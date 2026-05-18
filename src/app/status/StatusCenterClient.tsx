@@ -637,19 +637,19 @@ export default function StatusCenterClient({ preview }: { preview?: StatusPrevie
   }, [previewMode, snapshot]);
   const isPreviewScenario = previewMode !== "live" && previewMode !== "loading";
   const snapshotUnavailable = !isPreviewScenario && scenario === "snapshot_unavailable";
+  const modeledScenario = !snapshotUnavailable && isPreviewScenario ? (scenario as PlatformState) : null;
 
-  const services = useMemo(() => (snapshotUnavailable ? [] : buildServices(scenario as PlatformState)), [scenario, snapshotUnavailable]);
-  const incidents = useMemo(
-    () => (isPreviewScenario ? buildIncidents(scenario as PlatformState) : []),
-    [isPreviewScenario, scenario]
-  );
-  const uptime = useMemo(
-    () => (isPreviewScenario ? buildUptime(scenario as PlatformState) : []),
-    [isPreviewScenario, scenario]
-  );
+  const services = useMemo(() => (modeledScenario ? buildServices(modeledScenario) : []), [modeledScenario]);
+  const incidents = useMemo(() => (modeledScenario ? buildIncidents(modeledScenario) : []), [modeledScenario]);
+  const uptime = useMemo(() => (modeledScenario ? buildUptime(modeledScenario) : []), [modeledScenario]);
   const state = useMemo<StatusPageScenario>(
-    () => (snapshotUnavailable ? "snapshot_unavailable" : services.reduce<PlatformState>((worst, cur) => (statusRank(cur.status) > statusRank(worst) ? cur.status : worst), "operational")),
-    [services, snapshotUnavailable]
+    () =>
+      snapshotUnavailable
+        ? "snapshot_unavailable"
+        : modeledScenario
+          ? services.reduce<PlatformState>((worst, cur) => (statusRank(cur.status) > statusRank(worst) ? cur.status : worst), "operational")
+          : scenario,
+    [modeledScenario, scenario, services, snapshotUnavailable]
   );
   const stateUi = useMemo(() => statusConfig(state), [state]);
   const uptimePercent = useMemo(() => {
@@ -679,6 +679,14 @@ export default function StatusCenterClient({ preview }: { preview?: StatusPrevie
             <div className="text-xs uppercase tracking-[0.16em] text-[var(--text-faint)]">Current service posture</div>
             <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">{stateUi.headline}</h2>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--text-secondary)] sm:text-base">{stateUi.summary}</p>
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[var(--text-faint)]">
+              <span className="selection-pill px-2.5 py-1">
+                {isPreviewScenario ? "Preview scenario with modeled service detail" : "Live mode with snapshot-backed public status"}
+              </span>
+              {!isPreviewScenario ? (
+                <span className="selection-pill px-2.5 py-1">Per-service cards and history stay unpublished until they have explicit backing data.</span>
+              ) : null}
+            </div>
           </div>
           <div className="flex flex-col items-end gap-2">
             <span className={`inline-flex items-center gap-2 border px-3 py-1.5 text-sm font-medium ${stateUi.badge}`}>
@@ -712,29 +720,43 @@ export default function StatusCenterClient({ preview }: { preview?: StatusPrevie
         <div className="grid gap-4 xl:grid-cols-[1.2fr_minmax(0,0.8fr)]">
           <div>
             <div className="text-xs uppercase tracking-[0.16em] text-[var(--text-faint)]">Overall platform status</div>
-            <h2 className="mt-2 text-2xl font-semibold text-slate-950">Live summary and service coverage</h2>
+            <h2 className="mt-2 text-2xl font-semibold text-slate-950">
+              {isPreviewScenario ? "Preview summary and modeled coverage" : "Live public snapshot summary"}
+            </h2>
             <p className="mt-3 max-w-2xl text-sm text-[var(--text-secondary)]">
-              Public traffic reads a cached readiness snapshot. Deeper dependency diagnostics stay on operator-only surfaces.
+              {isPreviewScenario
+                ? "Preview mode intentionally models service coverage so incident states, cards, and timelines can be reviewed before publication."
+                : "Public traffic reads a cached readiness snapshot. Deeper dependency diagnostics stay on operator-only surfaces until they can be published with explicit backing data."}
             </p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
             <div className="surface-panel-soft p-4">
               <div className="text-xs uppercase tracking-[0.16em] text-[var(--text-faint)]">30-day uptime</div>
               <div className="mt-2 text-2xl font-semibold text-slate-950">
-                {snapshotUnavailable ? "Snapshot unavailable" : uptimePercent != null ? `${uptimePercent.toFixed(2)}%` : "Live snapshot"}
+                {snapshotUnavailable ? "Snapshot unavailable" : uptimePercent != null ? `${uptimePercent.toFixed(2)}%` : "Not published here"}
               </div>
               <div className="mt-1 text-sm text-[var(--text-muted)]">
                 {snapshotUnavailable
                   ? "This public page is waiting for a fresh cached readiness snapshot before publishing service-wide health claims."
                   : uptimePercent != null
                   ? "Platform availability over the last 30 days."
-                  : "Cached public health summary from the current live snapshot."}
+                  : "Live mode avoids synthesizing uptime history from a single cached snapshot."}
               </div>
             </div>
             <div className="surface-panel-soft p-4">
-              <div className="text-xs uppercase tracking-[0.16em] text-[var(--text-faint)]">Open incidents</div>
-              <div className="mt-2 text-2xl font-semibold text-slate-950">{openIncidents}</div>
-              <div className="mt-1 text-sm text-[var(--text-muted)]">{openIncidents === 0 ? "No unresolved incidents at this time." : "Incident response is currently in progress."}</div>
+              <div className="text-xs uppercase tracking-[0.16em] text-[var(--text-faint)]">
+                {isPreviewScenario ? "Open incidents" : "Incident publication"}
+              </div>
+              <div className="mt-2 text-2xl font-semibold text-slate-950">
+                {isPreviewScenario ? openIncidents : "Manual"}
+              </div>
+              <div className="mt-1 text-sm text-[var(--text-muted)]">
+                {isPreviewScenario
+                  ? openIncidents === 0
+                    ? "No unresolved incidents at this time."
+                    : "Incident response is currently in progress."
+                  : "Historical incident entries are published intentionally rather than inferred from one health check."}
+              </div>
             </div>
           </div>
         </div>
@@ -742,12 +764,29 @@ export default function StatusCenterClient({ preview }: { preview?: StatusPrevie
 
       <section className="surface-panel-strong p-5 sm:p-6">
         <div className="mb-4">
-          <div className="text-xs uppercase tracking-[0.16em] text-[var(--text-faint)]">Services</div>
-          <h2 className="mt-2 text-xl font-semibold text-slate-950">Core service health</h2>
-          <p className="mt-1 text-sm text-[var(--text-secondary)]">At-a-glance status for key product systems.</p>
+          <div className="text-xs uppercase tracking-[0.16em] text-[var(--text-faint)]">
+            {isPreviewScenario ? "Services" : "Service detail"}
+          </div>
+          <h2 className="mt-2 text-xl font-semibold text-slate-950">
+            {isPreviewScenario ? "Modeled core service health" : "Why live mode stays conservative"}
+          </h2>
+          <p className="mt-1 text-sm text-[var(--text-secondary)]">
+            {isPreviewScenario
+              ? "At-a-glance status for key product systems in preview mode."
+              : "The public status page avoids fabricating service-by-service health cards from a single cached readiness result."}
+          </p>
         </div>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {snapshotUnavailable ? (
+          {!isPreviewScenario ? (
+            <div className="md:col-span-2 xl:col-span-3 surface-panel-soft border-dashed px-5 py-8 text-center">
+              <div className="text-lg font-semibold text-slate-950">Live snapshot mode</div>
+              <p className="mx-auto mt-2 max-w-2xl text-sm text-[var(--text-secondary)]">
+                Live public status is currently backed by the cached readiness snapshot above. Per-service latency,
+                uptime, and trend cards only appear in preview mode, where they are explicitly presented as modeled
+                scenarios rather than published live facts.
+              </p>
+            </div>
+          ) : snapshotUnavailable ? (
             <div className="md:col-span-2 xl:col-span-3 surface-panel-soft border-dashed px-5 py-8 text-center">
               <div className="text-lg font-semibold text-slate-950">Service-wide snapshot unavailable</div>
               <p className="mx-auto mt-2 max-w-2xl text-sm text-[var(--text-secondary)]">

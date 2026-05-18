@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { StructuredData } from "../components/StructuredData";
 import { DoclinksPageView } from "../components/DoclinksPageView";
 import { SiteShell } from "../components/SiteShell";
 import { getPublicRuntimeConfig } from "@/lib/publicRuntimeConfig";
@@ -19,6 +20,22 @@ export default function DoclinksPage() {
 
   return (
     <SiteShell maxWidth="full" publicConfig={publicConfig}>
+      <StructuredData
+        data={{
+          "@context": "https://schema.org",
+          "@type": "SoftwareApplication",
+          name: "Doclinks",
+          applicationCategory: "BusinessApplication",
+          operatingSystem: "Web",
+          url: "https://cyang.io/doclinks",
+          description:
+            "Secure document sharing with protected links, sender controls, and trust-centered public review surfaces.",
+          brand: {
+            "@type": "Brand",
+            name: "cyang.io",
+          },
+        }}
+      />
       <DoclinksPageView publicConfig={publicConfig} />
     </SiteShell>
   );

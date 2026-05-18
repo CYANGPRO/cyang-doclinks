@@ -15,15 +15,16 @@ import {
   SenderRecipientProof,
   UseCaseClusterGrid,
 } from "./components/PublicPrimitives";
+import { ProductWalkthrough } from "./components/ProductWalkthrough";
 import { SiteShell } from "./components/SiteShell";
 import { getPublicRuntimeConfig } from "@/lib/publicRuntimeConfig";
 
 export const revalidate = 900;
 
 export const metadata: Metadata = {
-  title: "cyang.io - Secure document sharing with control after send",
+  title: "cyang.io - Send private documents without losing control",
   description:
-    "Doclinks helps teams securely share sensitive documents, keep control after sending, and prove trust through real security, legal, and operational surfaces.",
+    "Doclinks helps teams send private documents through protected links, keep control after sending, and give recipients a calmer, more professional delivery flow.",
 };
 
 const TRUST_DOCUMENTS = [
@@ -94,55 +95,55 @@ export default function HomePage() {
         <div className="mx-auto flex min-h-[96svh] w-full max-w-[1600px] flex-col justify-between px-4 pb-10 pt-18 sm:px-6 sm:pb-12 lg:px-8 lg:pt-24">
           <div className="grid gap-10 lg:grid-cols-[minmax(0,1.08fr)_360px] lg:items-end">
             <ScrollRevealFrame className="max-w-5xl">
-              <Eyebrow>cyang.io product studio</Eyebrow>
+              <Eyebrow>Doclinks by cyang.io</Eyebrow>
               <h1 className="font-editorial mt-6 text-balance text-[3.25rem] leading-[0.9] tracking-[-0.06em] text-slate-950 sm:text-[4.75rem] lg:text-[7.5rem]">
-                Securely share sensitive documents
-                <span className="block text-[var(--text-muted)]">and keep control after sending.</span>
+                Send private documents
+                <span className="block text-[var(--text-muted)]">without losing control after send.</span>
               </h1>
               <Lead className="mt-6 max-w-2xl text-base sm:text-xl">
-                Doclinks gives teams a safer way to send private files, replace careless attachments, and keep access
-                controls, visibility, and trust intact after send.
+                Built for contracts, HR records, financial files, and client-facing documents that need more control
+                than an attachment and a calmer experience than a generic file link.
               </Lead>
               <CTAGroup
                 className="mt-8"
                 actions={[
                   { href: primaryAccessHref, label: publicConfig.signupEnabled ? "Get started" : "Sign in", tone: "primary" },
                   {
-                    href: publicConfig.showPricingUi ? "/pricing" : "/doclinks",
-                    label: publicConfig.showPricingUi ? "View pricing" : "Explore Doclinks",
+                    href: "/doclinks#sample-flow",
+                    label: "See the product flow",
                     tone: "secondary",
                   },
                 ]}
               />
               <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-[var(--text-secondary)]">
-                <span>Safer than email attachments</span>
-                <span>More control than generic links</span>
-                <span>Sender keeps control after send</span>
+                <span>For finance, HR, legal, and operations</span>
+                <span>Protected links instead of loose files</span>
+                <span>Expiry, revocation, and visibility stay available</span>
               </div>
               <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-sm">
                 {publicConfig.showPricingUi ? <ArrowLink href="/pricing">Review pricing</ArrowLink> : null}
                 <ArrowLink href="/trust">Review trust</ArrowLink>
-                <ArrowLink href="/doclinks">See the product</ArrowLink>
+                <ArrowLink href="/doclinks#sample-flow">See a sample flow</ArrowLink>
               </div>
             </ScrollRevealFrame>
 
             <ScrollRevealFrame delay={120} className="floating-stage p-6 sm:p-7">
-              <div className="text-[11px] uppercase tracking-[0.24em] text-[var(--text-faint)]">Launch surface</div>
+              <div className="text-[11px] uppercase tracking-[0.24em] text-[var(--text-faint)]">What visitors should know first</div>
               <div className="mt-4 text-2xl font-semibold tracking-[-0.04em] text-slate-950">
-                A safer way to send files that should stay under control.
+                One product, one promise: send the file and keep the control layer.
               </div>
               <p className="mt-4 text-sm leading-7 text-[var(--text-secondary)]">
-                Built for contracts, HR records, financial files, and other documents that are too sensitive for
-                ordinary attachments or casual file links.
+                Doclinks is the flagship product. It exists for sensitive document delivery where the sender still
+                needs policy control after the link has been shared.
               </p>
               <div className="story-seam mt-6 h-28" />
               <VisualSignalCluster
                 className="mt-4"
                 title="Immediate signals"
                 items={[
-                  { label: "Use case", value: "Sensitive document sharing" },
-                  { label: "Differentiator", value: "Control stays with the sender" },
-                  { label: "Proof", value: "Trust surfaces are public and reviewable" },
+                  { label: "Use case", value: "Private document delivery" },
+                  { label: "Why it wins", value: "Control stays with the sender" },
+                  { label: "Why trust it", value: "Trust surfaces are public and reviewable" },
                 ]}
               />
             </ScrollRevealFrame>
@@ -152,11 +153,11 @@ export default function HomePage() {
             <div className="grid gap-4 border-t border-[var(--border-subtle)] pt-5 sm:grid-cols-3">
               <div>
                 <div className="text-[11px] uppercase tracking-[0.22em] text-[var(--text-faint)]">What it is</div>
-                <div className="mt-2 text-lg text-[var(--text-primary)]">Secure document sharing for sensitive files</div>
+                <div className="mt-2 text-lg text-[var(--text-primary)]">Protected delivery for private documents</div>
               </div>
               <div>
-                <div className="text-[11px] uppercase tracking-[0.22em] text-[var(--text-faint)]">Why it is better</div>
-                <div className="mt-2 text-lg text-[var(--text-primary)]">More control than email attachments or generic links</div>
+                <div className="text-[11px] uppercase tracking-[0.22em] text-[var(--text-faint)]">What changes</div>
+                <div className="mt-2 text-lg text-[var(--text-primary)]">Expiry, revocation, and serving rules stay in play</div>
               </div>
               <div>
                 <div className="text-[11px] uppercase tracking-[0.22em] text-[var(--text-faint)]">Why trust it</div>
@@ -250,7 +251,7 @@ export default function HomePage() {
 
       <SectionTransition label="Product proof" />
 
-      <Section className="py-20 sm:py-24">
+      <Section id="sample-flow" className="py-20 sm:py-24">
         <ContentRail>
           <ScrollRevealFrame>
             <div className="max-w-3xl">
@@ -263,6 +264,10 @@ export default function HomePage() {
                 and the system keeps the important decisions at serve time.
               </p>
             </div>
+          </ScrollRevealFrame>
+
+          <ScrollRevealFrame delay={90} className="mt-10">
+            <ProductWalkthrough />
           </ScrollRevealFrame>
 
           <ScrollRevealFrame delay={120} className="mt-10">
@@ -336,7 +341,7 @@ export default function HomePage() {
                     sharing only feels credible when the company is reviewable too.
                   </p>
                 </div>
-                <DocumentIndexList items={TRUST_DOCUMENTS} />
+                <DocumentIndexList items={TRUST_DOCUMENTS} funnelAction="trust_doc_open" funnelLocation="trust" />
               </div>
             </div>
           </ScrollRevealFrame>

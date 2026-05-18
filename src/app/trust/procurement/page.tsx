@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { PolicyPageShell } from "@/app/components/PolicyPageShell";
 import { DocumentIndexList, PremiumCard, Section, SectionHeader } from "@/app/components/PublicPrimitives";
 import { SiteShell } from "@/app/components/SiteShell";
+import InquiryForm from "@/app/contact/InquiryForm";
 import { getSecurityEmail, getSupportEmail } from "@/lib/legal";
 
 export const runtime = "nodejs";
@@ -39,7 +40,7 @@ export default function ProcurementTrustPage() {
         title="Business-ready trust review, organized for speed."
         body="This page collects the core legal, privacy, security, and reliability documents buyers usually need when evaluating Doclinks or cyang.io."
         actions={[
-          { href: `mailto:${legalEmail}`, label: "Request package", tone: "primary", external: true },
+          { href: "#procurement-request", label: "Request package", tone: "primary" },
           { href: "/contact", label: "Contact", tone: "secondary" },
         ]}
         meta={[
@@ -62,8 +63,18 @@ export default function ProcurementTrustPage() {
           body="Use the list below to route security, privacy, procurement, and legal reviewers quickly."
         />
         <div className="mt-8">
-          <DocumentIndexList items={DOCUMENTS} />
+          <DocumentIndexList items={DOCUMENTS} funnelAction="trust_doc_open" funnelLocation="procurement" />
         </div>
+      </Section>
+
+      <Section id="procurement-request">
+        <InquiryForm
+          source="procurement"
+          defaultTopic="procurement"
+          title="Request the package with context attached."
+          body="Share the team, review stage, and what you need next. This keeps procurement follow-up attached to the right context instead of forcing buyers into a blank email."
+          submitLabel="Request procurement follow-up"
+        />
       </Section>
 
       <Section>

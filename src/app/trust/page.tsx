@@ -199,7 +199,7 @@ export default function TrustPage() {
               </p>
             </div>
 
-            <DocumentIndexList items={DOCUMENTS} />
+            <DocumentIndexList items={DOCUMENTS} funnelAction="trust_doc_open" funnelLocation="trust" />
           </div>
         </ScrollRevealFrame>
       </Section>

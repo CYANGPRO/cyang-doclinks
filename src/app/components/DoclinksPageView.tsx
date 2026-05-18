@@ -12,6 +12,7 @@ import {
   Section,
   UseCaseClusterGrid,
 } from "./PublicPrimitives";
+import { ProductWalkthrough } from "./ProductWalkthrough";
 import type { PublicRuntimeConfig } from "@/lib/publicRuntimeConfig";
 
 const OUTCOMES = [
@@ -164,17 +165,18 @@ export function DoclinksPageView({ publicConfig }: { publicConfig: PublicRuntime
             <ScrollRevealFrame className="max-w-5xl">
               <Eyebrow>Flagship product</Eyebrow>
               <h1 className="font-editorial mt-6 text-balance text-[3.15rem] leading-[0.9] tracking-[-0.06em] text-slate-950 sm:text-[4.75rem] lg:text-[7rem]">
-                Securely share sensitive documents
-                <span className="block text-[var(--text-muted)]">with control after send.</span>
+                Send private documents
+                <span className="block text-[var(--text-muted)]">without giving up control after send.</span>
               </h1>
               <p className="mt-6 max-w-2xl text-base leading-8 text-[var(--text-secondary)] sm:text-xl">
-                Protect contracts, records, financial files, HR documents, and other private files with protected links,
-                server-side controls, real-time policy enforcement, and visibility into what happened after delivery.
+                Protect contracts, records, financial files, HR documents, and other private files with protected
+                links, clear recipient delivery, and sender controls that still matter after the link leaves your hands.
               </p>
               <CTAGroup
                 className="mt-8"
                 actions={[
                   { href: primaryAccessHref, label: publicConfig.signupEnabled ? "Get started" : "Sign in", tone: "primary" },
+                  { href: "#sample-flow", label: "See a sample flow", tone: "secondary" },
                   { href: "/trust", label: "Review Trust", tone: "secondary" },
                   ...(publicConfig.showPricingUi ? [{ href: "/pricing", label: "View pricing", tone: "secondary" as const }] : []),
                 ]}
@@ -253,7 +255,7 @@ export function DoclinksPageView({ publicConfig }: { publicConfig: PublicRuntime
 
       <SectionTransition label="Product proof" />
 
-      <Section className="py-18 sm:py-24">
+      <Section id="sample-flow" className="py-18 sm:py-24">
         <ContentRail>
           <ScrollRevealFrame>
             <div className="max-w-3xl">
@@ -266,6 +268,13 @@ export function DoclinksPageView({ publicConfig }: { publicConfig: PublicRuntime
                 and professional.
               </p>
             </div>
+          </ScrollRevealFrame>
+
+          <ScrollRevealFrame delay={90} className="mt-10">
+            <ProductWalkthrough
+              title="Walk through a real protected-link lifecycle."
+              body="This sample flow makes the sender, recipient, and system behavior visible before you ever create a workspace."
+            />
           </ScrollRevealFrame>
 
           <ScrollRevealFrame delay={120} className="mt-10">

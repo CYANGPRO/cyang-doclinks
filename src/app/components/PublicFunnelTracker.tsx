@@ -177,7 +177,7 @@ export default function PublicFunnelTracker() {
       if (!anchor) return;
 
       const action = normText(anchor.dataset.funnelAction, 64) || "cta_click";
-      if (action !== "cta_click" && action !== "procurement_request") return;
+      if (!["cta_click", "procurement_request", "pricing_interest", "trust_doc_open"].includes(action)) return;
 
       const className = String(anchor.className || "");
       const explicit = Boolean(anchor.dataset.funnelAction);

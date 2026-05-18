@@ -562,8 +562,12 @@ export function TrustLinkGrid({
 
 export function DocumentIndexList({
   items,
+  funnelAction,
+  funnelLocation,
 }: {
   items: Array<{ href: string; title: string; body: string; meta?: ReactNode }>;
+  funnelAction?: string;
+  funnelLocation?: string;
 }) {
   return (
     <div className="overflow-hidden rounded-sm border border-[var(--border-subtle)] bg-white shadow-[var(--shadow-soft)]">
@@ -571,6 +575,9 @@ export function DocumentIndexList({
         <Link
           key={item.href}
           href={item.href}
+          data-funnel-action={funnelAction}
+          data-funnel-location={funnelLocation}
+          data-funnel-label={funnelAction ? item.title : undefined}
           className={cn(
             "flex flex-col gap-4 px-5 py-5 transition-colors hover:bg-[var(--surface-soft)] sm:flex-row sm:items-start sm:justify-between sm:px-6",
             index !== 0 && "border-t border-[var(--border-subtle)]"

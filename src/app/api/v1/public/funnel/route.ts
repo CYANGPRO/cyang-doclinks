@@ -31,9 +31,16 @@ const MAX_BODY_BYTES = 10 * 1024;
 const MAX_TEXT_LEN = 180;
 const MAX_PATH_LEN = 220;
 const MAX_ACTION_LEN = 64;
-const SAFE_ACTIONS = new Set(["cta_click", "procurement_request"]);
+const SAFE_ACTIONS = new Set([
+  "cta_click",
+  "procurement_request",
+  "contact_request",
+  "pricing_interest",
+  "trust_doc_open",
+  "demo_interaction",
+]);
 const SAFE_TIER = new Set(["primary", "secondary", "tertiary", "utility"]);
-const SAFE_LOCATION = new Set(["header", "hero", "section", "footer", "legal", "trust", "page"]);
+const SAFE_LOCATION = new Set(["header", "hero", "section", "footer", "legal", "trust", "page", "pricing", "contact", "procurement", "demo"]);
 
 function parseJsonBodyLength(req: NextRequest): number {
   const raw = String(req.headers.get("content-length") || "").trim();

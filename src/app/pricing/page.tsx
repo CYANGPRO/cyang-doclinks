@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { StructuredData } from "../components/StructuredData";
 import { SiteShell } from "../components/SiteShell";
 import { getPublicRuntimeConfig } from "@/lib/publicRuntimeConfig";
 import { FREE_PLAN, PRO_PLAN } from "@/lib/monetization";
@@ -167,6 +168,46 @@ export default function PricingPage() {
 
   return (
     <SiteShell maxWidth="full" publicConfig={publicConfig}>
+      <StructuredData
+        data={[
+          {
+            "@context": "https://schema.org",
+            "@type": "SoftwareApplication",
+            name: "Doclinks",
+            applicationCategory: "BusinessApplication",
+            operatingSystem: "Web",
+            url: "https://cyang.io/pricing",
+            offers: [
+              {
+                "@type": "Offer",
+                name: "Doclinks Free",
+                price: "0",
+                priceCurrency: "USD",
+                url: "https://cyang.io/pricing",
+              },
+              {
+                "@type": "Offer",
+                name: "Doclinks Pro",
+                price: "12",
+                priceCurrency: "USD",
+                url: "https://cyang.io/pricing",
+              },
+            ],
+          },
+          {
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            mainEntity: FAQS.map((item) => ({
+              "@type": "Question",
+              name: item.q,
+              acceptedAnswer: {
+                "@type": "Answer",
+                text: item.a,
+              },
+            })),
+          },
+        ]}
+      />
       <section className="relative mt-10 grid gap-6 lg:grid-cols-12 lg:items-end">
         <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
           <div className="absolute -left-16 top-0 h-72 w-72 rounded-full bg-[rgba(70,118,194,0.12)] blur-3xl" />
@@ -199,10 +240,22 @@ export default function PricingPage() {
           </div>
 
           <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-            <Link href={primaryAccessHref} className="btn-base btn-primary rounded-sm px-6 py-3 text-sm font-semibold">
+            <Link
+              href={primaryAccessHref}
+              className="btn-base btn-primary rounded-sm px-6 py-3 text-sm font-semibold"
+              data-funnel-action="pricing_interest"
+              data-funnel-location="pricing"
+              data-funnel-label={signupEnabled ? "hero_get_started_free" : "hero_sign_in"}
+            >
               {signupEnabled ? "Get started free" : "Sign in"}
             </Link>
-            <Link href="/signin?intent=admin" className="btn-base btn-secondary rounded-sm px-6 py-3 text-sm">
+            <Link
+              href="/signin?intent=admin"
+              className="btn-base btn-secondary rounded-sm px-6 py-3 text-sm"
+              data-funnel-action="pricing_interest"
+              data-funnel-location="pricing"
+              data-funnel-label="hero_upgrade_existing_workspace"
+            >
               Upgrade existing workspace
             </Link>
             <Link href="/doclinks" className="btn-base btn-secondary rounded-sm px-6 py-3 text-sm">
@@ -361,8 +414,16 @@ export default function PricingPage() {
               href={primaryAccessHref}
               title={signupEnabled ? "Start Free" : "Sign in"}
               body="Open your account and validate your workflow."
+              funnelAction="pricing_interest"
+              funnelLocation="pricing"
             />
-            <CtaTile href="/signin?intent=admin" title="Upgrade to Pro" body="Existing workspace owners can upgrade instantly." />
+            <CtaTile
+              href="/signin?intent=admin"
+              title="Upgrade to Pro"
+              body="Existing workspace owners can upgrade instantly."
+              funnelAction="pricing_interest"
+              funnelLocation="pricing"
+            />
             <CtaTile href="/doclinks" title="Learn about Doclinks" body="Review product capabilities and security model." />
             <CtaTile href="/trust" title="Review trust" body="Inspect status, legal, disclosure, and procurement surfaces." />
           </div>
@@ -443,10 +504,22 @@ function PlanCard(props: {
       </ul>
 
       <div className="mt-6 flex flex-wrap items-center gap-2">
-        <Link href={props.ctaHref} className={badgeClass}>
+        <Link
+          href={props.ctaHref}
+          className={badgeClass}
+          data-funnel-action="pricing_interest"
+          data-funnel-location="pricing"
+          data-funnel-label={`${props.tier.toLowerCase()}_${props.ctaLabel.toLowerCase().replace(/\s+/g, "_")}`}
+        >
           {props.ctaLabel}
         </Link>
-        <Link href="/signin" className="btn-base btn-secondary rounded-sm px-3.5 py-2 text-sm">
+        <Link
+          href="/signin"
+          className="btn-base btn-secondary rounded-sm px-3.5 py-2 text-sm"
+          data-funnel-action="pricing_interest"
+          data-funnel-location="pricing"
+          data-funnel-label={`${props.tier.toLowerCase()}_secondary_sign_in`}
+        >
           Sign in
         </Link>
       </div>
@@ -531,10 +604,13 @@ function FitCard(props: { title: string; points: string[]; pro?: boolean }) {
   );
 }
 
-function CtaTile(props: { href: string; title: string; body: string }) {
+function CtaTile(props: { href: string; title: string; body: string; funnelAction?: string; funnelLocation?: string }) {
   return (
     <Link
       href={props.href}
+      data-funnel-action={props.funnelAction}
+      data-funnel-location={props.funnelLocation}
+      data-funnel-label={props.funnelAction ? props.title : undefined}
       className="rounded-sm border border-[var(--border-subtle)] bg-white p-4 transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--surface-soft)]"
     >
       <div className="text-sm font-medium text-slate-950">{props.title}</div>
