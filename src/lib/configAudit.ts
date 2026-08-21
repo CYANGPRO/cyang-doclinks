@@ -1,4 +1,5 @@
 import { validateDocMasterKeysConfig } from "@/lib/encryption";
+import { readMalwareScannerConfiguration } from "@/lib/malwareScannerConfig";
 
 export type AppEnvironment = "development" | "test" | "staging" | "production";
 export type ConfigAuditSeverity = "error" | "warn";
@@ -219,19 +220,22 @@ export function auditRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Config
     requireHttps: productionLike,
     disallowLoopback: productionLike,
   });
-  if (normalizeText(env.MALWARE_SCANNER_URL)) {
-    validateUrl(findings, env, "MALWARE_SCANNER_URL", {
-      required: false,
-      requireHttps: productionLike,
-      disallowLoopback: productionLike,
-    });
-  } else if (productionLike) {
+  const scannerConfiguration = readMalwareScannerConfiguration(env);
+  if (scannerConfiguration.state !== "configured"
+    && (productionLike || normalizeText(env.MALWARE_SCANNER_URL))) {
+    const field = scannerConfiguration.reason === "client_id"
+      ? "MALWARE_SCANNER_CLIENT_ID"
+      : scannerConfiguration.reason === "hmac_secret"
+      ? "MALWARE_SCANNER_HMAC_SECRET_HEX"
+      : scannerConfiguration.reason === "timeout"
+      ? "MALWARE_SCANNER_TIMEOUT_MS"
+      : "MALWARE_SCANNER_URL";
     addFinding(
       findings,
       "error",
-      "MALWARE_SCANNER_URL",
-      "MISSING",
-      "MALWARE_SCANNER_URL is required for production-grade malware scanning."
+      field,
+      scannerConfiguration.state === "missing" ? "MISSING" : "INVALID_SCANNER_CONFIG",
+      "The OVHcloud malware scanner requires the approved /v1/scan URL, a valid client ID, a 64-character lowercase hexadecimal HMAC secret, and a 1-20 second timeout."
     );
   }
 

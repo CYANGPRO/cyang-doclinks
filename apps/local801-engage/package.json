@@ -1,0 +1,58 @@
+{
+  "name": "@cyang/local801-engage",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Private membership, CAT engagement, campaign, reporting, and document hub for MAPE Local 801.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build --webpack",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --conditions=react-server --experimental-strip-types --test tests/*.test.mjs",
+    "test:sql-integration": "node --conditions=react-server --experimental-strip-types scripts/test-sql-integration.mjs",
+    "db:migrations:verify": "node scripts/verify-migrations.mjs",
+    "security:production-readiness": "node --experimental-strip-types scripts/check-production-readiness.mjs",
+    "pii:dual-write:enable:preview": "node --conditions=react-server --experimental-strip-types scripts/enable-pii-dual-write-preview.mjs",
+    "pii:backfill:preview": "node --conditions=react-server --experimental-strip-types scripts/backfill-pii-preview-v2.mjs",
+    "pii:verify:preview": "node --conditions=react-server --experimental-strip-types scripts/verify-pii-protected-preview.mjs",
+    "pii:rotate:protected": "node --conditions=react-server --experimental-strip-types scripts/rotate-protected-pii.mjs",
+    "seed:synthetic": "node scripts/seed-synthetic.mjs"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1011.0",
+    "@aws-sdk/s3-request-presigner": "^3.1011.0",
+    "@neondatabase/serverless": "^1.0.2",
+    "bcryptjs": "^3.0.3",
+    "cyang-doclinks": "file:../..",
+    "jszip": "3.10.1",
+    "next": "16.3.0",
+    "next-auth": "4.24.15",
+    "postgres": "^3.4.8",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "server-only": "^0.0.1",
+    "workflow": "^4.8.2",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "^16.1.7",
+    "typescript": "^5"
+  },
+  "overrides": {
+    "@workflow/core@4.8.2": {
+      "nanoid": "5.1.16"
+    },
+    "@workflow/world-local@4.2.4": {
+      "undici": "7.29.0"
+    },
+    "@workflow/world-vercel@4.6.2": {
+      "undici": "7.29.0"
+    }
+  }
+}

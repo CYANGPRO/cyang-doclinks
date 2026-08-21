@@ -137,6 +137,12 @@ test.describe("health readiness aggregation", () => {
         critical: true,
         summary: "Object storage reachable.",
       }),
+      probeMalwareScannerConfig: async () => ({
+        name: "malware_scanner",
+        state: "ok",
+        critical: true,
+        summary: "Malware scanner endpoint and HMAC configuration are present.",
+      }),
       probeScanQueue: async () => ({
         name: "scan_queue",
         state: "degraded",

@@ -115,6 +115,23 @@ function buildAuditFindings(env) {
   validateUrl(findings, env, "NEXTAUTH_URL", productionLike, productionLike);
   validateUrl(findings, env, "R2_ENDPOINT", productionLike, productionLike);
   validateUrl(findings, env, "MALWARE_SCANNER_URL", productionLike, productionLike);
+  if (productionLike) {
+    if (normalize(env.MALWARE_SCANNER_URL) !== "https://scan.cyang.io/v1/scan") {
+      findings.push("MALWARE_SCANNER_URL: must use the approved OVHcloud /v1/scan endpoint");
+    }
+    if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(normalize(env.MALWARE_SCANNER_CLIENT_ID))) {
+      findings.push("MALWARE_SCANNER_CLIENT_ID: missing or invalid");
+    }
+    const scannerSecret = normalize(env.MALWARE_SCANNER_HMAC_SECRET_HEX);
+    if (!/^[0-9a-f]{64}$/.test(scannerSecret)
+      || scannerSecret === "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f") {
+      findings.push("MALWARE_SCANNER_HMAC_SECRET_HEX: must be 64 lowercase hexadecimal characters");
+    }
+    const scannerTimeout = Number(env.MALWARE_SCANNER_TIMEOUT_MS || 10_000);
+    if (!Number.isSafeInteger(scannerTimeout) || scannerTimeout < 1_000 || scannerTimeout > 20_000) {
+      findings.push("MALWARE_SCANNER_TIMEOUT_MS: must be an integer from 1000 to 20000");
+    }
+  }
 
   if (!normalize(env.DATABASE_URL)) {
     if (productionLike) findings.push("DATABASE_URL: missing");

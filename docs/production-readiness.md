@@ -84,6 +84,7 @@ It fails on:
 
 - `docs/local-verification.md`
 - `docs/environment-ownership.md`
+- `docs/malware-scanner-ovhcloud.md`
 - `docs/database-migrations.md`
 - `docs/staging-fire-drill.md`
 - `docs/backup-recovery-runbook.md`

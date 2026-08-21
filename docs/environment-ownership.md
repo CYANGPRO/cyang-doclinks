@@ -30,9 +30,10 @@ Real staging/production deployments must replace the placeholders for:
 - R2 access keys and bucket
 - document master keys
 - core secrets such as `APP_SECRET`, `NEXTAUTH_SECRET`, `CRON_SECRET`, cookie secrets, and audit/hash salts
+- the approved OVHcloud malware scanner URL, a registered DocLinks client ID, and its matching HMAC secret
 - owner/admin contact values
 
-If Stripe, malware scanning, or backup automation are enabled in a real environment, the corresponding live secrets are also required.
+If Stripe or backup automation are enabled in a real environment, the corresponding live secrets are also required.
 
 ## 3. Optional Integrations
 
@@ -41,7 +42,6 @@ These are intentionally optional and should only be set when the integration is 
 - Google / OIDC identity provider settings
 - Resend email delivery settings
 - Stripe billing inputs
-- malware scanner endpoint/auth
 - status and backup webhook destinations
 - Sentry build-time values
 

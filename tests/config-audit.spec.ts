@@ -73,7 +73,10 @@ test.describe("production config audit", () => {
         ADMIN_COOKIE_SECRET: "prod_admin_cookie_secret_1234567890abcdef",
         OIDC_SECRETS_KEY: "prod_oidc_secret_key_1234567890abcdef",
         OWNER_EMAIL: "owner@cyang.io",
-        MALWARE_SCANNER_URL: "https://scanner.cyang.io/scan",
+        MALWARE_SCANNER_URL: "https://scan.cyang.io/v1/scan",
+        MALWARE_SCANNER_CLIENT_ID: "doclinks-production",
+        MALWARE_SCANNER_HMAC_SECRET_HEX: "a".repeat(64),
+        MALWARE_SCANNER_TIMEOUT_MS: "10000",
         BACKUP_AUTOMATION_ENABLED: "1",
         BACKUP_STATUS_WEBHOOK_TOKEN: "prod_backup_webhook_token_1234567890abcdef",
       })
@@ -110,10 +113,25 @@ test.describe("production config audit", () => {
         ADMIN_COOKIE_SECRET: "prod_admin_cookie_secret_1234567890abcdef",
         OIDC_SECRETS_KEY: "prod_oidc_secret_key_1234567890abcdef",
         OWNER_EMAIL: "owner@cyang.io",
-        MALWARE_SCANNER_URL: "https://scanner.cyang.io/scan",
+        MALWARE_SCANNER_URL: "https://scan.cyang.io/v1/scan",
+        MALWARE_SCANNER_CLIENT_ID: "doclinks-production",
+        MALWARE_SCANNER_HMAC_SECRET_HEX: "a".repeat(64),
+        MALWARE_SCANNER_TIMEOUT_MS: "10000",
       })
     );
 
     expect(report.findings.some((finding) => finding.code === "LEGACY_ALIAS_ONLY" && finding.field === "R2_BUCKET_NAME")).toBeTruthy();
+  });
+
+  test("rejects the retired bearer scanner and malformed HMAC credentials", () => {
+    const report = auditRuntimeConfig(env({
+      NODE_ENV: "production",
+      NEXT_PUBLIC_APP_ENV: "production",
+      MALWARE_SCANNER_URL: "https://scanner.cyang.io/scan",
+      MALWARE_SCANNER_CLIENT_ID: "unsafe client",
+      MALWARE_SCANNER_HMAC_SECRET_HEX: "not-a-secret",
+    }));
+
+    expect(report.findings.some((finding) => finding.field === "MALWARE_SCANNER_URL")).toBeTruthy();
   });
 });

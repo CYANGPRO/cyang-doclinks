@@ -4,6 +4,7 @@ import { getR2Bucket, getR2Prefix, r2Client } from "@/lib/r2";
 import { auditRuntimeConfig, type ConfigAuditReport } from "@/lib/configAudit";
 import { getBackupRecoveryStatusSummary, type BackupRecoveryStatusSummary } from "@/lib/backupRecovery";
 import { getKeyRotationStatusSummary } from "@/lib/keyRotationJobs";
+import { malwareScannerConfigurationSummary } from "@/lib/malwareScannerConfig";
 
 export type HealthState = "ok" | "degraded" | "down" | "disabled";
 export type HealthCheck = {
@@ -48,6 +49,7 @@ export type HealthDependencySummaryDeps = {
   auditRuntimeConfig: typeof auditRuntimeConfig;
   probeDatabase: () => Promise<HealthCheck>;
   probeStorage: () => Promise<HealthCheck>;
+  probeMalwareScannerConfig: () => Promise<HealthCheck>;
   probeScanQueue: () => Promise<HealthCheck>;
   probeBackupRecovery: () => Promise<HealthCheck>;
   probeKeyRotation: () => Promise<HealthCheck>;
@@ -223,6 +225,30 @@ async function probeStorage(): Promise<HealthCheck> {
       details: failureDetails(startedAt, "storage_error"),
     };
   }
+}
+
+async function probeMalwareScannerConfig(): Promise<HealthCheck> {
+  const summary = malwareScannerConfigurationSummary();
+  if (!summary.configured) {
+    return {
+      name: "malware_scanner",
+      state: "down",
+      critical: true,
+      summary: "Malware scanner authentication or endpoint configuration is unavailable.",
+      details: { configurationState: summary.state, reason: summary.reason },
+    };
+  }
+  return {
+    name: "malware_scanner",
+    state: "ok",
+    critical: true,
+    summary: "Malware scanner endpoint and HMAC configuration are present.",
+    details: {
+      endpointHost: summary.endpointHost,
+      endpointPath: summary.endpointPath,
+      authMode: summary.authMode,
+    },
+  };
 }
 
 async function probeScanQueue(): Promise<HealthCheck> {
@@ -411,6 +437,7 @@ const defaultHealthDependencySummaryDeps: HealthDependencySummaryDeps = {
   auditRuntimeConfig,
   probeDatabase,
   probeStorage,
+  probeMalwareScannerConfig,
   probeScanQueue,
   probeBackupRecovery,
   probeKeyRotation,
@@ -453,6 +480,7 @@ async function buildDependencyChecks(
   const checks = await Promise.all([
     deps.probeDatabase(),
     deps.probeStorage(),
+    deps.probeMalwareScannerConfig(),
     deps.probeScanQueue(),
     deps.probeBackupRecovery(),
     deps.probeKeyRotation(),

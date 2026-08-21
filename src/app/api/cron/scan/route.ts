@@ -30,7 +30,7 @@ type ScanFailureUpdate = {
   deadLettered: boolean;
 };
 
-const SCANNER_VERSION = "v3-external-clam-only";
+const SCANNER_VERSION = "v4-ovh-clamav-hmac";
 
 async function countQueuedStaleJobs(staleMinutes: number): Promise<QueuedStaleSummary> {
   const staleQueued = (await sql`

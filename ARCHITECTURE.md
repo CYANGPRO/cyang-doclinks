@@ -81,3 +81,11 @@ This document defines trust boundaries, enforcement order, and lifecycle flows f
 1. Client-enforced access control
 2. Public object-store direct access as an authorization mechanism
 3. Long-lived bearer URLs as standalone authority
+
+## Local 801 Engage Application Boundary
+
+Local 801 Engage is a separate application project in `apps/local801-engage` prepared for `cat.cyang.io`. It reuses selected generic development and security patterns, but it does not reuse DocLinks production data, public document-link business logic, billing, customer organizations, authentication sessions, object-storage bucket, database, encryption keys, or deployment project.
+
+Its operational data belongs in a separate PostgreSQL database with migrations under `apps/local801-engage/db/migrations`. Source imports, generated reports, restricted CAT strategy, and Local 801 documents belong in a separate private object-storage bucket. Authentication cookies must be application scoped rather than shared across `*.cyang.io`.
+
+See `docs/local801-implementation-plan.md` and `apps/local801-engage/docs/architecture.md` for the Local 801-specific architecture.

@@ -77,3 +77,9 @@ Last updated: February 27, 2026
 2. Add regression test for the bypass/failure mode.
 3. Update this runbook and `ARCHITECTURE.md` if enforcement order changed.
 4. Track remediation completion in security checklist.
+
+## Local 801 Engage Addendum
+
+Initial Local 801 response priorities are account revocation, push-subscription disablement, storage-download disablement, export freeze, audit review, credential rotation, and owner notification.
+
+Do not send sensitive member data to telemetry or incident notes. Use event identifiers, hashes, and scoped summaries.
