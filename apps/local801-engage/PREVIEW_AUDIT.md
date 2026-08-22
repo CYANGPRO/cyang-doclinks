@@ -1,5 +1,7 @@
 # Local 801 Engage Preview Audit
 
+> Historical snapshot: this preview-era audit is retained for provenance and is not the current security or production-readiness record. Use `docs/security/README.md`, `docs/security/CIS_V8_1_IG2_CONTROL_MATRIX.md`, and `PRODUCTION_READINESS.md` for the current control posture and launch decision.
+
 ## Framework And Package Versions
 
 - Next.js: `16.3.0`

@@ -8,6 +8,8 @@ import { authOptions } from "@/lib/auth-options";
 import { previewAuthEnabled } from "@/lib/preview-auth-policy";
 import { getProductionAuthConfig, resolveProductionSessionBinding } from "@/lib/production-auth";
 import { productionAuthRuntimeEnabled } from "@/lib/production-launch-policy";
+import { enforceAuthenticatedIdentityRateLimit, type RateLimitPolicy } from "@/lib/rate-limit";
+import { writeSecuritySignal } from "@/lib/security-signal";
 
 export { previewAuthEnabled } from "@/lib/preview-auth-policy";
 
@@ -94,13 +96,48 @@ export async function getPreviewUser(): Promise<PreviewUser | null> {
   }
 }
 
-export async function requirePreviewUser(permission?: Permission) {
+const permissionRatePolicy: Partial<Record<Permission, RateLimitPolicy>> = {
+  manageUsers: "administrative_mutation",
+  manageImports: "import",
+  approveImports: "import",
+  manageCampaigns: "administrative_mutation",
+  manageCatActions: "administrative_mutation",
+  manageDocuments: "upload",
+  viewDocuments: "download_export",
+  generateReports: "download_export",
+  viewReports: "download_export",
+  viewDirectory: "search",
+  recordEngagement: "administrative_mutation",
+  exportRoster: "download_export",
+};
+
+export async function requirePreviewUser(permission?: Permission, options: { skipRateLimit?: boolean } = {}) {
   const user = await getPreviewUser();
   if (!user) {
+    if (process.env.NODE_ENV === "production") {
+      writeSecuritySignal("warn", "authorization.denied", {
+        outcome: "denied", reason: "unauthenticated", permission: permission ?? null,
+      });
+    }
     return { ok: false as const, response: NextResponse.json({ error: "UNAUTHENTICATED" }, { status: 401 }) };
   }
   if (permission && !can(user.role, permission)) {
+    if (process.env.NODE_ENV === "production") {
+      writeSecuritySignal("warn", "authorization.denied", {
+        outcome: "denied", reason: "insufficient_permission", actorId: user.id,
+        organizationId: user.organizationId, permission,
+      });
+    }
     return { ok: false as const, response: NextResponse.json({ error: "FORBIDDEN" }, { status: 403 }) };
+  }
+  const policy = permission ? permissionRatePolicy[permission] : undefined;
+  if (policy && !options.skipRateLimit) {
+    const limit = await enforceAuthenticatedIdentityRateLimit({
+      organizationSlug: user.organizationId,
+      userId: user.id,
+      policy,
+    });
+    if (!limit.ok) return { ok: false as const, response: limit.response };
   }
   return { ok: true as const, user };
 }

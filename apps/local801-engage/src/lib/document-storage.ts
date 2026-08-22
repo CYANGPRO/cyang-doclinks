@@ -6,6 +6,7 @@ import { getAppConfig } from "./config.ts";
 import { queryLocal801 } from "./db.ts";
 import { decryptEnvelope, encryptEnvelope } from "./encryption.ts";
 import { deleteObject, generateStorageKey, getObject, putObject, type StorageKind } from "./r2.ts";
+import { writeSecuritySignal } from "./security-signal.ts";
 
 const DOCUMENT_MEDIA_TYPES = new Set([
   "application/pdf",
@@ -204,10 +205,14 @@ async function decryptStoredObject(row: StoredObjectRow) {
   const encryptedObject = await getObject(row.storage_key);
   const decrypted = decryptEnvelope(encryptedObject.body);
   if (decrypted.keyVersion !== row.encryption_key_version) {
+    writeSecuritySignal("error", "integrity.failure", { component: "object_storage", reason: "key_version_mismatch" });
     throw new Error("Encrypted object key version does not match database metadata.");
   }
   const actualHash = sha256Hex(decrypted.plaintext);
-  if (!hashesMatch(actualHash, row.sha256)) throw new Error("Document integrity check failed.");
+  if (!hashesMatch(actualHash, row.sha256)) {
+    writeSecuritySignal("error", "integrity.failure", { component: "object_storage", reason: "plaintext_hash_mismatch" });
+    throw new Error("Document integrity check failed.");
+  }
   return decrypted.plaintext;
 }
 

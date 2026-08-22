@@ -1,0 +1,35 @@
+name: local801-codeql
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - apps/local801-engage/**
+      - .github/workflows/local801-codeql.yml
+      - apps/local801-engage/codeql-config.yml
+  pull_request:
+    paths:
+      - apps/local801-engage/**
+      - .github/workflows/local801-codeql.yml
+      - apps/local801-engage/codeql-config.yml
+  schedule:
+    - cron: "31 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze-local801:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          config-file: ./apps/local801-engage/codeql-config.yml
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:javascript-typescript/local801

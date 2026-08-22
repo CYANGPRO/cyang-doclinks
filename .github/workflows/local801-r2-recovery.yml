@@ -1,0 +1,49 @@
+name: local801-r2-recovery
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Inventory, dry-run, or explicitly confirmed ciphertext copy
+        required: true
+        default: inventory
+        type: choice
+        options: [inventory, dry-run, copy]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: local801-r2-recovery
+  cancel-in-progress: false
+
+jobs:
+  recover-encrypted-cat-objects:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: apps/local801-engage
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+          cache: npm
+          cache-dependency-path: apps/local801-engage/package-lock.json
+      - run: npm ci
+      - name: Inventory or copy CAT ciphertext
+        env:
+          LOCAL801_R2_RECOVERY_SOURCE_ACCOUNT_ID: ${{ secrets.LOCAL801_R2_RECOVERY_SOURCE_ACCOUNT_ID }}
+          LOCAL801_R2_RECOVERY_SOURCE_ENDPOINT: ${{ secrets.LOCAL801_R2_RECOVERY_SOURCE_ENDPOINT }}
+          LOCAL801_R2_RECOVERY_SOURCE_BUCKET: ${{ secrets.LOCAL801_R2_RECOVERY_SOURCE_BUCKET }}
+          LOCAL801_R2_RECOVERY_SOURCE_ACCESS_KEY_ID: ${{ secrets.LOCAL801_R2_RECOVERY_SOURCE_ACCESS_KEY_ID }}
+          LOCAL801_R2_RECOVERY_SOURCE_SECRET_ACCESS_KEY: ${{ secrets.LOCAL801_R2_RECOVERY_SOURCE_SECRET_ACCESS_KEY }}
+          LOCAL801_R2_RECOVERY_DESTINATION_ACCOUNT_ID: ${{ secrets.LOCAL801_R2_RECOVERY_DESTINATION_ACCOUNT_ID }}
+          LOCAL801_R2_RECOVERY_DESTINATION_ENDPOINT: ${{ secrets.LOCAL801_R2_RECOVERY_DESTINATION_ENDPOINT }}
+          LOCAL801_R2_RECOVERY_DESTINATION_BUCKET: ${{ secrets.LOCAL801_R2_RECOVERY_DESTINATION_BUCKET }}
+          LOCAL801_R2_RECOVERY_DESTINATION_ACCESS_KEY_ID: ${{ secrets.LOCAL801_R2_RECOVERY_DESTINATION_ACCESS_KEY_ID }}
+          LOCAL801_R2_RECOVERY_DESTINATION_SECRET_ACCESS_KEY: ${{ secrets.LOCAL801_R2_RECOVERY_DESTINATION_SECRET_ACCESS_KEY }}
+          LOCAL801_R2_RECOVERY_COPY: ${{ vars.LOCAL801_R2_RECOVERY_COPY }}
+          LOCAL801_R2_RECOVERY_CONFIRMATION: ${{ vars.LOCAL801_R2_RECOVERY_CONFIRMATION }}
+        run: npm run recovery:r2 -- --mode=${{ inputs.mode }}

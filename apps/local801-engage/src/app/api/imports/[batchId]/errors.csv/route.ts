@@ -3,6 +3,7 @@ import { requirePreviewUser } from "@/lib/authz.server";
 import { getImportBatch, getImportErrors } from "@/lib/import-persistence";
 import { neutralizeSpreadsheetFormula } from "@/lib/imports";
 import { writeAuditEvent } from "@/lib/audit";
+import { writeSecuritySignal } from "@/lib/security-signal";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
 
 export const dynamic = "force-dynamic";
@@ -33,6 +34,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ bat
       subjectType: "import_batch",
       subjectId: batchId,
       payload: { errorCount: errors.length },
+    });
+    writeSecuritySignal("warn", "protected_access", {
+      outcome: "success", operation: "import_errors.export", actorId: context.userId,
+      organizationId: context.organizationId, subjectId: batchId,
     });
     return new NextResponse(csv, {
       headers: {

@@ -10,7 +10,7 @@ export async function GET() {
     return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   }
 
-  const auth = await requirePreviewUser("manageUsers");
+  const auth = await requirePreviewUser("manageUsers", { skipRateLimit: true });
   if (!auth.ok) return auth.response;
 
   const isolation = assertLocal801Isolation();

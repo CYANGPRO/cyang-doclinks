@@ -1,10 +1,13 @@
 const LOCAL801_CACHE_PREFIX = "local801-";
-const CACHE_NAME = `${LOCAL801_CACHE_PREFIX}static-v3`;
+const CACHE_NAME = `${LOCAL801_CACHE_PREFIX}static-v4`;
 const STATIC_ASSETS = [
   "/offline.html",
   "/icons/local801-icon.svg",
   "/icons/local801-maskable.svg",
-  "/icons/apple-touch-icon.svg",
+  "/icons/local801-192.png",
+  "/icons/local801-512.png",
+  "/icons/local801-maskable-512.png",
+  "/icons/apple-touch-icon.png",
 ];
 
 self.addEventListener("install", (event) => {
@@ -55,8 +58,8 @@ self.addEventListener("push", (event) => {
   const title = "Local 801 Engage";
   const options = {
     body: "You have a Local 801 Engage update.",
-    icon: "/icons/local801-icon.svg",
-    badge: "/icons/local801-maskable.svg",
+    icon: "/icons/local801-192.png",
+    badge: "/icons/local801-maskable-512.png",
     data: { url: "/" },
   };
   event.waitUntil(self.registration.showNotification(title, options));

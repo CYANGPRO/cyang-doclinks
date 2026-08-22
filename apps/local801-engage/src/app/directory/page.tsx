@@ -7,6 +7,7 @@ import { getPreviewUser } from "@/lib/authz.server";
 import { DEFAULT_DIRECTORY_PAGE_SIZE, getDirectoryPage, type DirectoryPage as Results } from "@/lib/directory";
 import { isPiiProtectedReadEnabled } from "@/lib/pii-protected-read";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
+import { enforceAuthenticatedRateLimit } from "@/lib/rate-limit";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 function emptyResults(): Results { return { people: [], term: "", pageSize: DEFAULT_DIRECTORY_PAGE_SIZE, total: 0, previousCursor: null, nextCursor: null, requestedScope: "assigned", effectiveScope: "assigned", filters: { membershipStatus: "", department: "", classification: "", workLocation: "" } }; }
@@ -32,6 +33,8 @@ export default async function DirectoryPage({ searchParams }: { searchParams: Se
   let results = emptyResults(); let unavailable = false; let protectedReadEnabled = false;
   try {
     const context = await resolveWorkspaceContext(user);
+    const limit = await enforceAuthenticatedRateLimit({ organizationId: context.organizationId, userId: context.userId, policy: "search" });
+    if (!limit.ok) throw new Error("Directory rate limit denied.");
     results = await getDirectoryPage(context, { term: parameters.q, scope: parameters.scope, pageSize: parameters.limit, cursor: parameters.cursor, membershipStatus: parameters.membershipStatus, department: parameters.department, classification: parameters.classification, workLocation: parameters.workLocation });
     protectedReadEnabled = isPiiProtectedReadEnabled();
   } catch (error) {

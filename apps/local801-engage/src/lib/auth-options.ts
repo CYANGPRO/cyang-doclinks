@@ -10,6 +10,8 @@ import {
 } from "./production-auth.ts";
 import { productionAuthRuntimeEnabled } from "./production-launch-policy.ts";
 
+const secureCookie = process.env.NODE_ENV === "production";
+
 function oidcProvider(): OAuthConfig<Record<string, unknown>> | null {
   const config = getProductionAuthConfig();
   if (!config.enabled || !productionAuthRuntimeEnabled()) return null;
@@ -48,6 +50,17 @@ export const authOptions: NextAuthOptions = {
   session: {
     strategy: "jwt",
     maxAge: Number(process.env.LOCAL801_ADMIN_SESSION_SECONDS ?? 43_200),
+  },
+  cookies: {
+    sessionToken: {
+      name: secureCookie ? "__Secure-local801.session-token" : "local801.session-token",
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: secureCookie,
+      },
+    },
   },
   pages: {
     signIn: "/sign-in",

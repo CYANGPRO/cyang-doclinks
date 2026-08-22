@@ -22,11 +22,11 @@ Local 801 Engage is private, invitation-only, MFA-required, and independently de
 - the service worker caches only fixed static/offline assets, not authenticated application responses;
 - synthetic seed production guards, explicit opt-in, transactional writes, stable identifiers, and fictional `example.test` identities.
 
-## Database PII limitation — Stage 14B blocker
+## Database PII protection
 
-Object/R2 encryption does **not** encrypt ordinary PostgreSQL columns. Migration `0001` still contains potentially sensitive plaintext fields such as names, person identifiers, contact values, import `normalized_json`, correction values, selected report parameters, and notification/subscription JSON. Engagement narrative notes have a separate encrypted path, but that does not solve the broader member-data threat model.
+Object/R2 encryption does **not** encrypt ordinary PostgreSQL columns. Migrations `0012` through `0018` and the protected PII server modules add encrypted companion records, blind indexes, guarded dual-write/protected-read modes, protected import staging and commit constraints, rotation tracking, and member contact/employment coverage. Production remains fail-closed unless the protected schema has been applied and synthetic acceptance has passed.
 
-Before real member data, Stage 14B must implement a separate database-PII protection design. It must identify protected fields, searchable/unique blind indexes, a key hierarchy separate from object-storage encryption, key rotation, additive migration/backfill, authorization and audit behavior, and the consequences for directory search, outreach queues, imports, reports, and exports. The application must prove synthetic read/write/search/report acceptance against the protected schema before `LOCAL801_DATABASE_PII_PROTECTION_ENABLED` can be set to `1`.
+Before real member data, operators must apply the reviewed migrations to the isolated CAT database, run the synthetic read/write/search/import/report acceptance suite against that database, verify key custody and rotation procedures, and confirm the organization is in protected read/write mode. Only then may `LOCAL801_DATABASE_PII_PROTECTION_ENABLED` be set to `1`.
 
 ## Production launch interlock
 
@@ -39,7 +39,7 @@ Before real member data, Stage 14B must implement a separate database-PII protec
 - a valid private Local 801 database and R2 configuration isolated from any DocLinks variables;
 - object-encryption configuration;
 - the shared malware scanner enabled with the expected `scan.cyang.io` HMAC client configuration;
-- `LOCAL801_DATABASE_PII_PROTECTION_ENABLED=1` only after Stage 14B acceptance;
+- `LOCAL801_DATABASE_PII_PROTECTION_ENABLED=1` only after protected-schema acceptance;
 - `LOCAL801_BACKUP_RESTORE_VERIFIED=1` only after a real restore exercise;
 - `LOCAL801_SECURITY_REVIEW_APPROVED=1` and a non-secret production review/change reference;
 - Preview-only durable import and authoritative execution switches disabled;
@@ -55,7 +55,7 @@ Document deletion first archives and marks the database record as cleanup-pendin
 
 ## Remaining blockers for real data
 
-- Complete Stage 14B database field-level protection and synthetic migration/search/report acceptance.
+- Apply and pass synthetic acceptance for the implemented protected-PII migrations, read/write paths, search, import, and reporting behavior.
 - Complete a formal authorization/tenant-isolation review for every page, Route Handler, mutation, export, and background task.
 - Complete rate-limit coverage for high-risk search, import, export, download, and mutation paths.
 - Complete audit coverage for private storage operations and operational orphan/cleanup procedures.

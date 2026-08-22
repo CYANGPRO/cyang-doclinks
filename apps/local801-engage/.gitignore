@@ -15,6 +15,15 @@ build/
 *.key
 *.p12
 *.pfx
+*.p8
+*.jks
+*.keystore
+*.mobileprovision
+*.provisionprofile
+keystore.properties
+key.properties
+google-services.json
+GoogleService-Info.plist
 
 # sensitive local data
 local-sensitive-samples/

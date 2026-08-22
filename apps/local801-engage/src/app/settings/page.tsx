@@ -17,11 +17,13 @@ const blockerLabels: Record<ProductionLaunchBlocker, string> = {
   SCANNER_DISABLED: "The malware scanner is not enabled.",
   SCANNER_CONFIG_INVALID: "The malware scanner configuration is incomplete or invalid.",
   DATABASE_CONFIG_INVALID: "The production database configuration is missing, invalid, or not isolated.",
+  DATABASE_TLS_NOT_REQUIRED: "The production database connection does not explicitly require TLS.",
   STORAGE_CONFIG_INVALID: "The private production object-storage configuration is missing, invalid, or not isolated.",
   ENCRYPTION_CONFIG_INVALID: "The production object-encryption keyring is not configured.",
   PII_KEY_CONFIG_INVALID: "The separate PII encryption and blind-index keyrings are missing, invalid, or reuse key material.",
   PII_PROTECTION_NOT_VERIFIED: "Database PII protection has not passed its production acceptance gate.",
   BACKUP_RESTORE_NOT_VERIFIED: "A production backup restore test has not been recorded as verified.",
+  DISTRIBUTED_RATE_LIMITS_DISABLED: "The production PostgreSQL distributed rate limiter has not been enabled and accepted.",
   SECURITY_REVIEW_NOT_APPROVED: "The final production security review has not been approved.",
   SECURITY_REVIEW_ID_MISSING: "A production security-review/change reference has not been recorded.",
   PREVIEW_ONLY_IMPORT_EXECUTION_ENABLED: "The Preview-only authoritative import execution gate must be off.",
@@ -33,7 +35,7 @@ export default function SettingsPage() {
   const launch = getProductionLaunchState();
   return <ProtectedPage permission="manageUsers"><div className="content">
     <PageHeader eyebrow="Administration" title="Settings" description="Review environment and security posture without exposing secrets or presenting inactive controls as functional." />
-    <AlertBanner title="Real-data launch remains locked" tone="preview">Synthetic Preview can continue normally. Production authentication and real member data remain fail-closed until every Stage 14 production gate is satisfied.</AlertBanner>
+    <AlertBanner title="Real-data launch remains locked" tone="preview">Synthetic Preview can continue normally. Production authentication and real member data remain fail-closed until every production security gate is satisfied.</AlertBanner>
     <SectionCard title="Security defaults" badge={<StatusBadge tone="ready">Fail closed</StatusBadge>}>
       <p className="page-copy">Dedicated database configuration, encrypted private storage, organization scoping, same-origin mutation checks, server authorization, MFA-backed production identity, and malware scanning remain enforced by server-side boundaries. Configuration values are never rendered.</p>
     </SectionCard>

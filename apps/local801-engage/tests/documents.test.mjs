@@ -190,6 +190,9 @@ test("download route is preview-only, authenticated, handle-resolved, decrypted 
   assert.match(source, /resolveWorkspaceContext\(auth\.user\)/);
   assert.match(source, /resolveDocumentDownloadId\(context, handle\)/);
   assert.match(source, /downloadDocument\(/);
+  assert.match(source, /writeAuditEvent\(/);
+  assert.match(source, /eventType: "record\.access"/);
+  assert.match(source, /outcome: "success"/);
   assert.match(source, /Cache-Control.*private, no-store/);
   assert.match(source, /Content-Disposition/);
   assert.match(source, /X-Content-Type-Options.*nosniff/);

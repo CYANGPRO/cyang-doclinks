@@ -20,6 +20,7 @@ export type AuditEventType =
   | "import.review_decision_cleared"
   | "import.execute"
   | "record.create"
+  | "record.access"
   | "record.update"
   | "role.change"
   | "report.run"

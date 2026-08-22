@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AppShell } from "@/components/AppShell";
+import { NativeRuntime } from "@/components/NativeRuntime";
 
 export const metadata: Metadata = {
   title: "Local 801 Engage",
@@ -13,8 +14,11 @@ export const metadata: Metadata = {
     statusBarStyle: "default",
   },
   icons: {
-    icon: "/icons/local801-icon.svg",
-    apple: "/icons/apple-touch-icon.svg",
+    icon: [
+      { url: "/icons/local801-icon.svg", type: "image/svg+xml" },
+      { url: "/icons/local801-192.png", type: "image/png", sizes: "192x192" },
+    ],
+    apple: [{ url: "/icons/apple-touch-icon.png", type: "image/png", sizes: "180x180" }],
   },
   robots: {
     index: false,
@@ -34,6 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
+        <NativeRuntime />
         <AppShell>{children}</AppShell>
       </body>
     </html>

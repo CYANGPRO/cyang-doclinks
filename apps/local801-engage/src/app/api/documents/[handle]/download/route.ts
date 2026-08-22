@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
+import { writeAuditEvent } from "@/lib/audit";
 import { requirePreviewUser } from "@/lib/authz.server";
 import { downloadDocument } from "@/lib/document-storage";
 import { resolveDocumentDownloadId } from "@/lib/documents";
+import { writeSecuritySignal } from "@/lib/security-signal";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
 
 const safeDocumentMediaTypes = new Set([
@@ -70,6 +72,20 @@ export async function GET(
     const mediaType = downloaded.mediaType && safeDocumentMediaTypes.has(downloaded.mediaType)
       ? downloaded.mediaType
       : "application/octet-stream";
+
+    // Fail closed: protected bytes are not released if the access event cannot be durably recorded.
+    await writeAuditEvent({
+      eventType: "record.access",
+      actorId: context.userId,
+      organizationId: context.organizationId,
+      subjectType: "document",
+      subjectId: documentId,
+      payload: { operation: "download", outcome: "success", byteSize: downloaded.plaintext.byteLength, mediaType },
+    });
+    writeSecuritySignal("warn", "protected_access", {
+      outcome: "success", operation: "document.download", actorId: context.userId,
+      organizationId: context.organizationId, subjectId: documentId,
+    });
 
     return new Response(Uint8Array.from(downloaded.plaintext), {
       status: 200,

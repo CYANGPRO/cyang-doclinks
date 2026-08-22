@@ -56,6 +56,7 @@ const staticHeaders = [
 const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
+  productionBrowserSourceMaps: false,
   turbopack: {
     root: appRoot,
   },

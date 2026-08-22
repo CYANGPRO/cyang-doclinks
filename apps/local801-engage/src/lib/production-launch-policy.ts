@@ -19,11 +19,13 @@ export type ProductionLaunchBlocker =
   | "SCANNER_DISABLED"
   | "SCANNER_CONFIG_INVALID"
   | "DATABASE_CONFIG_INVALID"
+  | "DATABASE_TLS_NOT_REQUIRED"
   | "STORAGE_CONFIG_INVALID"
   | "ENCRYPTION_CONFIG_INVALID"
   | "PII_KEY_CONFIG_INVALID"
   | "PII_PROTECTION_NOT_VERIFIED"
   | "BACKUP_RESTORE_NOT_VERIFIED"
+  | "DISTRIBUTED_RATE_LIMITS_DISABLED"
   | "SECURITY_REVIEW_NOT_APPROVED"
   | "SECURITY_REVIEW_ID_MISSING"
   | "PREVIEW_ONLY_IMPORT_EXECUTION_ENABLED"
@@ -64,6 +66,17 @@ function databaseTarget(value: string | undefined) {
     return `${parsed.protocol}//${parsed.hostname.toLowerCase()}:${parsed.port}/${parsed.pathname.replace(/^\//, "")}`;
   } catch {
     return null;
+  }
+}
+
+function databaseRequiresTls(value: string | undefined) {
+  if (!value) return false;
+  try {
+    const parsed = new URL(value);
+    const sslMode = parsed.searchParams.get("sslmode")?.toLowerCase();
+    return sslMode === "require" || sslMode === "verify-ca" || sslMode === "verify-full";
+  } catch {
+    return false;
   }
 }
 
@@ -201,12 +214,14 @@ export function getProductionLaunchState(env: NodeJS.ProcessEnv = process.env): 
   const localDatabase = databaseTarget(env.LOCAL801_DATABASE_URL);
   const legacyDatabase = databaseTarget(env.DATABASE_URL);
   if (!localDatabase || (legacyDatabase && localDatabase === legacyDatabase)) blockers.push("DATABASE_CONFIG_INVALID");
+  if (!databaseRequiresTls(env.LOCAL801_DATABASE_URL)) blockers.push("DATABASE_TLS_NOT_REQUIRED");
   if (!storageIsPrivateAndScoped(env)) blockers.push("STORAGE_CONFIG_INVALID");
   if (!encryptionConfigPresent(env)) blockers.push("ENCRYPTION_CONFIG_INVALID");
   if (!piiKeyConfigLooksValid(env)) blockers.push("PII_KEY_CONFIG_INVALID");
 
   if (env.LOCAL801_DATABASE_PII_PROTECTION_ENABLED !== "1") blockers.push("PII_PROTECTION_NOT_VERIFIED");
   if (env.LOCAL801_BACKUP_RESTORE_VERIFIED !== "1") blockers.push("BACKUP_RESTORE_NOT_VERIFIED");
+  if (env.LOCAL801_DISTRIBUTED_RATE_LIMIT_ENABLED !== "1") blockers.push("DISTRIBUTED_RATE_LIMITS_DISABLED");
   if (env.LOCAL801_SECURITY_REVIEW_APPROVED !== "1") blockers.push("SECURITY_REVIEW_NOT_APPROVED");
   if (!reviewIdPattern.test(env.LOCAL801_PRODUCTION_SECURITY_REVIEW_ID?.trim() ?? "")) blockers.push("SECURITY_REVIEW_ID_MISSING");
 
@@ -235,6 +250,7 @@ export function productionAuthRuntimeEnabled(env: NodeJS.ProcessEnv = process.en
 export const __testing = {
   canonical32ByteKey,
   databaseTarget,
+  databaseRequiresTls,
   encryptionConfigPresent,
   nextAuthSecretLooksStrong,
   oidcConfigLooksValid,

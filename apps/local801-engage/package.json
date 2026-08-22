@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.16.0 <23"
+  },
   "description": "Private membership, CAT engagement, campaign, reporting, and document hub for MAPE Local 801.",
   "scripts": {
     "dev": "next dev",
@@ -12,20 +15,42 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --conditions=react-server --experimental-strip-types --test tests/*.test.mjs",
     "test:sql-integration": "node --conditions=react-server --experimental-strip-types scripts/test-sql-integration.mjs",
+    "test:rate-limit-sql": "node scripts/test-rate-limit-sql.mjs",
+    "db:migrations": "npm run db:migrations:verify",
     "db:migrations:verify": "node scripts/verify-migrations.mjs",
+    "security": "npm run security:audit && npm run security:production-readiness",
     "security:production-readiness": "node --experimental-strip-types scripts/check-production-readiness.mjs",
+    "security:initialize-production": "node --conditions=react-server --experimental-strip-types scripts/initialize-production.mjs",
+    "recovery:r2": "node scripts/recover-r2-objects.mjs",
+    "security:retention-inventory": "node --conditions=react-server --experimental-strip-types scripts/retention-inventory.mjs",
+    "security:audit": "npm audit --omit=dev --audit-level=high",
+    "security:sbom": "npm sbom --omit=dev --sbom-format=cyclonedx",
     "pii:dual-write:enable:preview": "node --conditions=react-server --experimental-strip-types scripts/enable-pii-dual-write-preview.mjs",
     "pii:backfill:preview": "node --conditions=react-server --experimental-strip-types scripts/backfill-pii-preview-v2.mjs",
     "pii:verify:preview": "node --conditions=react-server --experimental-strip-types scripts/verify-pii-protected-preview.mjs",
     "pii:rotate:protected": "node --conditions=react-server --experimental-strip-types scripts/rotate-protected-pii.mjs",
-    "seed:synthetic": "node scripts/seed-synthetic.mjs"
+    "seed:synthetic": "node scripts/seed-synthetic.mjs",
+    "mobile:assets": "node scripts/generate-mobile-assets.mjs",
+    "mobile:sync": "npm run mobile:assets && cap sync",
+    "mobile:add:android": "npm run mobile:assets && cap add android",
+    "mobile:add:ios": "npm run mobile:assets && cap add ios --packagemanager SPM",
+    "mobile:open:android": "cap open android",
+    "mobile:open:ios": "cap open ios",
+    "mobile:build:android": "node scripts/check-mobile-release.mjs && cap build android --androidreleasetype AAB",
+    "mobile:build:ios": "node scripts/check-mobile-release.mjs && cap build ios --scheme App",
+    "mobile:release:gate": "node scripts/check-mobile-release.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1011.0",
     "@aws-sdk/s3-request-presigner": "^3.1011.0",
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/core": "^8.5.0",
+    "@capacitor/ios": "^8.5.0",
+    "@capacitor/splash-screen": "^8.0.2",
+    "@capacitor/status-bar": "^8.0.3",
     "@neondatabase/serverless": "^1.0.2",
     "bcryptjs": "^3.0.3",
-    "cyang-doclinks": "file:../..",
     "jszip": "3.10.1",
     "next": "16.3.0",
     "next-auth": "4.24.15",
@@ -37,6 +62,8 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.0",
+    "@napi-rs/canvas": "^0.1.95",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
@@ -45,6 +72,9 @@
     "typescript": "^5"
   },
   "overrides": {
+    "xcode": {
+      "uuid": "^11.1.1"
+    },
     "@workflow/core@4.8.2": {
       "nanoid": "5.1.16"
     },

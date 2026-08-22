@@ -7,6 +7,7 @@ import { DocumentUploadError, uploadDocument } from "@/lib/document-upload";
 import { getImportMalwareScanner as getSharedMalwareScanner } from "@/lib/import-scanner";
 import { hasExactSameOrigin } from "@/lib/request-security";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
+import { writeSecuritySignal } from "@/lib/security-signal";
 
 const multipartOverheadAllowanceBytes = 1_048_576;
 
@@ -32,6 +33,7 @@ export async function POST(request: Request) {
   }
 
   try {
+    const context = await resolveWorkspaceContext(auth.user);
     const maxBytes = getAppConfig().LOCAL801_IMPORT_MAX_BYTES;
     const contentLength = request.headers.get("content-length");
     if (contentLength !== null) {
@@ -48,7 +50,6 @@ export async function POST(request: Request) {
       return jsonNoStore({ error: "INVALID_UPLOAD", message: "Select a document to upload." }, 400);
     }
 
-    const context = await resolveWorkspaceContext(auth.user);
     const result = await uploadDocument({
       actor: { organizationId: context.organizationId, userId: context.userId, role: context.role },
       file,
@@ -66,6 +67,11 @@ export async function POST(request: Request) {
     return jsonNoStore({ documentUpload: "ok", ...result }, 201);
   } catch (error) {
     if (error instanceof DocumentUploadError) {
+      if (error.code === "MALWARE_REJECTED" || error.code === "SCANNER_TEMPORARY_FAILURE" || error.code === "SCANNER_UNAVAILABLE") {
+        writeSecuritySignal(error.code === "MALWARE_REJECTED" ? "warn" : "error", "scanner.failure", {
+          component: "document_upload", safeCode: error.code, outcome: "fail_closed",
+        });
+      }
       return jsonNoStore({ error: error.code, message: error.message, retryable: error.retryable }, error.status);
     }
     return jsonNoStore({ error: "UPLOAD_UNAVAILABLE", message: "The document could not be securely stored. No document was shared." }, 503);

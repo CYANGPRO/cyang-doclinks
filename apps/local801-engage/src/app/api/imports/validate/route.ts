@@ -44,12 +44,12 @@ export async function POST(request: Request) {
   if (!auth.ok) return auth.response;
 
   try {
+    const context = await resolveWorkspaceContext(auth.user);
     const form = await request.formData();
     const file = form.get("file");
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "MISSING_FILE", message: "Select an .xlsx or .csv file to import." }, { status: 400 });
     }
-    const context = await resolveWorkspaceContext(auth.user);
     if (form.get("processingMode") === "durable_preview") {
       const accepted = await acceptDurablePreviewCsv({
         actor: { organizationId: context.organizationId, role: context.role, userId: context.userId },

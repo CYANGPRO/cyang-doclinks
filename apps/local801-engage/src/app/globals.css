@@ -42,6 +42,20 @@
 * { box-sizing: border-box; }
 html { min-height: 100%; background: var(--background); color: var(--text); font-family: "Segoe UI", SegoeUI, system-ui, -apple-system, BlinkMacSystemFont, sans-serif; }
 body { min-height: 100%; margin: 0; background: var(--background); }
+html[data-native-app-state="background"] body::after {
+  align-items: center;
+  background: var(--brand-blue);
+  color: #fff;
+  content: "Local 801 Engage";
+  display: flex;
+  font-size: 1.15rem;
+  font-weight: 750;
+  inset: 0;
+  justify-content: center;
+  letter-spacing: .02em;
+  position: fixed;
+  z-index: 2147483647;
+}
 a { color: var(--brand-blue); text-decoration-thickness: 1px; text-underline-offset: 3px; }
 a:hover { color: var(--brand-blue-hover); }
 button, input, select, textarea { font: inherit; }

@@ -33,6 +33,8 @@ import {
   type NewHireTrendPoint,
 } from "@/lib/reports";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
+import { enforceAuthenticatedRateLimit } from "@/lib/rate-limit";
+import { recordReportAccess } from "@/lib/report-access";
 
 type ReportView = "overview" | "membership" | "new-hires" | "engagement" | "campaigns" | "cat-actions" | "data-quality";
 
@@ -294,6 +296,8 @@ export default async function ReportsPage({
 
   try {
     const context = await resolveWorkspaceContext(user);
+    const limit = await enforceAuthenticatedRateLimit({ organizationId: context.organizationId, userId: context.userId, policy: "download_export" });
+    if (!limit.ok) throw new Error("Report rate limit denied.");
     if (view === "overview") {
       const report = await getEngagementCommandCenterReport(context, params);
       commandCenterReport = await hydrateCommandCenterReportFromProtectedPii(context.organizationId, report);
@@ -304,6 +308,7 @@ export default async function ReportsPage({
     } else if (view === "campaigns") campaignReport = await getCampaignReport(context);
     else if (view === "cat-actions") catActionReport = await getCatActionReport(context);
     else membershipReport = await getMembershipReport(context);
+    await recordReportAccess(context, view);
     protectedReadEnabled = isPiiProtectedReadEnabled();
   } catch {
     // Fail closed. Never substitute synthetic report values when the reporting query is unavailable.
