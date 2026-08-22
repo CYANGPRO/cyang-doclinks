@@ -56,6 +56,8 @@ test("R2 recovery implementation uses separate credentials, explicit retries, ch
   assert.match(source, /retryMode: "standard"/);
   assert.match(source, /local801-recovery-sha256/);
   assert.match(source, /checksumSha256/);
+  assert.match(source, /if \(listed\.IsTruncated\)/);
+  assert.match(source, /inventory exceeds the configured bounded batch/);
   assert.match(source, /finally\s*\{\s*ciphertext\.fill\(0\)/);
   assert.doesNotMatch(source, /DeleteObjectCommand|--delete/);
 });

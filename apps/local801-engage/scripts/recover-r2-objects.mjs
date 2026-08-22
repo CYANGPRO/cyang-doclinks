@@ -63,6 +63,9 @@ try {
   const listed = await source.send(new ListObjectsV2Command({
     Bucket: config.sourceBucket, Prefix: config.prefix, MaxKeys: config.batchSize,
   }));
+  if (listed.IsTruncated) {
+    throw new Error("R2 recovery inventory exceeds the configured bounded batch; increase the explicit batch size before recovery.");
+  }
   const objects = (listed.Contents ?? []).map((entry) => assertOpaqueRecoveryObject(entry, config.maximumBytes));
   const results = [];
   for (const entry of objects) {
@@ -75,7 +78,7 @@ try {
     }
     results.push(record);
   }
-  console.log(JSON.stringify({ mode, objectCount: results.length, truncated: Boolean(listed.IsTruncated), objects: results }));
+  console.log(JSON.stringify({ mode, objectCount: results.length, truncated: false, objects: results }));
 } catch (error) {
   console.error(JSON.stringify({ mode, status: "failed", reason: error instanceof Error ? error.message : "R2 recovery failed safely." }));
   process.exitCode = 1;

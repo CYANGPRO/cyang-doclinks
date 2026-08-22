@@ -64,4 +64,5 @@ next-env.d.ts
 
 .vercel
 .env*
+!.env.example
 /.swc

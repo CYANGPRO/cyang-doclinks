@@ -13,8 +13,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Install PostgreSQL client
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
       - name: Create encrypted-in-transit CAT dump and checksum
         env:
           LOCAL801_DATABASE_URL: ${{ secrets.LOCAL801_BACKUP_DATABASE_URL }}
@@ -23,7 +21,8 @@ jobs:
           test -n "${LOCAL801_DATABASE_URL:-}"
           case "${LOCAL801_DATABASE_URL}" in *sslmode=require*|*sslmode=verify-ca*|*sslmode=verify-full*) ;; *) echo "CAT backup database URL must require TLS" >&2; exit 1;; esac
           BACKUP_FILE="local801-$(date -u +%Y%m%dT%H%M%SZ).dump"
-          pg_dump --dbname="${LOCAL801_DATABASE_URL}" --format=custom --compress=9 --no-owner --no-privileges --file="${BACKUP_FILE}"
+          docker run --rm -e LOCAL801_DATABASE_URL postgres:18 sh -c \
+            'pg_dump --dbname="$LOCAL801_DATABASE_URL" --format=custom --compress=9 --no-owner --no-privileges' > "${BACKUP_FILE}"
           sha256sum "${BACKUP_FILE}" > "${BACKUP_FILE}.sha256"
           echo "BACKUP_FILE=${BACKUP_FILE}" >> "$GITHUB_ENV"
       - name: Upload to dedicated CAT recovery bucket
