@@ -76,7 +76,7 @@
     "openid-client": "^6.8.2",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^5.4.624",
-    "postgres": "^3.4.8",
+    "postgres": "^3.4.9",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "resend": "^6.9.4",
