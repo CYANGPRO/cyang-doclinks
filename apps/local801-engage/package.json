@@ -56,7 +56,7 @@
     "next-auth": "4.24.15",
     "postgres": "^3.4.8",
     "react": "19.2.3",
-    "react-dom": "19.2.3",
+    "react-dom": "19.2.8",
     "server-only": "^0.0.1",
     "workflow": "^4.8.2",
     "zod": "^4.3.6"
