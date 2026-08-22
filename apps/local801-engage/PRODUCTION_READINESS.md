@@ -35,10 +35,10 @@ The 2026-08-22 authenticated provider inspection found critical Production/Previ
 - [ ] Replace the observed Production/Preview credential and key reuse with approved separate database, storage, identity, scanner, session and key material; validate backup/key recovery before retiring old credentials.
 - [ ] Configure a separate production private R2 bucket and least-privilege production credentials.
 - [ ] Generate a separate production object-encryption keyring and protected-PII key hierarchy; escrow/rotation procedures must be documented.
-- [ ] Configure the approved production OIDC client/callback and verify MFA assurance end-to-end with test production accounts.
+- [x] Configure the approved production OIDC client/callback and verify MFA assurance end-to-end with three test production accounts, including negative controls.
 - [ ] Provision production Local 801 users through Team & Access; self-service signup remains disabled.
 - [ ] Configure the production scanner client secret separately from Preview and pass clean/infected/outage acceptance tests.
-- [ ] Configure production monitoring/alerting with sensitive-data filtering and verify an alert path.
+- [x] Configure CAT-only Sentry application-error monitoring with fail-closed enablement and aggressive sensitive-data filtering; verify redacted Production delivery and two high-priority email-alert triggers.
 - [ ] Configure database/object backups and perform a documented restore exercise; only then set `LOCAL801_BACKUP_RESTORE_VERIFIED=1`.
 - [ ] Complete privacy, retention/deletion, incident-response, vendor, access-control, and penetration/deployment reviews.
 - [ ] Confirm no real sample/member files or credentials are committed to GitHub and no plaintext member files remain in temporary operational locations.

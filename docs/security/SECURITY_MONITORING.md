@@ -16,9 +16,9 @@
 
 ## Current provider state and operating runbook
 
-The 2026-08-22 authenticated inspection found zero Vercel Log Drains. Native retention can be short, so the manual evidence routine is a residual-risk control, not equivalent to centralized alerting. Selecting a destination, accepting its data-processing/retention terms and sending production logs externally require owner/privacy approval.
+The 2026-08-22 authenticated inspection found zero Vercel Log Drains. The existing CAT-only Sentry project `local801-cat-production` is the approved application-error destination: it contains only redacted Production events, and its enabled high-priority email rule records two successful triggers. CAT runtime initialization now removes request, user, context, breadcrumb, local-variable, and original-message data, disables tracing, and requires both `LOCAL801_SENTRY_ENABLED=1` and the separate CAT DSN. Vercel runtime/build/firewall logs and GitHub workflow failures remain on their native provider surfaces because no approved multi-source drain endpoint exists.
 
-### Proposed Vercel Log Drain
+### Optional future Vercel Log Drain
 
 After approval, use **Vercel team -> Settings -> Drains -> Add Drain** (or **CAT project -> Settings -> Log Drains**, if shown by the current console). Select only the CAT project and Production. Include runtime logs, build logs and firewall logs; exclude request bodies and any source that cannot be filtered to CAT. Use HTTPS with a destination-owned authentication secret and, where supported, delivery signature verification. The receiver must verify the signature over the raw request body before parsing, reject replays outside its approved window and retain only allowlisted metadata.
 

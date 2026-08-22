@@ -1,4 +1,5 @@
 import "server-only";
+import * as Sentry from "@sentry/nextjs";
 
 export type SecuritySignalEvent =
   | "authorization.denied"
@@ -33,6 +34,11 @@ export function buildSecuritySignal(event: SecuritySignalEvent, metadata: Record
 
 export function writeSecuritySignal(level: "warn" | "error", event: SecuritySignalEvent, metadata: Record<string, unknown> = {}) {
   const serialized = JSON.stringify(buildSecuritySignal(event, metadata));
-  if (level === "error") console.error("[local801-security]", serialized);
-  else console.warn("[local801-security]", serialized);
+  if (level === "error") {
+    console.error("[local801-security]", serialized);
+    Sentry.withScope((scope) => {
+      scope.setTag("local801.security_signal", event);
+      Sentry.captureMessage("Local 801 security signal", "error");
+    });
+  } else console.warn("[local801-security]", serialized);
 }
