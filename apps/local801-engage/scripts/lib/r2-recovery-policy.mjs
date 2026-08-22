@@ -46,6 +46,18 @@ export function getR2RecoveryConfiguration(env = process.env, mode = "inventory"
     sourceEndpoint, destinationEndpoint, batchSize, maximumBytes, prefix: "local801/" });
 }
 
+export function getR2RecoveryKeyReadTestConfiguration(env = process.env) {
+  const base = getR2RecoveryConfiguration(env, "inventory");
+  if (env.LOCAL801_R2_RECOVERY_KEY_READ_TEST !== "1") {
+    throw new Error("R2 recovery key-read test opt-in is missing.");
+  }
+  const expected = `TEST AND CLEAN LOCAL801 ENCRYPTED OBJECT ${base.sourceBucket} TO ${base.destinationBucket}`;
+  if (env.LOCAL801_R2_RECOVERY_KEY_READ_CONFIRMATION !== expected) {
+    throw new Error("R2 recovery key-read typed confirmation does not match the exact buckets.");
+  }
+  return Object.freeze({ ...base, mode: "key-read-test" });
+}
+
 export function assertOpaqueRecoveryObject(entry, maximumBytes) {
   if (!entry || typeof entry.Key !== "string" || !opaqueObjectKeyPattern.test(entry.Key)
     || !Number.isSafeInteger(entry.Size) || entry.Size < 0 || entry.Size > maximumBytes) {

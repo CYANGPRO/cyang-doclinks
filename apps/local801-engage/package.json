@@ -22,6 +22,7 @@
     "security:production-readiness": "node --experimental-strip-types scripts/check-production-readiness.mjs",
     "security:initialize-production": "node --conditions=react-server --experimental-strip-types scripts/initialize-production.mjs",
     "recovery:r2": "node scripts/recover-r2-objects.mjs",
+    "recovery:r2:key-read-test": "node --conditions=react-server --experimental-strip-types scripts/test-r2-key-recovery.mjs",
     "security:retention-inventory": "node --conditions=react-server --experimental-strip-types scripts/retention-inventory.mjs",
     "security:audit": "npm audit --omit=dev --audit-level=high",
     "security:sbom": "npm sbom --omit=dev --sbom-format=cyclonedx",

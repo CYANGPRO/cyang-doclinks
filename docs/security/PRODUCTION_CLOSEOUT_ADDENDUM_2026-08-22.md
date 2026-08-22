@@ -21,7 +21,7 @@
   - PII state reported protected read/write mode, completed backfill, and verification for the production organization.
 - Deleted the three approved stale branches and the task-created restore branch. Only protected `production` and the existing `develoment` branch remain.
 - Published seven Vercel Firewall observation rules. Every rule is live and valid, uses an IP-keyed fixed window, and has exceeded-threshold action `log`. There are no pending firewall changes and no deny/challenge/redirect action in this rule set.
-- Built and deployed the CAT-only source bundle to Vercel Production as deployment `dpl_5tMcboZqnpqsNif9X2bV4k3mdSSx` and explicitly assigned `cat.cyang.io` to it.
+- Promoted exact Git commit `33fa5fdf4bbb8a73677a28efb0845284ee5037db` to Vercel Production as deployment `dpl_3Q5czVMvZVECRDFJgFWbicpy7qpz` and explicitly verified that `cat.cyang.io` resolves to that deployment. The project intentionally requires explicit promotion because automatic custom-domain assignment is disabled.
 - Verified `https://cat.cyang.io/` returns HTTP 200 with HSTS, CSP, and no-store caching. Production `/api/health` remains intentionally unavailable with HTTP 404. No runtime errors were reported in the post-deployment smoke window.
 - Recorded accountable-owner confirmation that the complete production Entra identity acceptance flow was exercised with three users, including account onboarding, MFA-backed authentication, CAT role/access confirmation, and the required disabled/revoked/stale-session/recovery negative controls. No user identities or authentication artifacts are retained in this repository evidence.
 - Completed CAT recovery workflow runs against commit `6c2f9e99fdeeb82076ff69266ee9ea2f9937b4db`:
@@ -32,8 +32,9 @@
 - Created private bucket `local801-engage-recovery-private` with separate bucket-scoped source-read and destination-write credentials. Public access remains disabled.
 - Verified Sentry project `local801-cat-production` receives redacted Production errors. Its enabled high-priority email alert has two recorded triggers, including the synthetic acceptance event; runtime Sentry initialization now strips request, user, context, breadcrumb, local-variable, and original-message data before transmission and disables tracing.
 - Enabled `main` branch protection with strict required checks `local801-security` and `analyze-local801`, one approval, stale-review dismissal, last-push approval, linear history, conversation resolution, and force-push/deletion denial. Administrator enforcement remains off so the sole recovery owner is not locked out.
-- Exact-release CAT checks for `847a1f5` passed: [CAT CI job](https://github.com/CYANGPRO/cyang-doclinks/actions/runs/32598104055), [CAT CodeQL](https://github.com/CYANGPRO/cyang-doclinks/actions/runs/32598104090), and [repository CodeQL](https://github.com/CYANGPRO/cyang-doclinks/actions/runs/32598104113). The combined CI workflow remains red only because the root DocLinks production dependency audit fails; CAT's dependency audit reports zero vulnerabilities.
-- Local verification passed: 581 tests, TypeScript, lint (two non-blocking generated-code warnings), migration verification, zero CAT dependency vulnerabilities, and the production build.
+- Exact-release checks for `33fa5fd` passed: [CAT CI job](https://github.com/CYANGPRO/cyang-doclinks/actions/runs/32598683811), [CAT CodeQL](https://github.com/CYANGPRO/cyang-doclinks/actions/runs/32598683828), and [repository CodeQL](https://github.com/CYANGPRO/cyang-doclinks/actions/runs/32598683877). The combined CI workflow remains red only because the root DocLinks production dependency audit fails; CAT's dependency audit reports zero vulnerabilities.
+- Local verification passed: 583 tests, TypeScript, lint (two non-blocking generated-code warnings), migration verification, zero CAT dependency vulnerabilities, and the production build.
+- Added a separately guarded synthetic encrypted-object recovery drill that uses three distinct bucket-scoped credentials, verifies authenticated decryption and a synthetic plaintext hash in memory, and attempts exact-key deletion plus absence confirmation in both buckets. Provider execution still requires a temporary source-write drill token and controlled keyring transfer.
 
 ## Acceptance flag state
 
@@ -46,7 +47,7 @@
 
 ## Remaining blockers
 
-1. Execute a controlled synthetic recovery-key read from the recovery bucket and clean up the exact test object. Ciphertext copy alone does not authorize `LOCAL801_BACKUP_RESTORE_VERIFIED=1`.
+1. Execute the implemented controlled synthetic recovery-key drill and retain its successful cleanup evidence. Ciphertext copy or implementation alone does not authorize `LOCAL801_BACKUP_RESTORE_VERIFIED=1`.
 2. Complete the Production/Preview separation decision for R2, object/PII keyrings, session secret, OIDC client, and scanner credential; current evidence only proves Production database-role separation.
 3. Complete firewall observation review and Preview 429/`Retry-After` enforcement testing. The first observation window had no custom-rule hits, so there is not yet a false-positive basis for Production enforcement.
 4. Formally disposition the root DocLinks/scanner Dependabot backlog separately from CAT. Do not treat CAT's zero-vulnerability audit as remediation of other workspaces.

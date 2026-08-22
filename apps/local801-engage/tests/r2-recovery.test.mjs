@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assertOpaqueRecoveryObject, getR2RecoveryConfiguration } from "../scripts/lib/r2-recovery-policy.mjs";
+import {
+  assertOpaqueRecoveryObject,
+  getR2RecoveryConfiguration,
+  getR2RecoveryKeyReadTestConfiguration,
+} from "../scripts/lib/r2-recovery-policy.mjs";
 
 function environment(overrides = {}) {
   return {
@@ -34,6 +38,20 @@ test("R2 ciphertext copy requires explicit opt-in and exact typed bucket confirm
   }), "copy"), /does not match/);
 });
 
+test("R2 key-read drill requires a separate opt-in and exact cleanup confirmation", () => {
+  assert.throws(() => getR2RecoveryKeyReadTestConfiguration(environment()), /opt-in/);
+  const accepted = getR2RecoveryKeyReadTestConfiguration(environment({
+    LOCAL801_R2_RECOVERY_KEY_READ_TEST: "1",
+    LOCAL801_R2_RECOVERY_KEY_READ_CONFIRMATION:
+      "TEST AND CLEAN LOCAL801 ENCRYPTED OBJECT local801-production-private TO local801-production-recovery",
+  }));
+  assert.equal(accepted.mode, "key-read-test");
+  assert.throws(() => getR2RecoveryKeyReadTestConfiguration(environment({
+    LOCAL801_R2_RECOVERY_KEY_READ_TEST: "1",
+    LOCAL801_R2_RECOVERY_KEY_READ_CONFIRMATION: "TEST",
+  })), /does not match/);
+});
+
 test("R2 recovery rejects unbounded batches and object sizes", () => {
   assert.throws(() => getR2RecoveryConfiguration(environment({ LOCAL801_R2_RECOVERY_BATCH_SIZE: "101" }), "dry-run"), /bound is invalid/);
   assert.throws(() => getR2RecoveryConfiguration(environment({ LOCAL801_R2_RECOVERY_MAX_OBJECT_BYTES: String(101 * 1024 * 1024) }), "dry-run"), /bound is invalid/);
@@ -60,4 +78,16 @@ test("R2 recovery implementation uses separate credentials, explicit retries, ch
   assert.match(source, /inventory exceeds the configured bounded batch/);
   assert.match(source, /finally\s*\{\s*ciphertext\.fill\(0\)/);
   assert.doesNotMatch(source, /DeleteObjectCommand|--delete/);
+});
+
+test("synthetic key-read drill uses an opaque random key, three credentials, authenticated decryption, and exact cleanup", async () => {
+  const source = await import("node:fs/promises").then(({ readFile }) => readFile(new URL("../scripts/test-r2-key-recovery.mjs", import.meta.url), "utf8"));
+  assert.match(source, /new Set\(\[sourceReadId, sourceWriteId, destinationId\]\)\.size !== 3/);
+  assert.match(source, /local801\/reports\/\$\{year\}\/\$\{month\}\/\$\{randomUUID\(\)\}/);
+  assert.match(source, /decryptEnvelope\(recoveredCiphertext/);
+  assert.match(source, /timingSafeEqual\(recoveredPlaintext, plaintext\)/);
+  assert.match(source, /DeleteObjectCommand/);
+  assert.match(source, /HeadObjectCommand/);
+  assert.match(source, /source-and-destination-confirmed-absent/);
+  assert.doesNotMatch(source, /console\.log\([^\n]*objectKey/);
 });

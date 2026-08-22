@@ -16,7 +16,7 @@
 
 ## Current provider state and operating runbook
 
-The 2026-08-22 authenticated inspection found zero Vercel Log Drains. The existing CAT-only Sentry project `local801-cat-production` is the approved application-error destination: it contains only redacted Production events, and its enabled high-priority email rule records two successful triggers. CAT runtime initialization now removes request, user, context, breadcrumb, local-variable, and original-message data, disables tracing, and requires both `LOCAL801_SENTRY_ENABLED=1` and the separate CAT DSN. Vercel runtime/build/firewall logs and GitHub workflow failures remain on their native provider surfaces because no approved multi-source drain endpoint exists.
+The 2026-08-22 authenticated inspection found zero Vercel Log Drains. The existing CAT-only Sentry project `local801-cat-production` is the configured application-error destination: it contains only redacted Production events, and its enabled high-priority email rule records two successful triggers. CAT runtime initialization now removes request, user, context, breadcrumb, local-variable, and original-message data, disables tracing, and requires both `LOCAL801_SENTRY_ENABLED=1` and the separate CAT DSN. Vercel runtime/build/firewall logs and GitHub workflow failures remain on their native provider surfaces because no approved multi-source drain endpoint exists.
 
 ### Optional future Vercel Log Drain
 

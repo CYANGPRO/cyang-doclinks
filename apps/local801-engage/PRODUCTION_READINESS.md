@@ -31,7 +31,7 @@ The 2026-08-22 authenticated provider inspection found critical Production/Previ
 - [ ] CAT-local PostgreSQL rate-limit source and disposable SQL concurrency tests are complete; acceptance-test production enablement, thresholds, denials, fail-closed behavior and cleanup for high-risk read/write/search/export/download paths.
 - [ ] Complete storage-operation auditing and orphan/cleanup operational procedures.
 - [ ] Configure a separate approved production PostgreSQL database and apply every reviewed migration in order.
-- [x] Existing CAT Vercel project is connected to `CYANGPRO/cyang-doclinks`, Root Directory is `apps/local801-engage`, Node.js is 22.x, and the existing domain/environment/deployment records were preserved; a new Git-triggered Preview still must pass before Production release.
+- [x] Existing CAT Vercel project is connected to `CYANGPRO/cyang-doclinks`, Root Directory is `apps/local801-engage`, Node.js is 22.x, and exact commit `33fa5fd` passed CAT CI/CodeQL before explicit promotion to `cat.cyang.io`.
 - [ ] Replace the observed Production/Preview credential and key reuse with approved separate database, storage, identity, scanner, session and key material; validate backup/key recovery before retiring old credentials.
 - [ ] Configure a separate production private R2 bucket and least-privilege production credentials.
 - [ ] Generate a separate production object-encryption keyring and protected-PII key hierarchy; escrow/rotation procedures must be documented.
@@ -39,7 +39,7 @@ The 2026-08-22 authenticated provider inspection found critical Production/Previ
 - [ ] Provision production Local 801 users through Team & Access; self-service signup remains disabled.
 - [ ] Configure the production scanner client secret separately from Preview and pass clean/infected/outage acceptance tests.
 - [x] Configure CAT-only Sentry application-error monitoring with fail-closed enablement and aggressive sensitive-data filtering; verify redacted Production delivery and two high-priority email-alert triggers.
-- [ ] Configure database/object backups and perform a documented restore exercise; only then set `LOCAL801_BACKUP_RESTORE_VERIFIED=1`.
+- [ ] Database restore and bounded encrypted-object copy passed; execute the guarded synthetic key-read/cleanup drill and retain its successful provider evidence before setting `LOCAL801_BACKUP_RESTORE_VERIFIED=1`.
 - [ ] Complete privacy, retention/deletion, incident-response, vendor, access-control, and penetration/deployment reviews.
 - [ ] Confirm no real sample/member files or credentials are committed to GitHub and no plaintext member files remain in temporary operational locations.
 - [ ] Record final security approval and non-secret review/change reference; only then set `LOCAL801_SECURITY_REVIEW_APPROVED=1` and `LOCAL801_PRODUCTION_SECURITY_REVIEW_ID`.
