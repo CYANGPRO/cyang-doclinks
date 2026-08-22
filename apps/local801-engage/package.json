@@ -41,7 +41,7 @@
     "mobile:release:gate": "node scripts/check-mobile-release.mjs"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1011.0",
+    "@aws-sdk/client-s3": "^3.1114.0",
     "@aws-sdk/s3-request-presigner": "^3.1011.0",
     "@capacitor/android": "^8.5.0",
     "@capacitor/app": "^8.1.1",
