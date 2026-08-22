@@ -64,7 +64,7 @@
   "devDependencies": {
     "@capacitor/cli": "^8.5.0",
     "@napi-rs/canvas": "^0.1.95",
-    "@types/node": "^20",
+    "@types/node": "^26",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
