@@ -35,3 +35,11 @@ Do not record secret values in this file. Track configured/not configured status
 - Apply and verify every pending Local 801 migration before enabling a newly deployed import schema.
 - Migration `0018__member_contact_and_employment_fields.sql` must be applied before deploying the matching application build. It adds Hire Date, Job Status, and labeled protected work, cell, home, and home-email contact records.
 - Verify both approved workbook shapes in Preview: the membership update workbook supplies employment and phone fields, and the personal-email workbook supplies Home Email enrichment. Confirm that no raw contact value appears in operational import JSON or logs.
+
+## Encryption-key escrow and recovery
+
+- Vercel `sensitive` variables are write-only operational inputs. The dashboard, owner-authenticated environment API, environment pull, and environment-run commands do not provide the stored value back. Vercel must not be treated as the only escrow for `LOCAL801_ENCRYPTION_MASTER_KEYS` or `LOCAL801_ACTIVE_ENCRYPTION_KEY_VERSION`.
+- Generate and retain the exact keyring and active version in an owner-controlled secure vault before entering them in Vercel. Keep at least one independently controlled recovery copy, record a non-secret key fingerprint, and verify that the escrowed copy parses and matches the recorded fingerprint.
+- Never commit the keyring, place it in documentation, paste it into issue or workflow logs, or store it in an unencrypted local file.
+- For a recovery drill, transfer the escrowed values only to the temporary GitHub Actions drill secrets named by `.github/workflows/local801-r2-recovery.yml`; run `key-read-test`, retain only non-secret evidence, then delete those drill secrets immediately.
+- Do not replace an unavailable Production keyring in place. If its independent escrow cannot be located, preserve the current Vercel values and require a separately reviewed in-runtime migration that decrypts each existing object with the still-running application and re-encrypts it under a new, independently escrowed keyring.

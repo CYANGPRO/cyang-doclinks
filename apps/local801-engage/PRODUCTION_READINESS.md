@@ -6,6 +6,8 @@
 
 The 2026-08-22 authenticated provider inspection found critical Production/Preview variable reuse. The same-day closeout repair reconnected the existing Vercel project to `CYANGPRO/cyang-doclinks`, set Root Directory to `apps/local801-engage`, aligned Vercel to Node.js 22.x, and set all four Production launch/acceptance switches explicitly to `0` without replacing the project, domain, deployment, or environment records. Infrastructure/credential separation still requires owner-controlled remediation before real data or launch.
 
+The 2026-08-23 guarded key-recovery drill was stopped before dispatch because the Production object keyring and active version exist only as Vercel `sensitive` variables. Vercel's dashboard, owner-authenticated environment API, environment pull, and environment-run paths do not return those values. The scoped 24-hour R2 drill token was deleted, no synthetic object was created, no GitHub drill secret was retained, and `LOCAL801_BACKUP_RESTORE_VERIFIED` remains `0`. Do not overwrite either Production encryption variable: first locate the original owner-controlled keyring escrow, or obtain separate approval for an in-runtime re-encryption migration that preserves access to every existing encrypted object.
+
 `LOCAL801_PRODUCTION_LAUNCH_ENABLED` must remain `0` until every required production item below is complete. The launch policy also requires `LOCAL801_DATABASE_PII_PROTECTION_ENABLED=1`, `LOCAL801_BACKUP_RESTORE_VERIFIED=1`, `LOCAL801_SECURITY_REVIEW_APPROVED=1`, and a non-secret `LOCAL801_PRODUCTION_SECURITY_REVIEW_ID` before Vercel Production authentication can run.
 
 ## Verified application controls
@@ -34,12 +36,12 @@ The 2026-08-22 authenticated provider inspection found critical Production/Previ
 - [x] Existing CAT Vercel project is connected to `CYANGPRO/cyang-doclinks`, Root Directory is `apps/local801-engage`, Node.js is 22.x, and exact commit `33fa5fd` passed CAT CI/CodeQL before explicit promotion to `cat.cyang.io`.
 - [ ] Replace the observed Production/Preview credential and key reuse with approved separate database, storage, identity, scanner, session and key material; validate backup/key recovery before retiring old credentials.
 - [ ] Configure a separate production private R2 bucket and least-privilege production credentials.
-- [ ] Generate a separate production object-encryption keyring and protected-PII key hierarchy; escrow/rotation procedures must be documented.
+- [ ] Recover or establish independently verified owner-controlled escrow for the exact Production object keyring and active version. Vercel `sensitive` variables are intentionally not a recoverable escrow. If the original keyring cannot be located, design and approve an in-runtime re-encryption migration before changing either Production encryption variable.
 - [x] Configure the approved production OIDC client/callback and verify MFA assurance end-to-end with three test production accounts, including negative controls.
 - [ ] Provision production Local 801 users through Team & Access; self-service signup remains disabled.
 - [ ] Configure the production scanner client secret separately from Preview and pass clean/infected/outage acceptance tests.
 - [x] Configure CAT-only Sentry application-error monitoring with fail-closed enablement and aggressive sensitive-data filtering; verify redacted Production delivery and two high-priority email-alert triggers.
-- [ ] Database restore and bounded encrypted-object copy passed; execute the guarded synthetic key-read/cleanup drill and retain its successful provider evidence before setting `LOCAL801_BACKUP_RESTORE_VERIFIED=1`.
+- [ ] Database restore and bounded encrypted-object copy passed. The 2026-08-23 synthetic key-read/cleanup drill was blocked before dispatch by the missing recoverable Production keyring; locate the exact independent escrow, rerun the guarded drill, and retain successful provider evidence before setting `LOCAL801_BACKUP_RESTORE_VERIFIED=1`.
 - [ ] Complete privacy, retention/deletion, incident-response, vendor, access-control, and penetration/deployment reviews.
 - [ ] Confirm no real sample/member files or credentials are committed to GitHub and no plaintext member files remain in temporary operational locations.
 - [ ] Record final security approval and non-secret review/change reference; only then set `LOCAL801_SECURITY_REVIEW_APPROVED=1` and `LOCAL801_PRODUCTION_SECURITY_REVIEW_ID`.
