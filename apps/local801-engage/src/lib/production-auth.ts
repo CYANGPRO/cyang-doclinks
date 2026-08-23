@@ -110,8 +110,11 @@ export function profileHasRequiredMfa(profile: Record<string, unknown>, config: 
 
 export function productionIdentityFromProfile(profile: Record<string, unknown>, config: ProductionAuthConfig): ProductionIdentity {
   const subject = claimString(profile, "sub");
-  const email = claimString(profile, "email").trim().toLowerCase();
-  const emailVerified = profile.email_verified === true;
+  const standardEmail = claimString(profile, "email").trim().toLowerCase();
+  const authoritativeEmail = claimString(profile, "verified_primary_email").trim().toLowerCase();
+  const email = standardEmail || authoritativeEmail;
+  const emailVerified = profile.email_verified === true
+    || (authoritativeEmail.length > 0 && authoritativeEmail === email);
   const mfaVerified = profileHasRequiredMfa(profile, config);
   if (!subjectPattern.test(subject)) throw new ProductionAuthError("IDENTITY_INVALID", "The identity provider did not return a valid subject identifier.");
   if (!emailPattern.test(email) || email.length > 320) throw new ProductionAuthError("EMAIL_REQUIRED", "A valid identity-provider email address is required.");

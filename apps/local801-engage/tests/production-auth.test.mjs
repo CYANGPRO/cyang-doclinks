@@ -71,6 +71,17 @@ test("OIDC profile requires subject, verified email, and configured MFA assuranc
     amr: ["pwd", "mfa"],
   }, config);
   assert.deepEqual(parsed, identity);
+  assert.deepEqual(productionIdentityFromProfile({
+    sub: "oidc-subject-123",
+    verified_primary_email: "Person@Example.Test",
+    amr: ["pwd", "mfa"],
+  }, config), identity);
+  assert.throws(() => productionIdentityFromProfile({
+    sub: "x",
+    email: "different@example.test",
+    verified_primary_email: "person@example.test",
+    amr: ["mfa"],
+  }, config), /verify/i);
   assert.throws(() => productionIdentityFromProfile({ sub: "x", email: "person@example.test", email_verified: false, amr: ["mfa"] }, config), /verify/i);
   assert.throws(() => productionIdentityFromProfile({ sub: "x", email: "person@example.test", email_verified: true, amr: ["pwd"] }, config), /MFA/i);
 });
