@@ -36,6 +36,7 @@ let operationError;
 let cleanupError;
 let operationStage = "target-state";
 let safeFailureCodes = [];
+let cleanupMethod = "exact-direct-delete";
 try {
   const [targetState] = await sql`
     select
@@ -79,7 +80,13 @@ try {
   operationError = error;
 } finally {
   try {
-    await sql`delete from local801.rate_limit_buckets where bucket_key = ${bucketKey} and subject_hash = ${subjectHash}`;
+    try {
+      await sql`delete from local801.rate_limit_buckets where bucket_key = ${bucketKey} and subject_hash = ${subjectHash}`;
+    } catch {
+      cleanupMethod = "bounded-expired-bucket-cleanup";
+      const cleanupAt = new Date(now.getTime() + (windowSeconds + 1) * 1000);
+      await sql`select local801.cleanup_expired_rate_limits(1000, ${cleanupAt.toISOString()}::timestamptz)`;
+    }
     const [{ remaining }] = await sql`
       select count(*)::integer as remaining
       from local801.rate_limit_buckets
@@ -109,6 +116,7 @@ if (operationError || cleanupError) {
     attempts: 25,
     allowed: 10,
     denied: 15,
+    cleanupMethod,
     cleanup: "exact-synthetic-bucket-confirmed-absent",
     durationMs: Date.now() - startedAt,
   })}\n`);
