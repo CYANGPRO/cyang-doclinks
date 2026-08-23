@@ -14,6 +14,10 @@ test("protected production auth resolves email and provider subject through blin
   assert.match(source, /normalizePiiEmail\(storedEmail\)/);
   assert.doesNotMatch(source, /lower\(app_user\.email\)\s*=\s*lower/);
   assert.doesNotMatch(source, /provider_subject\s*=\s*\$[0-9]+/);
+  assert.match(source, /production_initializations/);
+  assert.match(source, /initial_system_owner_id/);
+  assert.match(source, /identity\.bootstrapObjectMatched/);
+  assert.match(source, /role\.code = 'system_owner'/);
 });
 
 test("new protected OIDC links place only non-PII placeholders in legacy identity columns", async () => {

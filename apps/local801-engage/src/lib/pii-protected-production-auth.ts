@@ -131,6 +131,47 @@ async function resolveUserByProtectedEmail(
   return { row, role, sessionVersion, email: storedEmail, keyConfig };
 }
 
+async function resolveBootstrapOwner(
+  organization: OrganizationRow,
+  query: DatabaseQuery,
+) {
+  const rows = await query<UserRow>(`
+    /* production-auth:protected-bootstrap-owner */
+    SELECT organization.slug AS organization_slug, organization.id::text AS organization_id,
+      app_user.id::text AS user_id, app_user.auth_session_version, role.code AS role,
+      protected.email_encrypted_payload, protected.email_encryption_key_version, protected.email_encryption_format_version
+    FROM local801.production_initializations initialization
+    JOIN local801.organizations organization
+      ON organization.id = initialization.organization_id AND organization.archived_at IS NULL
+    JOIN local801.users app_user
+      ON app_user.organization_id = organization.id
+      AND app_user.id = initialization.initial_system_owner_id
+      AND app_user.deactivated_at IS NULL
+    JOIN local801.user_pii protected
+      ON protected.organization_id = organization.id AND protected.user_id = app_user.id
+    JOIN local801.workspace_user_roles user_role ON user_role.user_id = app_user.id
+    JOIN local801.workspace_roles role
+      ON role.id = user_role.role_id
+      AND role.organization_id = organization.id
+      AND role.code = 'system_owner'
+    WHERE organization.id = $1::uuid
+    LIMIT 2
+  `, [organization.id]);
+  if (rows.length !== 1) authError("USER_NOT_PROVISIONED", "The initial Local 801 system owner is not uniquely provisioned.");
+  const row = rows[0];
+  const sessionVersion = Number(row.auth_session_version);
+  if (!Number.isSafeInteger(sessionVersion) || sessionVersion < 1) {
+    authError("USER_NOT_PROVISIONED", "The initial Local 801 system owner has an invalid session version.");
+  }
+  const keyConfig = getPiiKeyConfiguration();
+  const email = decryptPiiField(
+    encrypted(row.email_encrypted_payload, row.email_encryption_key_version, row.email_encryption_format_version),
+    { organizationId: organization.id, entity: "user", recordId: row.user_id, field: "email" },
+    keyConfig,
+  );
+  return { row, role: "system_owner" as const, sessionVersion, email, keyConfig };
+}
+
 async function resolveIdentityBindings(
   organizationId: string,
   userId: string,
@@ -286,13 +327,20 @@ export async function authorizeProtectedProductionIdentity(
   } = {},
 ): Promise<ProductionAuthBinding> {
   if (!config.enabled) authError("AUTH_DISABLED", "Production authentication is disabled.");
-  if (identity.providerId !== config.providerId || !identity.emailVerified || !identity.mfaVerified) {
+  if (identity.providerId !== config.providerId
+    || (!identity.emailVerified && !identity.bootstrapObjectMatched)
+    || !identity.mfaVerified) {
     authError("IDENTITY_INVALID", "The production identity did not satisfy the configured assurance requirements.");
   }
   const query = dependencies.query ?? queryLocal801;
   const transaction = dependencies.transaction ?? runLocal801Transaction;
   const organization = await resolveOrganization(config, query);
-  const account = await resolveUserByProtectedEmail(organization, identity, query);
+  // The bootstrap identity is authorized by the immutable Entra object ID and is resolved
+  // through the recorded initial-system-owner relationship. Its mutable email claim never
+  // selects or authorizes a database account.
+  const account = identity.bootstrapObjectMatched
+    ? await resolveBootstrapOwner(organization, query)
+    : await resolveUserByProtectedEmail(organization, identity, query);
   const linked = await resolveIdentityBindings(organization.id, account.row.user_id, identity, query);
   if (linked.existing) {
     await transaction(authenticationStatements(organization.id, account.row.user_id, account.sessionVersion, linked.existing.auth_identity_id));

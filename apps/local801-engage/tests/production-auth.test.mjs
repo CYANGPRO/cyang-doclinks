@@ -22,6 +22,7 @@ const config = {
   wellKnown: "https://idp.example.test/.well-known/openid-configuration",
   clientId: "client",
   clientSecret: "secret",
+  bootstrapObjectId: "",
   mfaClaim: "amr",
   mfaValue: "mfa",
 };
@@ -29,8 +30,10 @@ const config = {
 const identity = {
   providerId: "local801-oidc",
   subject: "oidc-subject-123",
+  objectId: "",
   email: "person@example.test",
   emailVerified: true,
+  bootstrapObjectMatched: false,
   mfaVerified: true,
 };
 
@@ -59,6 +62,7 @@ test("production auth config is disabled by default and requires complete HTTPS 
   assert.equal(parsed.providerId, "local801-oidc");
   assert.equal(parsed.mfaClaim, "amr");
   assert.equal(parsed.mfaValue, "mfa");
+  assert.equal(parsed.bootstrapObjectId, "");
 });
 
 test("OIDC profile requires subject, verified email, and configured MFA assurance", () => {
@@ -85,6 +89,21 @@ test("OIDC profile requires subject, verified email, and configured MFA assuranc
   }, config), /verify/i);
   assert.throws(() => productionIdentityFromProfile({ sub: "x", email: "person@example.test", email_verified: false, amr: ["mfa"] }, config), /verify/i);
   assert.throws(() => productionIdentityFromProfile({ sub: "x", email: "person@example.test", email_verified: true, amr: ["pwd"] }, config), /MFA/i);
+  const bootstrapObjectId = "834e272c-3b2b-40ae-92e6-017803ce3525";
+  assert.deepEqual(productionIdentityFromProfile({
+    sub: "bootstrap-subject",
+    oid: bootstrapObjectId,
+    email: "owner@example.test",
+    amr: ["pwd", "mfa"],
+  }, { ...config, bootstrapObjectId }), {
+    providerId: "local801-oidc",
+    subject: "bootstrap-subject",
+    objectId: bootstrapObjectId,
+    email: "owner@example.test",
+    emailVerified: false,
+    bootstrapObjectMatched: true,
+    mfaVerified: true,
+  });
 });
 
 test("production auth exposes only allowlisted, PII-free rejection codes", () => {
@@ -103,9 +122,9 @@ test("production auth diagnostics expose only claim-presence bits", () => {
     xms_edov: true,
     amr: ["pwd", "mfa"],
     acr: "value",
-  }), "email1-primary1-emails1-verified1-domain1-amr1-acr1");
+  }), "email1-primary1-emails1-verified1-domain1-oid0-amr1-acr1");
   assert.equal(productionAuthClaimShape({ email: "", emails: [], token: "secret" }),
-    "email0-primary0-emails0-verified0-domain0-amr0-acr0");
+    "email0-primary0-emails0-verified0-domain0-oid0-amr0-acr0");
 });
 
 test("production identity binding requires one active provisioned user with one valid role and links subject atomically", async () => {

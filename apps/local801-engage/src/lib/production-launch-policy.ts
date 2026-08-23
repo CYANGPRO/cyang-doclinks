@@ -3,6 +3,7 @@ const scannerSecretPattern = /^[0-9a-f]{64}$/;
 const providerIdPattern = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const reviewIdPattern = /^[A-Za-z0-9][A-Za-z0-9._:/-]{7,127}$/;
 const keyVersionPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$/;
+const objectIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export type ProductionLaunchBlocker =
   | "NOT_VERCEL_PRODUCTION"
@@ -139,9 +140,11 @@ function oidcConfigLooksValid(env: NodeJS.ProcessEnv) {
   const wellKnown = env.LOCAL801_OIDC_WELL_KNOWN?.trim();
   const clientId = env.LOCAL801_OIDC_CLIENT_ID?.trim();
   const clientSecret = env.LOCAL801_OIDC_CLIENT_SECRET?.trim();
+  const bootstrapObjectId = env.LOCAL801_OIDC_BOOTSTRAP_OBJECT_ID?.trim() ?? "";
   const mfaClaim = env.LOCAL801_OIDC_MFA_CLAIM ?? "amr";
   const mfaValue = env.LOCAL801_OIDC_MFA_VALUE?.trim() || "mfa";
-  if (!providerIdPattern.test(providerId) || !wellKnown || !clientId || !clientSecret || !mfaValue || mfaValue.length > 120) return false;
+  if (!providerIdPattern.test(providerId) || !wellKnown || !clientId || !clientSecret
+    || !objectIdPattern.test(bootstrapObjectId) || !mfaValue || mfaValue.length > 120) return false;
   if (mfaClaim !== "amr" && mfaClaim !== "acr") return false;
   try {
     const parsed = new URL(wellKnown);

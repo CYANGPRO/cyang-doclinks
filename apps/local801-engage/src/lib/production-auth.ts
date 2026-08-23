@@ -6,6 +6,7 @@ import type { Role } from "./access.ts";
 const subjectPattern = /^[\x21-\x7e]{1,255}$/;
 const providerPattern = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const objectIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export type ProductionAuthConfig = {
   enabled: boolean;
@@ -15,6 +16,7 @@ export type ProductionAuthConfig = {
   wellKnown: string;
   clientId: string;
   clientSecret: string;
+  bootstrapObjectId: string;
   mfaClaim: "amr" | "acr";
   mfaValue: string;
 };
@@ -22,8 +24,10 @@ export type ProductionAuthConfig = {
 export type ProductionIdentity = {
   providerId: string;
   subject: string;
+  objectId: string;
   email: string;
   emailVerified: boolean;
+  bootstrapObjectMatched: boolean;
   mfaVerified: boolean;
 };
 
@@ -81,6 +85,7 @@ export function productionAuthClaimShape(profile: Record<string, unknown>) {
     `emails${hasStringArray("emails") ? 1 : 0}`,
     `verified${profile.email_verified === true ? 1 : 0}`,
     `domain${profile.xms_edov === true ? 1 : 0}`,
+    `oid${hasString("oid") ? 1 : 0}`,
     `amr${hasString("amr") || hasStringArray("amr") ? 1 : 0}`,
     `acr${hasString("acr") ? 1 : 0}`,
   ].join("-");
@@ -98,6 +103,7 @@ export function getProductionAuthConfig(env: NodeJS.ProcessEnv = process.env): P
   const wellKnown = nonempty(env.LOCAL801_OIDC_WELL_KNOWN);
   const clientId = nonempty(env.LOCAL801_OIDC_CLIENT_ID);
   const clientSecret = nonempty(env.LOCAL801_OIDC_CLIENT_SECRET);
+  const bootstrapObjectId = nonempty(env.LOCAL801_OIDC_BOOTSTRAP_OBJECT_ID).toLowerCase();
   const mfaClaim = env.LOCAL801_OIDC_MFA_CLAIM === "acr" ? "acr" : "amr";
   const mfaValue = nonempty(env.LOCAL801_OIDC_MFA_VALUE) || "mfa";
 
@@ -106,10 +112,11 @@ export function getProductionAuthConfig(env: NodeJS.ProcessEnv = process.env): P
     if (!providerPattern.test(providerId)) throw new ProductionAuthError("AUTH_CONFIG_INVALID", "LOCAL801_OIDC_PROVIDER_ID is invalid.");
     if (!wellKnown.startsWith("https://")) throw new ProductionAuthError("AUTH_CONFIG_INVALID", "LOCAL801_OIDC_WELL_KNOWN must be an HTTPS URL.");
     if (!clientId || !clientSecret) throw new ProductionAuthError("AUTH_CONFIG_INVALID", "OIDC client credentials are required when production authentication is enabled.");
+    if (bootstrapObjectId && !objectIdPattern.test(bootstrapObjectId)) throw new ProductionAuthError("AUTH_CONFIG_INVALID", "LOCAL801_OIDC_BOOTSTRAP_OBJECT_ID is invalid.");
     if (!mfaValue || mfaValue.length > 120) throw new ProductionAuthError("AUTH_CONFIG_INVALID", "LOCAL801_OIDC_MFA_VALUE is invalid.");
   }
 
-  return { enabled, organizationSlug, providerId, providerName, wellKnown, clientId, clientSecret, mfaClaim, mfaValue };
+  return { enabled, organizationSlug, providerId, providerName, wellKnown, clientId, clientSecret, bootstrapObjectId, mfaClaim, mfaValue };
 }
 
 function claimString(profile: Record<string, unknown>, key: string) {
@@ -125,17 +132,21 @@ export function profileHasRequiredMfa(profile: Record<string, unknown>, config: 
 
 export function productionIdentityFromProfile(profile: Record<string, unknown>, config: ProductionAuthConfig): ProductionIdentity {
   const subject = claimString(profile, "sub");
+  const objectId = claimString(profile, "oid").trim().toLowerCase();
   const standardEmail = claimString(profile, "email").trim().toLowerCase();
   const authoritativeEmail = claimString(profile, "verified_primary_email").trim().toLowerCase();
   const email = standardEmail || authoritativeEmail;
   const emailVerified = profile.email_verified === true
     || (authoritativeEmail.length > 0 && authoritativeEmail === email);
+  const bootstrapObjectMatched = objectIdPattern.test(objectId)
+    && config.bootstrapObjectId.length > 0
+    && objectId === config.bootstrapObjectId;
   const mfaVerified = profileHasRequiredMfa(profile, config);
   if (!subjectPattern.test(subject)) throw new ProductionAuthError("IDENTITY_INVALID", "The identity provider did not return a valid subject identifier.");
   if (!emailPattern.test(email) || email.length > 320) throw new ProductionAuthError("EMAIL_REQUIRED", "A valid identity-provider email address is required.");
-  if (!emailVerified) throw new ProductionAuthError("EMAIL_NOT_VERIFIED", "The identity provider must verify the sign-in email address.");
+  if (!emailVerified && !bootstrapObjectMatched) throw new ProductionAuthError("EMAIL_NOT_VERIFIED", "The identity provider must verify the sign-in email address.");
   if (!mfaVerified) throw new ProductionAuthError("MFA_REQUIRED", "The identity provider did not provide the required MFA assurance claim.");
-  return { providerId: config.providerId, subject, email, emailVerified, mfaVerified };
+  return { providerId: config.providerId, subject, objectId, email, emailVerified, bootstrapObjectMatched, mfaVerified };
 }
 
 function asRole(value: string): Role | null {
@@ -278,4 +289,4 @@ export async function resolveProductionSessionBinding(
     : null;
 }
 
-export const __testing = { asRole, providerPattern, safeProductionAuthCodes, subjectPattern };
+export const __testing = { asRole, objectIdPattern, providerPattern, safeProductionAuthCodes, subjectPattern };
