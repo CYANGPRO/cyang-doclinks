@@ -43,3 +43,15 @@ Determine reachability and deployed versions; block/disable affected function or
 ## Exercises
 
 Run at least annual tabletop exercises and after major architecture changes. Exercise administrator compromise plus data exposure/restore at minimum; record gaps and owners. A tabletop is not a penetration test or restore proof.
+
+### Required first tabletop scenario and pass record
+
+Use only synthetic identifiers and the private incident channel. The facilitator records UTC start/end times, participants by assigned incident role, each decision, evidence requested, communications owner, recovery checkpoint, gap owner, due date, and final disposition.
+
+1. **Inject 1 — identity compromise:** a synthetic administrator's Entra sign-in shows unexpected MFA recovery followed by CAT access and a high-volume protected export signal. The team must identify the incident coordinator, revoke the Entra identity and CAT sessions, preserve IdP/CAT/Vercel evidence, protect unaffected administrators, and identify who has notification authority.
+2. **Inject 2 — possible disclosure:** logs cannot initially prove whether the export completed. The team must define the affected time window and data classes without copying protected data into the exercise record, preserve audit/provider evidence, involve privacy/legal, and state what would trigger member, contractual, insurer, or regulator review.
+3. **Inject 3 — scanner outage during containment:** new uploads fail closed while the shared scanner is unavailable. The team must keep unsafe delivery blocked, choose whether to pause uploads, identify the scanner operator/escalation path, and refuse an unscanned bypass.
+4. **Inject 4 — recovery:** the latest database backup and encrypted-object recovery copy are available. The team must select a disposable restore target, identify the key custodian and recovery operator, validate checksums/decryption with synthetic data, and define the approval needed before normal service resumes.
+5. **Inject 5 — closure:** require a clean deployment, session-revocation evidence, scanner recovery, private-storage validation, monitoring receipt, backup status, a preliminary cause, and assigned remediation before declaring recovery.
+
+The exercise passes only if every required role and alternate acknowledged the call tree; session/account containment, evidence preservation, scanner fail-closed behavior, recovery authority, privacy/legal escalation, internal communications, and restoration criteria were each exercised; and every gap has an owner and due date. The accountable owner signs the private after-action record. Repository documentation and an AI-led walkthrough alone are preparation, not evidence that the human tabletop occurred.

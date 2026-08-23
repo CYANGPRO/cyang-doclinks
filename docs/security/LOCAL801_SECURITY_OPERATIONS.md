@@ -39,3 +39,18 @@ No retention period is approved, so no automatic deletion exists. The read-only 
 `npm --prefix apps/local801-engage run security:retention-inventory`
 
 It reports only counts/fingerprints for cleanup-pending documents, expired generated reports, import source files, failed temporary import jobs, and possible orphaned CAT objects. Orphan classification is limited to the exact bounded R2 page and asks the database for references to those exact keys within the exact organization; off-page keys cannot be classified. Treat possible orphans as review candidates and never delete based on one run. After Local 801 approves retention periods, design and separately review a destructive mode with exact target confirmation, disabled-launch plus maintenance checks, a typed confirmation, bounded batches, first-run dry output, durable per-item evidence, retry-safe state, backups, legal/privacy approval, cross-organization refusal tests and restore testing.
+
+## Required shape for orphan cleanup; execution remains disabled
+
+An R2 object is only a cleanup candidate after all of the following are true. This procedure does not supply the still-missing retention approval and does not authorize deletion by itself.
+
+1. Run two bounded inventories at least 24 hours apart. The same opaque key fingerprint and byte size must appear as a possible orphan in both runs, with neither run truncated before that key.
+2. Resolve the exact key in the private change session, then query every CAT object-reference table across the CAT database, not only the current organization. Refuse cleanup if any current, archived, pending-cleanup, import, generated-report, recovery, or legal-hold record references the key.
+3. HEAD the exact private object and record only its opaque fingerprint, byte size, encrypted-object metadata version, checksum metadata presence, bucket identity, and observation times. Never record a filename, plaintext, key material, or signed URL.
+4. Confirm the approved retention period has elapsed, no legal/preservation hold applies, the latest CAT backup succeeded, a restore test is current, and both `LOCAL801_PRODUCTION_LAUNCH_ENABLED=0` and the maintenance window are recorded.
+5. Obtain per-object approval from the records owner and storage operator. A batch may contain at most 25 exact keys and must use a bucket-scoped delete credential created for that approved window; application and recovery credentials are not deletion credentials.
+6. Dry-run the exact batch, record the typed confirmation derived from the bucket plus batch fingerprint, then delete only the enumerated keys. Do not use a prefix, wildcard, recursive command, lifecycle rule, or database-derived unbounded list.
+7. HEAD every exact key and require an absent response. Re-run the all-table reference query and the bounded inventory; create metadata-only cleanup evidence for each item and revoke the temporary delete credential.
+8. If deletion or verification is partial, stop the batch, retain the remaining exact-key list privately, open an incident/cleanup ticket, and do not remove database metadata merely to make inventory pass.
+
+Before any destructive implementation is enabled, tests must prove exact target resolution, maximum batch size, two-observation timing, hold/refusal behavior, all-organization reference checks, launch-disabled/maintenance gates, per-item approval, idempotent absence handling, partial-failure recovery, metadata-only evidence, and credential revocation. Until those tests and the approved schedule exist, the inventory command remains the only enabled retention tool.
