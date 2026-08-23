@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   authorizeProductionIdentity,
   getProductionAuthConfig,
+  productionAuthSafeCode,
   productionIdentityFromProfile,
   profileHasRequiredMfa,
   resolveProductionSessionBinding,
@@ -72,6 +73,13 @@ test("OIDC profile requires subject, verified email, and configured MFA assuranc
   assert.deepEqual(parsed, identity);
   assert.throws(() => productionIdentityFromProfile({ sub: "x", email: "person@example.test", email_verified: false, amr: ["mfa"] }, config), /verify/i);
   assert.throws(() => productionIdentityFromProfile({ sub: "x", email: "person@example.test", email_verified: true, amr: ["pwd"] }, config), /MFA/i);
+});
+
+test("production auth exposes only allowlisted, PII-free rejection codes", () => {
+  assert.equal(productionAuthSafeCode(new ProductionAuthError("MFA_REQUIRED", "details")), "MFA_REQUIRED");
+  assert.equal(productionAuthSafeCode({ code: "USER_NOT_PROVISIONED", email: "person@example.test" }), "USER_NOT_PROVISIONED");
+  assert.equal(productionAuthSafeCode({ code: "person@example.test" }), "AUTHORIZATION_FAILED");
+  assert.equal(productionAuthSafeCode(new Error("token details")), "AUTHORIZATION_FAILED");
 });
 
 test("production identity binding requires one active provisioned user with one valid role and links subject atomically", async () => {
@@ -164,6 +172,8 @@ test("production NextAuth route and server authorization keep Preview cookies se
   assert.match(options, /strategy: "jwt"/);
   assert.match(options, /productionIdentityFromProfile/);
   assert.match(options, /authorizeProductionIdentity/);
+  assert.match(options, /writeSecuritySignal\("warn", "authorization\.denied"/);
+  assert.match(options, /safeCode: productionAuthSafeCode\(error\)/);
   assert.match(options, /productionAuthRuntimeEnabled\(\)/);
   assert.match(options, /delete token\.email/);
   assert.match(options, /session\.user = undefined/);

@@ -53,6 +53,24 @@ export class ProductionAuthError extends Error {
   }
 }
 
+const safeProductionAuthCodes = new Set([
+  "AUTH_CONFIG_INVALID",
+  "AUTH_DISABLED",
+  "EMAIL_NOT_VERIFIED",
+  "EMAIL_REQUIRED",
+  "IDENTITY_INVALID",
+  "IDENTITY_MISMATCH",
+  "MFA_REQUIRED",
+  "PROTECTED_PII_INVALID",
+  "USER_NOT_PROVISIONED",
+]);
+
+export function productionAuthSafeCode(error: unknown) {
+  if (!error || typeof error !== "object" || !("code" in error)) return "AUTHORIZATION_FAILED";
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" && safeProductionAuthCodes.has(code) ? code : "AUTHORIZATION_FAILED";
+}
+
 function nonempty(value: string | undefined) {
   return value?.trim() ?? "";
 }
@@ -242,4 +260,4 @@ export async function resolveProductionSessionBinding(
     : null;
 }
 
-export const __testing = { asRole, providerPattern, subjectPattern };
+export const __testing = { asRole, providerPattern, safeProductionAuthCodes, subjectPattern };

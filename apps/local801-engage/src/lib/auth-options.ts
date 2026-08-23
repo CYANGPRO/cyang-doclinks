@@ -5,10 +5,12 @@ import type { OAuthConfig } from "next-auth/providers/oauth";
 import {
   authorizeProductionIdentity,
   getProductionAuthConfig,
+  productionAuthSafeCode,
   productionIdentityFromProfile,
   type ProductionAuthBinding,
 } from "./production-auth.ts";
 import { productionAuthRuntimeEnabled } from "./production-launch-policy.ts";
+import { writeSecuritySignal } from "./security-signal.ts";
 
 const secureCookie = process.env.NODE_ENV === "production";
 
@@ -74,7 +76,13 @@ export const authOptions: NextAuthOptions = {
       try {
         await bindingFromProfile(profile);
         return true;
-      } catch {
+      } catch (error) {
+        writeSecuritySignal("warn", "authorization.denied", {
+          component: "production_auth",
+          operation: "sign_in",
+          outcome: "denied",
+          safeCode: productionAuthSafeCode(error),
+        });
         return false;
       }
     },
