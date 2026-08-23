@@ -34,6 +34,8 @@ const windowStartedAt = new Date(Math.floor(now.getTime() / (windowSeconds * 100
 
 let operationError;
 let cleanupError;
+let operationStage = "target-state";
+let safeFailureCodes = [];
 try {
   const [targetState] = await sql`
     select
@@ -54,17 +56,12 @@ try {
         'EXECUTE'
       ) as app_cleanup_execute
   `;
-  assert.deepEqual(targetState, {
-    migration_role: true,
-    bucket_table: true,
-    consume_function: true,
-    cleanup_function: true,
-    app_schema_usage: true,
-    app_bucket_dml: true,
-    app_consume_execute: true,
-    app_cleanup_execute: true,
-  });
+  safeFailureCodes = Object.entries(targetState)
+    .filter(([_name, passed]) => passed !== true)
+    .map(([name]) => `TARGET_${name.toUpperCase()}`);
+  assert.equal(safeFailureCodes.length, 0);
 
+  operationStage = "concurrency-and-denial";
   const decisions = await Promise.all(Array.from({ length: 25 }, () => sql`
     select allowed, retry_after_seconds, current_count
     from local801.consume_rate_limit(
@@ -96,7 +93,11 @@ try {
 }
 
 if (operationError || cleanupError) {
-  process.stderr.write("Production rate-limit acceptance failed safely; inspect the guarded run without exposing credentials.\n");
+  process.stderr.write(`${JSON.stringify({
+    status: "failed-safe",
+    stage: cleanupError ? "exact-cleanup" : operationStage,
+    blockers: safeFailureCodes,
+  })}\n`);
   process.exitCode = 1;
 } else {
   process.stdout.write(`${JSON.stringify({
