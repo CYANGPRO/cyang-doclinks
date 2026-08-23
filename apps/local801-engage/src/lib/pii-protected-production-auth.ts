@@ -43,6 +43,7 @@ type IdentityRow = {
   provider_subject_encryption_key_version: string;
   provider_subject_encryption_format_version: number;
 };
+type SubjectBoundUserRow = UserRow & IdentityRow;
 
 type ProtectedSessionInput = {
   organizationSlug: string;
@@ -69,6 +70,21 @@ function encrypted(payload: string, keyVersion: string, formatVersion: number): 
 
 function subjectDomain(providerId: string) {
   return `auth:provider-subject:${providerId}`;
+}
+
+function protectedUserAccount(organization: OrganizationRow, row: UserRow) {
+  const role = asRole(row.role);
+  const sessionVersion = Number(row.auth_session_version);
+  if (!role || !Number.isSafeInteger(sessionVersion) || sessionVersion < 1) {
+    authError("USER_NOT_PROVISIONED", "The Local 801 account is not provisioned with one valid role.");
+  }
+  const keyConfig = getPiiKeyConfiguration();
+  const email = decryptPiiField(
+    encrypted(row.email_encrypted_payload, row.email_encryption_key_version, row.email_encryption_format_version),
+    { organizationId: organization.id, entity: "user", recordId: row.user_id, field: "email" },
+    keyConfig,
+  );
+  return { row, role, sessionVersion, email, keyConfig };
 }
 
 async function resolveOrganization(config: ProductionAuthConfig, query: DatabaseQuery) {
@@ -116,19 +132,72 @@ async function resolveUserByProtectedEmail(
     LIMIT 2
   `, [organization.id, lookup.blindIndexKeyVersion, lookup.blindIndex]);
   if (rows.length !== 1) authError("USER_NOT_PROVISIONED", "No unique active Local 801 account is provisioned for this identity.");
+  const account = protectedUserAccount(organization, rows[0]);
+  if (normalizePiiEmail(account.email) !== normalizedEmail) authError("IDENTITY_MISMATCH", "The protected Local 801 email did not match the verified identity-provider email.");
+  return account;
+}
+
+async function resolveUserByProtectedSubject(
+  organization: OrganizationRow,
+  identity: ProductionIdentity,
+  query: DatabaseQuery,
+) {
+  const keyConfig = getPiiKeyConfiguration();
+  const domain = subjectDomain(identity.providerId);
+  const normalizedSubject = normalizePiiIdentifier(identity.subject);
+  const lookup = createPiiBlindIndex(normalizedSubject, { organizationId: organization.id, domain }, keyConfig);
+  const rows = await query<SubjectBoundUserRow>(`
+    /* production-auth:protected-bound-subject */
+    SELECT organization.slug AS organization_slug, organization.id::text AS organization_id,
+      app_user.id::text AS user_id, app_user.auth_session_version, role.code AS role,
+      user_protected.email_encrypted_payload, user_protected.email_encryption_key_version,
+      user_protected.email_encryption_format_version,
+      auth_identity.id::text AS auth_identity_id,
+      identity_protected.provider_subject_encrypted_payload,
+      identity_protected.provider_subject_encryption_key_version,
+      identity_protected.provider_subject_encryption_format_version
+    FROM local801.pii_exact_indexes subject_index
+    JOIN local801.auth_identities auth_identity
+      ON auth_identity.organization_id = subject_index.organization_id
+      AND auth_identity.id = subject_index.entity_id
+      AND auth_identity.provider_id = $3::text
+    JOIN local801.auth_identity_pii identity_protected
+      ON identity_protected.organization_id = auth_identity.organization_id
+      AND identity_protected.auth_identity_id = auth_identity.id
+    JOIN local801.organizations organization
+      ON organization.id = auth_identity.organization_id AND organization.archived_at IS NULL
+    JOIN local801.users app_user
+      ON app_user.organization_id = organization.id
+      AND app_user.id = auth_identity.user_id
+      AND app_user.deactivated_at IS NULL
+    JOIN local801.user_pii user_protected
+      ON user_protected.organization_id = organization.id AND user_protected.user_id = app_user.id
+    JOIN local801.workspace_user_roles user_role ON user_role.user_id = app_user.id
+    JOIN local801.workspace_roles role
+      ON role.id = user_role.role_id AND role.organization_id = organization.id
+    WHERE subject_index.organization_id = $1::uuid
+      AND subject_index.entity_type = 'auth_identity'
+      AND subject_index.index_domain = $2::text
+      AND subject_index.index_key_version = $4::text
+      AND subject_index.index_hash = $5::text
+    LIMIT 2
+  `, [organization.id, domain, identity.providerId, lookup.blindIndexKeyVersion, lookup.blindIndex]);
+  if (rows.length > 1) authError("IDENTITY_MISMATCH", "The identity-provider subject is not uniquely linked.");
+  if (rows.length === 0) return null;
   const row = rows[0];
-  const role = asRole(row.role);
-  const sessionVersion = Number(row.auth_session_version);
-  if (!role || !Number.isSafeInteger(sessionVersion) || sessionVersion < 1) {
-    authError("USER_NOT_PROVISIONED", "The Local 801 account is not provisioned with one valid role.");
-  }
-  const storedEmail = decryptPiiField(
-    encrypted(row.email_encrypted_payload, row.email_encryption_key_version, row.email_encryption_format_version),
-    { organizationId: organization.id, entity: "user", recordId: row.user_id, field: "email" },
+  const storedSubject = decryptPiiField(
+    encrypted(
+      row.provider_subject_encrypted_payload,
+      row.provider_subject_encryption_key_version,
+      row.provider_subject_encryption_format_version,
+    ),
+    { organizationId: organization.id, entity: "auth-identity", recordId: row.auth_identity_id, field: "provider-subject" },
     keyConfig,
   );
-  if (normalizePiiEmail(storedEmail) !== normalizedEmail) authError("IDENTITY_MISMATCH", "The protected Local 801 email did not match the verified identity-provider email.");
-  return { row, role, sessionVersion, email: storedEmail, keyConfig };
+  if (normalizePiiIdentifier(storedSubject) !== normalizedSubject) {
+    authError("IDENTITY_MISMATCH", "The protected identity-provider subject did not match its lookup index.");
+  }
+  return { ...protectedUserAccount(organization, row), authIdentityId: row.auth_identity_id };
 }
 
 async function resolveBootstrapOwner(
@@ -159,17 +228,11 @@ async function resolveBootstrapOwner(
   `, [organization.id]);
   if (rows.length !== 1) authError("BOOTSTRAP_OWNER_NOT_PROVISIONED", "The initial Local 801 system owner is not uniquely provisioned.");
   const row = rows[0];
-  const sessionVersion = Number(row.auth_session_version);
-  if (!Number.isSafeInteger(sessionVersion) || sessionVersion < 1) {
-    authError("BOOTSTRAP_OWNER_NOT_PROVISIONED", "The initial Local 801 system owner has an invalid session version.");
+  const account = protectedUserAccount(organization, row);
+  if (account.role !== "system_owner") {
+    authError("BOOTSTRAP_OWNER_NOT_PROVISIONED", "The initial Local 801 system owner does not have the required role.");
   }
-  const keyConfig = getPiiKeyConfiguration();
-  const email = decryptPiiField(
-    encrypted(row.email_encrypted_payload, row.email_encryption_key_version, row.email_encryption_format_version),
-    { organizationId: organization.id, entity: "user", recordId: row.user_id, field: "email" },
-    keyConfig,
-  );
-  return { row, role: "system_owner" as const, sessionVersion, email, keyConfig };
+  return { ...account, role: "system_owner" as const };
 }
 
 async function resolveIdentityBindings(
@@ -335,6 +398,25 @@ export async function authorizeProtectedProductionIdentity(
   const query = dependencies.query ?? queryLocal801;
   const transaction = dependencies.transaction ?? runLocal801Transaction;
   const organization = await resolveOrganization(config, query);
+  // An established, encrypted provider-subject binding is the authoritative account selector.
+  // Resolve it before any bootstrap fallback so a provisioned owner does not depend on the
+  // one-time production-initialization marker or a mutable email claim on later sign-ins.
+  const boundAccount = await resolveUserByProtectedSubject(organization, identity, query);
+  if (boundAccount) {
+    await transaction(authenticationStatements(
+      organization.id,
+      boundAccount.row.user_id,
+      boundAccount.sessionVersion,
+      boundAccount.authIdentityId,
+    ));
+    return {
+      organizationSlug: boundAccount.row.organization_slug,
+      userId: boundAccount.row.user_id,
+      email: boundAccount.email,
+      role: boundAccount.role,
+      sessionVersion: boundAccount.sessionVersion,
+    };
+  }
   // The bootstrap identity is authorized by the immutable Entra object ID and is resolved
   // through the recorded initial-system-owner relationship. Its mutable email claim never
   // selects or authorizes a database account.
