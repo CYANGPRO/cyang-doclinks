@@ -33,6 +33,7 @@ jobs:
       - name: Verify Production limiter and exact synthetic cleanup
         env:
           LOCAL801_MIGRATION_DATABASE_URL: ${{ secrets.LOCAL801_MIGRATION_DATABASE_URL }}
+          LOCAL801_RATE_LIMIT_DRILL_APP_DATABASE_URL: ${{ secrets.LOCAL801_RATE_LIMIT_DRILL_APP_DATABASE_URL }}
           LOCAL801_PRODUCTION_LAUNCH_ENABLED: "0"
           LOCAL801_PRODUCTION_RATE_LIMIT_ACCEPTANCE: "1"
           LOCAL801_PRODUCTION_RATE_LIMIT_CONFIRMATION: ${{ inputs.confirmation }}

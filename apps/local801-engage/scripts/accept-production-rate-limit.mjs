@@ -4,6 +4,7 @@ import postgres from "postgres";
 
 const confirmation = "RUN LOCAL801 PRODUCTION RATE LIMIT ACCEPTANCE";
 const databaseUrl = process.env.LOCAL801_MIGRATION_DATABASE_URL;
+const applicationDatabaseUrl = process.env.LOCAL801_RATE_LIMIT_DRILL_APP_DATABASE_URL;
 if (process.env.LOCAL801_PRODUCTION_RATE_LIMIT_ACCEPTANCE !== "1") {
   throw new Error("Production rate-limit acceptance requires explicit opt-in.");
 }
@@ -14,17 +15,28 @@ if (process.env.LOCAL801_PRODUCTION_LAUNCH_ENABLED !== "0") {
   throw new Error("Production launch must remain disabled during rate-limit acceptance.");
 }
 if (!databaseUrl) throw new Error("The guarded migration database URL is required.");
+if (!applicationDatabaseUrl) throw new Error("The temporary guarded application database URL is required.");
 
 const target = new URL(databaseUrl);
+const applicationTarget = new URL(applicationDatabaseUrl);
 const tlsMode = target.searchParams.get("sslmode");
-if (!target.hostname.endsWith(".neon.tech") || !["require", "verify-ca", "verify-full"].includes(tlsMode ?? "")) {
+const applicationTlsMode = applicationTarget.searchParams.get("sslmode");
+const normalizedHost = (hostname) => hostname.replace("-pooler.", ".");
+if (!target.hostname.endsWith(".neon.tech") || !["require", "verify-ca", "verify-full"].includes(tlsMode ?? "")
+  || !applicationTarget.hostname.endsWith(".neon.tech")
+  || !["require", "verify-ca", "verify-full"].includes(applicationTlsMode ?? "")
+  || normalizedHost(target.hostname) !== normalizedHost(applicationTarget.hostname)) {
   throw new Error("Production rate-limit acceptance requires an approved TLS Neon target.");
 }
 if (decodeURIComponent(target.username) !== "local801_migrator") {
   throw new Error("Production rate-limit acceptance requires the scoped Local 801 migration role.");
 }
+if (decodeURIComponent(applicationTarget.username) !== "local801_app") {
+  throw new Error("Production rate-limit acceptance requires the scoped Local 801 application role.");
+}
 
-const sql = postgres(databaseUrl, { max: 10, prepare: false, onnotice: () => {} });
+const migrationSql = postgres(databaseUrl, { max: 1, prepare: false, onnotice: () => {} });
+const appSql = postgres(applicationDatabaseUrl, { max: 10, prepare: false, onnotice: () => {} });
 const startedAt = Date.now();
 const bucketKey = createHash("sha256").update(`local801-production-rate-limit:${randomUUID()}`).digest("hex");
 const subjectHash = createHash("sha256").update(`local801-production-rate-limit-subject:${randomUUID()}`).digest("hex");
@@ -36,9 +48,9 @@ let operationError;
 let cleanupError;
 let operationStage = "target-state";
 let safeFailureCodes = [];
-let cleanupMethod = "exact-direct-delete";
+let expiredBucketsRemoved = 0;
 try {
-  const [targetState] = await sql`
+  const [targetState] = await migrationSql`
     select
       current_user = 'local801_migrator' as migration_role,
       to_regclass('local801.rate_limit_buckets') is not null as bucket_table,
@@ -63,7 +75,7 @@ try {
   assert.equal(safeFailureCodes.length, 0);
 
   operationStage = "concurrency-and-denial";
-  const decisions = await Promise.all(Array.from({ length: 25 }, () => sql`
+  const decisions = await Promise.all(Array.from({ length: 25 }, () => appSql`
     select allowed, retry_after_seconds, current_count
     from local801.consume_rate_limit(
       ${bucketKey}, null, 'ip', ${subjectHash}, 'authentication',
@@ -80,14 +92,11 @@ try {
   operationError = error;
 } finally {
   try {
-    try {
-      await sql`delete from local801.rate_limit_buckets where bucket_key = ${bucketKey} and subject_hash = ${subjectHash}`;
-    } catch {
-      cleanupMethod = "bounded-expired-bucket-cleanup";
-      const cleanupAt = new Date(now.getTime() + (windowSeconds + 1) * 1000);
-      await sql`select local801.cleanup_expired_rate_limits(1000, ${cleanupAt.toISOString()}::timestamptz)`;
-    }
-    const [{ remaining }] = await sql`
+    await appSql`delete from local801.rate_limit_buckets where bucket_key = ${bucketKey} and subject_hash = ${subjectHash}`;
+    const [cleanup] = await appSql`select local801.cleanup_expired_rate_limits(1000) as deleted_count`;
+    expiredBucketsRemoved = Number(cleanup.deleted_count);
+    assert.equal(Number.isSafeInteger(expiredBucketsRemoved) && expiredBucketsRemoved >= 0 && expiredBucketsRemoved <= 1000, true);
+    const [{ remaining }] = await appSql`
       select count(*)::integer as remaining
       from local801.rate_limit_buckets
       where bucket_key = ${bucketKey} or subject_hash = ${subjectHash}
@@ -96,7 +105,8 @@ try {
   } catch (error) {
     cleanupError = error;
   }
-  await sql.end({ timeout: 1 }).catch(() => undefined);
+  await migrationSql.end({ timeout: 1 }).catch(() => undefined);
+  await appSql.end({ timeout: 1 }).catch(() => undefined);
 }
 
 if (operationError || cleanupError) {
@@ -110,13 +120,13 @@ if (operationError || cleanupError) {
   process.stdout.write(`${JSON.stringify({
     status: "verified",
     target: "production-neon",
-    role: "local801_migrator",
+    roles: ["local801_migrator", "local801_app"],
     applicationRolePrivileges: "verified",
     policy: "authentication",
     attempts: 25,
     allowed: 10,
     denied: 15,
-    cleanupMethod,
+    expiredBucketsRemoved,
     cleanup: "exact-synthetic-bucket-confirmed-absent",
     durationMs: Date.now() - startedAt,
   })}\n`);

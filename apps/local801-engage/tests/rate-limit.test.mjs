@@ -80,9 +80,10 @@ test("Production rate-limit acceptance is manual, scoped, launch-disabled, and e
   assert.match(workflow, /workflow_dispatch:/);
   assert.doesNotMatch(workflow, /\b(push|pull_request|schedule):/);
   assert.match(workflow, /secrets\.LOCAL801_MIGRATION_DATABASE_URL/);
+  assert.match(workflow, /secrets\.LOCAL801_RATE_LIMIT_DRILL_APP_DATABASE_URL/);
   assert.match(script, /LOCAL801_PRODUCTION_LAUNCH_ENABLED !== "0"/);
   assert.match(script, /decodeURIComponent\(target\.username\) !== "local801_migrator"/);
   assert.match(script, /has_table_privilege\('local801_app'/);
-  assert.match(script, /delete from local801\.rate_limit_buckets where bucket_key = \$\{bucketKey\} and subject_hash = \$\{subjectHash\}/);
+  assert.match(script, /appSql`delete from local801\.rate_limit_buckets where bucket_key = \$\{bucketKey\} and subject_hash = \$\{subjectHash\}/);
   assert.doesNotMatch(script, /console\.log\([^)]*databaseUrl/);
 });
