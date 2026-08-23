@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   authorizeProductionIdentity,
   getProductionAuthConfig,
+  productionAuthClaimShape,
   productionAuthSafeCode,
   productionIdentityFromProfile,
   profileHasRequiredMfa,
@@ -91,6 +92,20 @@ test("production auth exposes only allowlisted, PII-free rejection codes", () =>
   assert.equal(productionAuthSafeCode({ code: "USER_NOT_PROVISIONED", email: "person@example.test" }), "USER_NOT_PROVISIONED");
   assert.equal(productionAuthSafeCode({ code: "person@example.test" }), "AUTHORIZATION_FAILED");
   assert.equal(productionAuthSafeCode(new Error("token details")), "AUTHORIZATION_FAILED");
+});
+
+test("production auth diagnostics expose only claim-presence bits", () => {
+  assert.equal(productionAuthClaimShape({
+    email: "person@example.test",
+    verified_primary_email: "person@example.test",
+    emails: ["person@example.test"],
+    email_verified: true,
+    xms_edov: true,
+    amr: ["pwd", "mfa"],
+    acr: "value",
+  }), "email1-primary1-emails1-verified1-domain1-amr1-acr1");
+  assert.equal(productionAuthClaimShape({ email: "", emails: [], token: "secret" }),
+    "email0-primary0-emails0-verified0-domain0-amr0-acr0");
 });
 
 test("production identity binding requires one active provisioned user with one valid role and links subject atomically", async () => {
@@ -185,6 +200,7 @@ test("production NextAuth route and server authorization keep Preview cookies se
   assert.match(options, /authorizeProductionIdentity/);
   assert.match(options, /writeSecuritySignal\("warn", "authorization\.denied"/);
   assert.match(options, /safeCode: productionAuthSafeCode\(error\)/);
+  assert.match(options, /reason: productionAuthClaimShape\(profile as Record<string, unknown>\)/);
   assert.match(options, /productionAuthRuntimeEnabled\(\)/);
   assert.match(options, /delete token\.email/);
   assert.match(options, /session\.user = undefined/);

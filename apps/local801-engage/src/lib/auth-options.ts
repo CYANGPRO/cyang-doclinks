@@ -5,6 +5,7 @@ import type { OAuthConfig } from "next-auth/providers/oauth";
 import {
   authorizeProductionIdentity,
   getProductionAuthConfig,
+  productionAuthClaimShape,
   productionAuthSafeCode,
   productionIdentityFromProfile,
   type ProductionAuthBinding,
@@ -81,6 +82,7 @@ export const authOptions: NextAuthOptions = {
           component: "production_auth",
           operation: "sign_in",
           outcome: "denied",
+          reason: productionAuthClaimShape(profile as Record<string, unknown>),
           safeCode: productionAuthSafeCode(error),
         });
         return false;

@@ -71,6 +71,21 @@ export function productionAuthSafeCode(error: unknown) {
   return typeof code === "string" && safeProductionAuthCodes.has(code) ? code : "AUTHORIZATION_FAILED";
 }
 
+export function productionAuthClaimShape(profile: Record<string, unknown>) {
+  const hasString = (key: string) => typeof profile[key] === "string" && (profile[key] as string).length > 0;
+  const hasStringArray = (key: string) => Array.isArray(profile[key])
+    && (profile[key] as unknown[]).some((value) => typeof value === "string" && value.length > 0);
+  return [
+    `email${hasString("email") ? 1 : 0}`,
+    `primary${hasString("verified_primary_email") ? 1 : 0}`,
+    `emails${hasStringArray("emails") ? 1 : 0}`,
+    `verified${profile.email_verified === true ? 1 : 0}`,
+    `domain${profile.xms_edov === true ? 1 : 0}`,
+    `amr${hasString("amr") || hasStringArray("amr") ? 1 : 0}`,
+    `acr${hasString("acr") ? 1 : 0}`,
+  ].join("-");
+}
+
 function nonempty(value: string | undefined) {
   return value?.trim() ?? "";
 }
