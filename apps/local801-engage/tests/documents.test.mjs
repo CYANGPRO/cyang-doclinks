@@ -182,10 +182,10 @@ test("document handle parser rejects overlong or malformed values", () => {
   assert.equal(documentTesting.normalizeDocumentHandle("x".repeat(65)), null);
 });
 
-test("download route is preview-only, authenticated, handle-resolved, decrypted through the existing service, and non-cacheable", () => {
+test("download route supports authenticated Preview and Production users, resolves opaque handles, decrypts through the existing service, and is non-cacheable", () => {
   const source = readFileSync(new URL("../src/app/api/documents/[handle]/download/route.ts", import.meta.url), "utf8");
-  assert.match(source, /VERCEL_ENV === "production"/);
-  assert.match(source, /LOCAL801_PREVIEW_AUTH_ENABLED !== "1"/);
+  assert.doesNotMatch(source, /VERCEL_ENV === "production"/);
+  assert.doesNotMatch(source, /LOCAL801_PREVIEW_AUTH_ENABLED/);
   assert.match(source, /requirePreviewUser\("viewDocuments"\)/);
   assert.match(source, /resolveWorkspaceContext\(auth\.user\)/);
   assert.match(source, /resolveDocumentDownloadId\(context, handle\)/);
@@ -197,7 +197,23 @@ test("download route is preview-only, authenticated, handle-resolved, decrypted 
   assert.match(source, /Content-Disposition/);
   assert.match(source, /X-Content-Type-Options.*nosniff/);
   assert.match(source, /Cross-Origin-Resource-Policy.*same-origin/);
+  assert.match(source, /runtime = "nodejs"/);
   assert.doesNotMatch(source, /storage_key|presign|signedUrl|putObject/);
+});
+
+test("delete route supports authenticated Preview and Production users while preserving same-origin, permission, opaque-handle, audit, and encrypted-storage controls", () => {
+  const source = readFileSync(new URL("../src/app/api/documents/[handle]/delete/route.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /VERCEL_ENV === "production"/);
+  assert.doesNotMatch(source, /LOCAL801_PREVIEW_AUTH_ENABLED/);
+  assert.match(source, /hasExactSameOrigin\(request\)/);
+  assert.match(source, /requirePreviewUser\("manageDocuments"\)/);
+  assert.match(source, /resolveWorkspaceContext\(auth\.user\)/);
+  assert.match(source, /resolveDocumentDownloadId\(context, handle\)/);
+  assert.match(source, /eventType: "record\.archive"/);
+  assert.match(source, /deleteEncryptedDocument\(/);
+  assert.match(source, /Cache-Control.*private, no-store/);
+  assert.match(source, /runtime = "nodejs"/);
+  assert.doesNotMatch(source, /storage_key|presign|signedUrl|deleteObject/);
 });
 
 test("documents page uses the opaque handle for download and never renders a document UUID", () => {

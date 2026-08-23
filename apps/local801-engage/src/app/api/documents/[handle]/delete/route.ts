@@ -7,6 +7,7 @@ import { hasExactSameOrigin } from "@/lib/request-security";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 const noStore = { "Cache-Control": "private, no-store, max-age=0, must-revalidate" };
 
@@ -18,14 +19,10 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ handle: string }> },
 ) {
-  if (process.env.VERCEL_ENV === "production" || process.env.LOCAL801_PREVIEW_AUTH_ENABLED !== "1") {
-    return json({ error: "NOT_FOUND" }, 404);
-  }
-
   if (!hasExactSameOrigin(request)) {
     return json({
       error: "FORBIDDEN_ORIGIN",
-      message: "Document deletion must come from the signed-in Preview application.",
+      message: "Document deletion must come from the signed-in Local 801 application.",
     }, 403);
   }
 

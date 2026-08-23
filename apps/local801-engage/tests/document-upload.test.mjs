@@ -125,10 +125,10 @@ test("audit failure compensates by deleting/archiving the encrypted document and
   assert.deepEqual(deps.calls.map(([name]) => name), ["scan", "store", "audit", "remove"]);
 });
 
-test("upload route is Preview-only, same-origin, permission-gated, scanner-backed, encrypted, and non-cacheable", () => {
+test("upload route supports authenticated Preview and Production users while remaining same-origin, permission-gated, scanner-backed, encrypted, and non-cacheable", () => {
   const source = readFileSync(new URL("../src/app/api/documents/upload/route.ts", import.meta.url), "utf8");
-  assert.match(source, /VERCEL_ENV === "production"/);
-  assert.match(source, /LOCAL801_PREVIEW_AUTH_ENABLED !== "1"/);
+  assert.doesNotMatch(source, /VERCEL_ENV === "production"/);
+  assert.doesNotMatch(source, /LOCAL801_PREVIEW_AUTH_ENABLED/);
   assert.match(source, /hasExactSameOrigin\(request\)/);
   assert.match(source, /requirePreviewUser\("manageDocuments"\)/);
   assert.match(source, /resolveWorkspaceContext\(auth\.user\)/);
@@ -137,6 +137,7 @@ test("upload route is Preview-only, same-origin, permission-gated, scanner-backe
   assert.match(source, /deleteEncryptedDocument/);
   assert.match(source, /writeAuditEvent/);
   assert.match(source, /Cache-Control.*private, no-store/);
+  assert.match(source, /runtime = "nodejs"/);
   assert.doesNotMatch(source, /presign|signedUrl|storage_key/);
 });
 

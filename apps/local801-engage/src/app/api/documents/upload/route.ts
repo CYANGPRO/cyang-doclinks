@@ -11,6 +11,9 @@ import { writeSecuritySignal } from "@/lib/security-signal";
 
 const multipartOverheadAllowanceBytes = 1_048_576;
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 function jsonNoStore(body: Record<string, unknown>, status: number) {
   return NextResponse.json(body, {
     status,
@@ -19,11 +22,8 @@ function jsonNoStore(body: Record<string, unknown>, status: number) {
 }
 
 export async function POST(request: Request) {
-  if (process.env.VERCEL_ENV === "production" || process.env.LOCAL801_PREVIEW_AUTH_ENABLED !== "1") {
-    return jsonNoStore({ error: "NOT_FOUND" }, 404);
-  }
   if (!hasExactSameOrigin(request)) {
-    return jsonNoStore({ error: "FORBIDDEN_ORIGIN", message: "Document uploads must come from the signed-in Preview application." }, 403);
+    return jsonNoStore({ error: "FORBIDDEN_ORIGIN", message: "Document uploads must come from the signed-in Local 801 application." }, 403);
   }
 
   const auth = await requirePreviewUser("manageDocuments");

@@ -14,6 +14,9 @@ const safeDocumentMediaTypes = new Set([
   "text/plain",
 ]);
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 function safeDownloadFilename(value: string | null | undefined) {
   const cleaned = (value ?? "document")
     .replace(/[\u0000-\u001f\u007f]/g, "")
@@ -44,10 +47,6 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ handle: string }> },
 ) {
-  if (process.env.VERCEL_ENV === "production" || process.env.LOCAL801_PREVIEW_AUTH_ENABLED !== "1") {
-    return jsonNoStore({ error: "NOT_FOUND" }, 404);
-  }
-
   const auth = await requirePreviewUser("viewDocuments");
   if (!auth.ok) {
     auth.response.headers.set("Cache-Control", "private, no-store, max-age=0, must-revalidate");
