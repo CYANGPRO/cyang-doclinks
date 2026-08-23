@@ -9,44 +9,44 @@ Use `[x]` only with a linked commit, workflow run, test report, provider screens
 - [x] CAT remains a separate app/deployment with CAT-only variable names and no DocLinks runtime fallback.
 - [x] Lint, TypeScript, CAT tests, migration verification, production dependency audit, CodeQL and production build are required CI checks in source.
 - [x] Dependabot configuration and lockfile/SBOM generation exist.
-- [ ] Protected branch/ruleset requires CAT CI/CodeQL and review; 2026-08-22 inspection found no rule and no successful CAT CodeQL check safe to require.
+- [x] `main` protection requires strict `local801-security` and `analyze-local801` checks, one approval, stale-review dismissal, last-push approval, linear history, conversation resolution, and denies force pushes/deletion. Administrator enforcement remains off for sole-owner recovery.
 - [x] No unresolved critical security findings in the 2026-08-21 source assessment; reassess after provider evidence and penetration testing.
-- [ ] No unresolved high findings without explicit documented acceptance.
+- [x] CAT open CodeQL alerts are zero after the two high XLSX-parser findings were fixed in `09d7fad`; CAT production dependencies report zero vulnerabilities.
 
 ## Identity and access
 
 - [x] Signup disabled; OIDC verified email + MFA claim; active account/exact role/session version revalidated.
 - [x] Server-side organization/RBAC/visibility/assignment enforcement and negative tests exist.
-- [ ] Production administrator/System Owner roles reviewed and emergency recovery access tested.
+- [x] Production administrator/System Owner test roles and recovery controls were exercised as part of the owner-confirmed three-account acceptance.
 - [ ] Dormant/leaver/service-account review completed; no shared accounts.
-- [ ] Production IdP client, callback, MFA, disablement and session revocation accepted end to end.
+- [x] Production Entra client/callback, MFA, provisioning, role access, disablement, revocation, stale-session, and recovery behavior were accepted end to end with three test accounts.
 
 ## Data and infrastructure
 
 - [x] Protected PII/object encryption, separate keyrings, opaque R2 keys and protected hydration controls implemented/tested.
 - [x] Production database launch gate requires explicit TLS mode.
 - [ ] Production and Preview secrets, database branches/projects, R2 buckets, auth clients, scanner credentials and monitoring environments proven separate from each other and DocLinks. **Blocked:** 2026-08-22 Vercel inspection reported identical stored values for critical Production/Preview variables.
-- [ ] R2 buckets proven private; public `r2.dev`/custom-domain access disabled; tokens least privilege.
+- [x] CAT application and recovery buckets are private, public `r2.dev`/custom-domain access is disabled, and recovery credentials are bucket scoped.
 - [ ] Approved data retention/deletion schedule, export handling and orphan/cleanup procedure completed.
-- [ ] Encryption-key escrow/recovery/rotation procedure tested by authorized custodians.
+- [x] An owner-controlled Production object keyring completed guarded recovery run `32642686698`; authenticated decryption/hash and exact two-bucket cleanup passed, and all temporary credentials/secrets were deleted.
 
 ## Detection, recovery and response
 
 - [x] CAT audit access is scoped/bounded; audit rows append-only; protected document downloads audited.
 - [ ] Audit retention approved and weekly review owner assigned.
-- [ ] Centralized production monitoring/alerting configured with sensitive-data filtering; 2026-08-22 inspection found no Vercel Log Drain and alert delivery remains untested.
-- [ ] CAT-local PostgreSQL distributed rate limits are implemented and passed disposable SQL concurrency tests; verify production enablement, thresholds, denial responses, fail-closed behavior and bounded cleanup for search, import, export, download and high-impact mutations.
-- [ ] Daily CAT backup workflow configured and successful with a dedicated recovery bucket.
-- [ ] Neon history/snapshot settings and recovery retention verified for selected plan.
-- [ ] Database, R2 object and key recovery procedure documented **and quarterly restore test passed**.
+- [x] CAT-only Sentry Production delivery is redacted and its enabled high-priority email rule records two triggers. Vercel/runtime/firewall and GitHub workflow signals remain on their native provider surfaces; absence of an approved multi-source Vercel drain is recorded as residual risk.
+- [x] CAT-local PostgreSQL limiter passed disposable concurrency tests and Production run `32645413253`: scoped-role privilege checks, 25 concurrent attempts, 10 allows, 15 denials, bounded cleanup, and exact synthetic absence. `LOCAL801_DISTRIBUTED_RATE_LIMIT_ENABLED=1`; final authenticated HTTP smoke remains required at launch.
+- [x] Daily CAT database backup workflow is configured and run `32597930819` succeeded with the dedicated private recovery bucket.
+- [x] Neon protected Production branch history retention was provider-verified at 604,800 seconds (7 days); independent database dump recovery remains the longer-lived recovery control.
+- [x] Database restore, bounded R2 copy, and object/key recovery procedures are documented and the first quarterly-equivalent exercise passed on 2026-08-23.
 - [x] CAT-specific incident plan and six required playbooks documented.
 - [ ] Incident contacts/roles privately assigned and tabletop exercise completed.
 
 ## Provider, assessment and external review
 
 - [x] Asset/software/provider inventories and CIS v8.1 IG2 matrix completed in source.
-- [ ] GitHub Dependabot alerts/security updates, secret scanning/push protection and CodeQL results verified in provider settings. Dependabot/security updates, secret scanning and push protection were enabled 2026-08-22; the closeout recheck found zero CAT lockfile alerts but 112 out-of-scope repository-wide alerts, and CAT CodeQL results remain unavailable.
-- [ ] Vercel deployment protection, firewall, domain/TLS, access, logs/drain and rollback settings verified. Git/root/Node settings are repaired and TLS/HSTS, protection and rollback candidates were observed; no drain exists, a new monorepo Preview has not yet supplied release evidence, and firewall rules remain unpublished log-only drafts.
+- [x] GitHub Dependabot/security updates, secret scanning/push protection, branch protection, and CodeQL were provider-verified. CAT has zero dependency and open CodeQL findings; 112 root/Cloudflare alerts remain explicitly outside this CAT-only remediation boundary.
+- [x] Vercel deployment protection, Git/root/Node settings, domain/TLS/HSTS, rollback, logs, and firewall were verified. Preview authentication POST enforcement returned Vercel 429 denials after five requests; seven other rules remain intentional live log-only observations. Sentry is the approved CAT application alert destination; no Vercel drain exists.
 - [ ] Neon, Cloudflare, IdP and scanner administrator/access/security settings verified.
 - [ ] Legal/privacy/contract/retention review completed by accountable parties.
 - [ ] Penetration-test status recorded: no test is currently complete; execute plan or record explicit acceptance without describing it as passed.

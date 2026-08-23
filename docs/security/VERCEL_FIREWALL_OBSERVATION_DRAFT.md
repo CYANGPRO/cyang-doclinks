@@ -1,6 +1,6 @@
 # CAT Vercel Firewall Observation Draft
 
-Status on 2026-08-22: seven CAT-project rules are staged as provider drafts with the over-threshold action set to **log**. They are not published and do not enforce or return 429. Production publication requires owner-approved change control after observation and Preview testing.
+Status on 2026-08-23: the seven CAT-project observation rules are published, live, valid, and remain **log** only. A separate live Preview enforcement rule, `CAT Preview enforce authentication POST`, limits `POST /api/auth*` to 5 requests per 60 seconds per IP and returns 429 after the threshold. A signed-in seven-request synthetic burst produced five application 404 responses followed by two Vercel 429 responses with `x-vercel-mitigated: deny`. There are no draft or pending firewall changes. Production enforcement still requires owner-approved change control and an adequate observation basis.
 
 | Risk class | Method/path scope | Observation threshold | Counter |
 | --- | --- | --- | --- |
@@ -16,8 +16,8 @@ These are generous observation thresholds, not approved business quotas. Vercel 
 
 ## Required rollout
 
-1. **Log only:** leave the draft unpublished. Review at least one representative normal-traffic period and synthetic bursts in Preview. Record counts, NAT/shared-IP behavior, automation traffic and proposed adjustments without retaining raw member payloads.
-2. **Preview enforcement:** after approval, create or scope equivalent rules to Preview first and change the exceeded action to deny. Verify the response is HTTP 429, legitimate requests recover after the window, and authentication/error pages remain usable. Test shared-office/mobile NAT and approved automation to identify false positives.
+1. **Log only:** keep the seven published observation rules at `log`. Review representative normal-traffic periods and synthetic bursts. Record counts, NAT/shared-IP behavior, automation traffic and proposed adjustments without retaining raw member payloads.
+2. **Preview enforcement:** keep the authentication rule Preview-scoped. Its 429 threshold is accepted; verify legitimate requests recover after the window and test shared-office/mobile NAT and approved automation before considering Production scope.
 3. **Production enforcement:** require an approved change record, rollback owner and captured pre-change diff. Publish only the exact reviewed rules. Monitor 429 rate and user reports during the approved observation window; revert the specific rules if false positives cross the approved threshold.
 
 The Vercel console path is **Project -> Firewall -> Configure -> Firewall Rules**. Before any publish, export or screenshot the draft diff, exact environment scope, method/path expressions, counter, threshold, action and rollback procedure. Never paste provider IDs, account IDs or secret values into repository evidence.

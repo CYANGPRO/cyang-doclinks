@@ -49,7 +49,7 @@ Delivery acceptance uses synthetic events only: emit one allowlisted security ev
 
 ### Synthetic visibility tests
 
-- In an isolated synthetic `example.test` environment, intentionally exceed one low temporary rate-limit threshold and confirm HTTP 429, safe `Retry-After`, a database bucket row with no raw IP, and `[local801-security]` visibility.
+- Rate limiting has two accepted layers: a signed-in Preview firewall burst returned Vercel 429 with `x-vercel-mitigated: deny` after five requests (Vercel does not add `Retry-After`), while Production database run `32645413253` verified atomic allow/deny and exact cleanup through scoped roles. CAT response tests separately confirm HTTP 429, safe `Retry-After`, no-store caching, hashed subject state, and fail-closed 503 behavior. Repeat the authenticated HTTP response and safe-signal check during final launch smoke testing.
 - Attempt one unauthorized synthetic API request and confirm a 401/403 plus metadata-only denial signal.
 - Use scanner test fixtures for clean, infected and outage responses; confirm infected/outage uploads fail closed and emit only the safe code.
 - Tamper with a disposable synthetic encrypted object, confirm retrieval fails closed, and confirm the integrity signal contains no object key, filename, content or PII.
