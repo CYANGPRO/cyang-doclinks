@@ -84,6 +84,22 @@ test("Production rate-limit acceptance is manual, scoped, launch-disabled, and e
   assert.match(script, /LOCAL801_PRODUCTION_LAUNCH_ENABLED !== "0"/);
   assert.match(script, /decodeURIComponent\(target\.username\) !== "local801_migrator"/);
   assert.match(script, /has_table_privilege\('local801_app'/);
-  assert.match(script, /appSql`delete from local801\.rate_limit_buckets where bucket_key = \$\{bucketKey\} and subject_hash = \$\{subjectHash\}/);
+  assert.match(script, /appSql`[\s\S]*cleanup_expired_rate_limits\(1000/);
+  assert.match(script, /migrationSql`[\s\S]*where bucket_key = \$\{bucketKey\} or subject_hash = \$\{subjectHash\}/);
   assert.doesNotMatch(script, /console\.log\([^)]*databaseUrl/);
+});
+
+test("rate-limit functions use scoped definer privileges without direct application table access", async () => {
+  const migration = await readFile(
+    new URL("../db/migrations/0022__rate_limit_function_privileges.sql", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(migration, /consume_rate_limit\([\s\S]*\) security definer/);
+  assert.match(migration, /cleanup_expired_rate_limits\(integer, timestamptz\) security definer/);
+  assert.match(migration, /set search_path = pg_catalog, local801/);
+  assert.match(migration, /revoke all on function[\s\S]*from public/);
+  assert.match(migration, /revoke all on table local801\.rate_limit_buckets from local801_app/);
+  assert.match(migration, /grant execute on function local801\.consume_rate_limit/);
+  assert.match(migration, /grant select on table local801\.rate_limit_buckets to local801_backup/);
 });

@@ -57,7 +57,7 @@ try {
       to_regprocedure('local801.consume_rate_limit(text,uuid,text,text,text,timestamp with time zone,integer,integer,timestamp with time zone)') is not null as consume_function,
       to_regprocedure('local801.cleanup_expired_rate_limits(integer,timestamp with time zone)') is not null as cleanup_function,
       has_schema_privilege('local801_app', 'local801', 'USAGE') as app_schema_usage,
-      has_table_privilege('local801_app', 'local801.rate_limit_buckets', 'SELECT,INSERT,UPDATE,DELETE') as app_bucket_dml,
+      not has_table_privilege('local801_app', 'local801.rate_limit_buckets', 'SELECT,INSERT,UPDATE,DELETE') as app_bucket_private,
       has_function_privilege(
         'local801_app',
         'local801.consume_rate_limit(text,uuid,text,text,text,timestamp with time zone,integer,integer,timestamp with time zone)',
@@ -92,11 +92,13 @@ try {
   operationError = error;
 } finally {
   try {
-    await appSql`delete from local801.rate_limit_buckets where bucket_key = ${bucketKey} and subject_hash = ${subjectHash}`;
-    const [cleanup] = await appSql`select local801.cleanup_expired_rate_limits(1000) as deleted_count`;
+    const cleanupAt = new Date(now.getTime() + (windowSeconds + 1) * 1000);
+    const [cleanup] = await appSql`
+      select local801.cleanup_expired_rate_limits(1000, ${cleanupAt.toISOString()}::timestamptz) as deleted_count
+    `;
     expiredBucketsRemoved = Number(cleanup.deleted_count);
-    assert.equal(Number.isSafeInteger(expiredBucketsRemoved) && expiredBucketsRemoved >= 0 && expiredBucketsRemoved <= 1000, true);
-    const [{ remaining }] = await appSql`
+    assert.equal(Number.isSafeInteger(expiredBucketsRemoved) && expiredBucketsRemoved >= 1 && expiredBucketsRemoved <= 1000, true);
+    const [{ remaining }] = await migrationSql`
       select count(*)::integer as remaining
       from local801.rate_limit_buckets
       where bucket_key = ${bucketKey} or subject_hash = ${subjectHash}
