@@ -244,13 +244,39 @@ export function parseCsv(text: string): string[][] {
   return rows;
 }
 
+const XML_NAMED_ENTITIES: Readonly<Record<string, string>> = Object.freeze({
+  amp: "&",
+  apos: "'",
+  gt: ">",
+  lt: "<",
+  quot: '"',
+});
+
+function isValidXmlCodePoint(codePoint: number) {
+  return codePoint === 0x09
+    || codePoint === 0x0a
+    || codePoint === 0x0d
+    || (codePoint >= 0x20 && codePoint <= 0xd7ff)
+    || (codePoint >= 0xe000 && codePoint <= 0xfffd)
+    || (codePoint >= 0x10000 && codePoint <= 0x10ffff);
+}
+
 function xmlText(value: string) {
-  return value
-    .replaceAll("&lt;", "<")
-    .replaceAll("&gt;", ">")
-    .replaceAll("&amp;", "&")
-    .replaceAll("&quot;", '"')
-    .replaceAll("&apos;", "'");
+  return value.replace(
+    /&(?:#x[0-9a-f]+|#[0-9]+|amp|apos|gt|lt|quot);/gi,
+    (entity) => {
+      const body = entity.slice(1, -1);
+      if (body.startsWith("#x") || body.startsWith("#X")) {
+        const codePoint = Number.parseInt(body.slice(2), 16);
+        return isValidXmlCodePoint(codePoint) ? String.fromCodePoint(codePoint) : "\uFFFD";
+      }
+      if (body.startsWith("#")) {
+        const codePoint = Number.parseInt(body.slice(1), 10);
+        return isValidXmlCodePoint(codePoint) ? String.fromCodePoint(codePoint) : "\uFFFD";
+      }
+      return XML_NAMED_ENTITIES[body.toLowerCase()] ?? entity;
+    },
+  );
 }
 
 function cellColumn(ref: string) {
@@ -258,9 +284,11 @@ function cellColumn(ref: string) {
   return letters.split("").reduce((sum, letter) => sum * 26 + letter.charCodeAt(0) - 64, 0) - 1;
 }
 
-function extractXmlTag(xml: string, tag: string) {
-  const match = xml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`));
-  return match ? xmlText(match[1].replace(/<[^>]+>/g, "")) : "";
+function extractXmlTextElements(xml: string, tag: "t" | "v") {
+  const elementPattern = tag === "t"
+    ? /<t\b[^>]*>([^<]*)<\/t>/g
+    : /<v\b[^>]*>([^<]*)<\/v>/g;
+  return Array.from(xml.matchAll(elementPattern), (match) => xmlText(match[1])).join("");
 }
 
 async function rowsFromXlsx(buffer: ArrayBuffer) {
@@ -279,7 +307,7 @@ async function sheetsFromXlsx(buffer: ArrayBuffer): Promise<ParsedImportSheet[]>
   const zip = await JSZip.loadAsync(buffer);
   const sharedStringsXml = await zip.file("xl/sharedStrings.xml")?.async("string");
   const sharedStrings = sharedStringsXml
-    ? Array.from(sharedStringsXml.matchAll(/<si[^>]*>([\s\S]*?)<\/si>/g)).map((match) => extractXmlTag(match[1], "t"))
+    ? Array.from(sharedStringsXml.matchAll(/<si[^>]*>([\s\S]*?)<\/si>/g)).map((match) => extractXmlTextElements(match[1], "t"))
     : [];
 
   const workbookXml = await zip.file("xl/workbook.xml")?.async("string");
@@ -309,7 +337,7 @@ async function sheetsFromXlsx(buffer: ArrayBuffer): Promise<ParsedImportSheet[]>
               const ref = attrs.match(/\br="([^"]+)"/)?.[1] ?? "";
               const index = ref ? cellColumn(ref) : row.length;
               const type = attrs.match(/\bt="([^"]+)"/)?.[1] ?? "";
-              const raw = extractXmlTag(cellMatch[2], type === "inlineStr" ? "t" : "v");
+              const raw = extractXmlTextElements(cellMatch[2], type === "inlineStr" ? "t" : "v");
               row[index] = type === "s" ? sharedStrings[Number(raw)] ?? "" : raw;
             }
             return row.map((value) => stringifyCell(value) ?? "");

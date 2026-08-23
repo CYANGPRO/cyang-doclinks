@@ -124,3 +124,62 @@ test("reads a synthetic xlsx workbook for preview validation", async () => {
   assert.equal(summary.acceptedRows, 1);
   assert.deepEqual(summary.identifierColumns, ["Employee ID", "Work Email"]);
 });
+
+test("decodes xlsx text once and safely joins rich-text runs", async () => {
+  const zip = new JSZip();
+  zip.file("xl/workbook.xml", `<?xml version="1.0" encoding="UTF-8"?>
+<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets><sheet name="Roster" sheetId="1" r:id="rId1"/></sheets>
+</workbook>`);
+  zip.file("xl/_rels/workbook.xml.rels", `<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Target="worksheets/sheet1.xml"/>
+</Relationships>`);
+  zip.file("xl/sharedStrings.xml", `<?xml version="1.0" encoding="UTF-8"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <si><r><t>Employee</t></r><r><t> ID</t></r></si>
+  <si><t>Work Email</t></si>
+  <si><t>Local #</t></si>
+  <si><t>100 &amp;lt; 200</t></si>
+  <si><r><t>synthetic</t></r><r><t>@example.test</t></r></si>
+  <si><t>&#x30;801</t></si>
+</sst>`);
+  zip.file("xl/worksheets/sheet1.xml", `<?xml version="1.0" encoding="UTF-8"?>
+<worksheet><sheetData>
+  <row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c><c r="C1" t="s"><v>2</v></c></row>
+  <row r="2"><c r="A2" t="s"><v>3</v></c><c r="B2" t="s"><v>4</v></c><c r="C2" t="s"><v>5</v></c></row>
+</sheetData></worksheet>`);
+  const bytes = await zip.generateAsync({ type: "uint8array" });
+  const file = new File([bytes], "entities-and-rich-text.xlsx", {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+
+  const rows = await imports.rowsFromImportFile(file);
+
+  assert.deepEqual(rows, [
+    ["Employee ID", "Work Email", "Local #"],
+    ["100 &lt; 200", "synthetic@example.test", "0801"],
+  ]);
+});
+
+test("rejects nested markup inside an xlsx text element instead of stripping it", async () => {
+  const zip = new JSZip();
+  zip.file("xl/workbook.xml", `<?xml version="1.0" encoding="UTF-8"?>
+<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets><sheet name="Roster" sheetId="1" r:id="rId1"/></sheets>
+</workbook>`);
+  zip.file("xl/_rels/workbook.xml.rels", `<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Target="worksheets/sheet1.xml"/>
+</Relationships>`);
+  zip.file("xl/worksheets/sheet1.xml", `<?xml version="1.0" encoding="UTF-8"?>
+<worksheet><sheetData>
+  <row r="1"><c r="A1" t="inlineStr"><is><t>safe<fake>unsafe</fake></t></is></c></row>
+</sheetData></worksheet>`);
+  const bytes = await zip.generateAsync({ type: "uint8array" });
+  const file = new File([bytes], "nested-markup.xlsx", {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+
+  assert.deepEqual(await imports.rowsFromImportFile(file), []);
+});
