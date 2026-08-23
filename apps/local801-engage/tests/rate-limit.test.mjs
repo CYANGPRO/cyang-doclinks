@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   buildRateLimitIdentity,
@@ -67,4 +68,21 @@ test("expiry and bounded cleanup are delegated to reviewed database functions", 
   assert.equal(deleted, 250);
   assert.match(statement, /cleanup_expired_rate_limits/);
   await assert.rejects(cleanupExpiredRateLimits(250, async () => [{ deleted_count: "251" }]), /invalid result/);
+});
+
+test("Production rate-limit acceptance is manual, scoped, launch-disabled, and exact-cleanup guarded", async () => {
+  const script = await readFile(new URL("../scripts/accept-production-rate-limit.mjs", import.meta.url), "utf8");
+  const workflow = await readFile(
+    new URL("../../../.github/workflows/local801-production-rate-limit-acceptance.yml", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.doesNotMatch(workflow, /\b(push|pull_request|schedule):/);
+  assert.match(workflow, /secrets\.LOCAL801_MIGRATION_DATABASE_URL/);
+  assert.match(script, /LOCAL801_PRODUCTION_LAUNCH_ENABLED !== "0"/);
+  assert.match(script, /decodeURIComponent\(target\.username\) !== "local801_migrator"/);
+  assert.match(script, /has_table_privilege\('local801_app'/);
+  assert.match(script, /delete from local801\.rate_limit_buckets where bucket_key = \$\{bucketKey\} and subject_hash = \$\{subjectHash\}/);
+  assert.doesNotMatch(script, /console\.log\([^)]*databaseUrl/);
 });
