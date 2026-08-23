@@ -79,7 +79,7 @@ async function resolveOrganization(config: ProductionAuthConfig, query: Database
     WHERE slug = $1::text AND archived_at IS NULL
     LIMIT 2
   `, [config.organizationSlug]);
-  if (rows.length !== 1 || !UUID_RE.test(rows[0].id)) authError("USER_NOT_PROVISIONED", "The Local 801 organization is not uniquely provisioned.");
+  if (rows.length !== 1 || !UUID_RE.test(rows[0].id)) authError("ORGANIZATION_NOT_PROVISIONED", "The Local 801 organization is not uniquely provisioned.");
   return rows[0];
 }
 
@@ -157,11 +157,11 @@ async function resolveBootstrapOwner(
     WHERE organization.id = $1::uuid
     LIMIT 2
   `, [organization.id]);
-  if (rows.length !== 1) authError("USER_NOT_PROVISIONED", "The initial Local 801 system owner is not uniquely provisioned.");
+  if (rows.length !== 1) authError("BOOTSTRAP_OWNER_NOT_PROVISIONED", "The initial Local 801 system owner is not uniquely provisioned.");
   const row = rows[0];
   const sessionVersion = Number(row.auth_session_version);
   if (!Number.isSafeInteger(sessionVersion) || sessionVersion < 1) {
-    authError("USER_NOT_PROVISIONED", "The initial Local 801 system owner has an invalid session version.");
+    authError("BOOTSTRAP_OWNER_NOT_PROVISIONED", "The initial Local 801 system owner has an invalid session version.");
   }
   const keyConfig = getPiiKeyConfiguration();
   const email = decryptPiiField(

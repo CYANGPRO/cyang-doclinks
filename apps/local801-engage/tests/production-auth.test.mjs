@@ -108,6 +108,7 @@ test("OIDC profile requires subject, verified email, and configured MFA assuranc
 
 test("production auth exposes only allowlisted, PII-free rejection codes", () => {
   assert.equal(productionAuthSafeCode(new ProductionAuthError("MFA_REQUIRED", "details")), "MFA_REQUIRED");
+  assert.equal(productionAuthSafeCode(new ProductionAuthError("BOOTSTRAP_OWNER_NOT_PROVISIONED", "details")), "BOOTSTRAP_OWNER_NOT_PROVISIONED");
   assert.equal(productionAuthSafeCode({ code: "USER_NOT_PROVISIONED", email: "person@example.test" }), "USER_NOT_PROVISIONED");
   assert.equal(productionAuthSafeCode({ code: "person@example.test" }), "AUTHORIZATION_FAILED");
   assert.equal(productionAuthSafeCode(new Error("token details")), "AUTHORIZATION_FAILED");
