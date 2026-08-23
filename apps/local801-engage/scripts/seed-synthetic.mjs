@@ -148,7 +148,7 @@ async function seed(transaction) {
       ${snapshotId}, ${organizationId}, ${isoDate(currentMonthStart)}, 'approved',
       ${userId("membership_data_manager")}, now()
     )
-    ON CONFLICT (organization_id, snapshot_date, status) DO UPDATE
+    ON CONFLICT (organization_id, snapshot_date) WHERE status = 'approved' DO UPDATE
     SET approved_by = EXCLUDED.approved_by, approved_at = EXCLUDED.approved_at
   `;
   const [storedSnapshot] = await transaction`
