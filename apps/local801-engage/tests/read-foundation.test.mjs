@@ -16,6 +16,8 @@ import {
 
 const organizationId = "11111111-1111-4111-8111-111111111111";
 const userId = "22222222-2222-4222-8222-222222222222";
+const previewMembershipManagerId = "e2b9a5cf-0b83-490d-b373-a37a8de20b9f";
+const previewLocalAdminId = "62af3638-663f-4fc2-94fb-358583ecd259";
 
 function workspaceContext(role = "local_admin") {
   return {
@@ -50,14 +52,16 @@ function directoryRow(overrides = {}) {
   };
 }
 
-test("workspace context resolves the authenticated slug, email, and role to database UUIDs", async () => {
+test("workspace context resolves a synthetic Preview role without querying sanitized plaintext email", async () => {
   let capturedSql = "";
   let capturedParameters = [];
   const context = await resolveWorkspaceContext(
     {
+      id: "preview-membership_data_manager",
       organizationId: "local801-preview",
       email: "membership_manager@example.test",
       role: "membership_data_manager",
+      authentication: "preview",
     },
     async (sql, parameters) => {
       capturedSql = sql;
@@ -65,8 +69,7 @@ test("workspace context resolves the authenticated slug, email, and role to data
       return [{
         organization_id: organizationId,
         organization_slug: "local801-preview",
-        user_id: userId,
-        email: "membership_manager@example.test",
+        user_id: previewMembershipManagerId,
         role: "membership_data_manager",
       }];
     },
@@ -75,20 +78,43 @@ test("workspace context resolves the authenticated slug, email, and role to data
   assert.deepEqual(context, {
     organizationId,
     organizationSlug: "local801-preview",
-    userId,
+    userId: previewMembershipManagerId,
     email: "membership_manager@example.test",
     role: "membership_data_manager",
   });
   assert.deepEqual(capturedParameters, [
     "local801-preview",
-    "membership_manager@example.test",
     "membership_data_manager",
+    previewMembershipManagerId,
   ]);
   assert.match(capturedSql, /organization\.archived_at IS NULL/);
   assert.match(capturedSql, /workspace_user\.deactivated_at IS NULL/);
   assert.match(capturedSql, /workspace_user_roles/);
   assert.match(capturedSql, /workspace_roles/);
   assert.match(capturedSql, /workspace_role\.organization_id = organization\.id/);
+  assert.doesNotMatch(capturedSql, /workspace_user\.email/);
+});
+
+test("workspace context binds a Production session to its exact already-validated user id", async () => {
+  let capturedParameters = [];
+  const context = await resolveWorkspaceContext({
+    id: userId,
+    organizationId: "local801",
+    email: "owner@example.test",
+    role: "system_owner",
+    authentication: "production",
+  }, async (_sql, parameters) => {
+    capturedParameters = parameters;
+    return [{
+      organization_id: organizationId,
+      organization_slug: "local801",
+      user_id: userId,
+      role: "system_owner",
+    }];
+  });
+  assert.equal(context.userId, userId);
+  assert.equal(context.email, "owner@example.test");
+  assert.deepEqual(capturedParameters, ["local801", "system_owner", userId]);
 });
 
 test("workspace context fails closed when organization, user, or role assignment is missing", async () => {
@@ -96,7 +122,7 @@ test("workspace context fails closed when organization, user, or role assignment
     {
       organization_id: organizationId,
       organization_slug: "local801-preview",
-      user_id: userId,
+      user_id: previewLocalAdminId,
       email: "local_admin@example.test",
       role: "cat_admin",
     },
@@ -104,9 +130,11 @@ test("workspace context fails closed when organization, user, or role assignment
     await assert.rejects(
       resolveWorkspaceContext(
         {
+          id: "preview-local_admin",
           organizationId: "local801-preview",
           email: "local_admin@example.test",
           role: "local_admin",
+          authentication: "preview",
         },
         async () => rows,
       ),
@@ -118,8 +146,10 @@ test("workspace context fails closed when organization, user, or role assignment
 test("workspace context ignores arbitrary client-style database identifiers", async () => {
   const untrustedIdentity = {
     organizationId: "local801-preview",
+    id: "preview-local_admin",
     email: "local_admin@example.test",
     role: "local_admin",
+    authentication: "preview",
     databaseOrganizationId: "attacker-organization",
     databaseUserId: "attacker-user",
   };
@@ -130,8 +160,7 @@ test("workspace context ignores arbitrary client-style database identifiers", as
     return [{
       organization_id: organizationId,
       organization_slug: "local801-preview",
-      user_id: userId,
-      email: "local_admin@example.test",
+      user_id: previewLocalAdminId,
       role: "local_admin",
     }];
   });

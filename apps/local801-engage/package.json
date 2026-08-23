@@ -21,6 +21,7 @@
     "security": "npm run security:audit && npm run security:production-readiness",
     "security:production-readiness": "node --experimental-strip-types scripts/check-production-readiness.mjs",
     "security:accept-production-rate-limit": "node scripts/accept-production-rate-limit.mjs",
+    "security:accept-malware-scanner": "node --conditions=react-server --experimental-strip-types scripts/accept-malware-scanner.mjs",
     "security:initialize-production": "node --conditions=react-server --experimental-strip-types scripts/initialize-production.mjs",
     "recovery:r2": "node scripts/recover-r2-objects.mjs",
     "recovery:r2:key-read-test": "node --conditions=react-server --experimental-strip-types scripts/test-r2-key-recovery.mjs",
