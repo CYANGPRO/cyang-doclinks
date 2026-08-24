@@ -135,7 +135,7 @@ export default async function CatActionDetailPage({
         </DataTable>
       </SectionCard>
 
-      <SectionCard title="Manage action" description="Changes are Preview-only, same-origin protected, organization scoped, and written atomically with a durable audit event.">
+      <SectionCard title="Manage action" description="Changes are same-origin protected, organization scoped, role authorized, and written atomically with a durable audit event.">
         {mutationReady ? <CatActionEditForm
           actionHandle={action.handle}
           initialName={action.name}

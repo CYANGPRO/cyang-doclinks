@@ -35,13 +35,15 @@ export default function SettingsPage() {
   const launch = getProductionLaunchState();
   return <ProtectedPage permission="manageUsers"><div className="content">
     <PageHeader eyebrow="Administration" title="Settings" description="Review environment and security posture without exposing secrets or presenting inactive controls as functional." />
-    <AlertBanner title="Real-data launch remains locked" tone="preview">Synthetic Preview can continue normally. Production authentication and real member data remain fail-closed until every production security gate is satisfied.</AlertBanner>
+    {launch.ready
+      ? <AlertBanner title="Production operations enabled">The approved Production runtime is active with Entra authentication and the required server-side security controls.</AlertBanner>
+      : <AlertBanner title="Production launch remains locked" tone="preview">Preview can continue normally. Production authentication and operational data remain fail-closed until every production security gate is satisfied.</AlertBanner>}
     <SectionCard title="Security defaults" badge={<StatusBadge tone="ready">Fail closed</StatusBadge>}>
       <p className="page-copy">Dedicated database configuration, encrypted private storage, organization scoping, same-origin mutation checks, server authorization, MFA-backed production identity, and malware scanning remain enforced by server-side boundaries. Configuration values are never rendered.</p>
     </SectionCard>
     <SectionCard title="Production launch gate" badge={<StatusBadge tone={launch.ready ? "ready" : "blocked"}>{launch.ready ? "Ready" : "Locked"}</StatusBadge>}>
       <p className="page-copy">This view reports only safe readiness states and blocker names. It never displays credentials, key material, connection strings, provider subjects, or scanner secrets.</p>
-      {launch.ready ? <p className="page-copy"><strong>All coded launch gates are satisfied.</strong> Operational approval is still governed by the production-readiness checklist.</p> : (
+      {launch.ready ? <p className="page-copy"><strong>All coded launch gates are satisfied.</strong> Production features remain subject to role, tenant, origin, rate-limit, audit, PII, scanner, and storage enforcement.</p> : (
         <ul>
           {launch.blockers.map((blocker) => <li key={blocker}>{blockerLabels[blocker]}</li>)}
         </ul>

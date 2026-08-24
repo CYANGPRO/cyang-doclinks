@@ -3,6 +3,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { requirePreviewUser } from "./authz.server.ts";
 import { CatActionMutationError } from "./cat-action-management.ts";
+import { operationalRuntimeEnabled } from "./operational-runtime.ts";
 import { hasExactSameOrigin } from "./request-security.ts";
 
 const MAX_JSON_BYTES = 8_192;
@@ -12,17 +13,12 @@ export function catActionJson(body: Record<string, unknown>, status = 200) {
   return NextResponse.json(body, { status, headers: noStore });
 }
 
-function previewMutationEnabled() {
-  if (process.env.VERCEL_ENV === "production") return false;
-  return process.env.LOCAL801_PREVIEW_AUTH_ENABLED === "1";
-}
-
 export async function authorizeCatActionMutation(request: Request) {
-  if (!previewMutationEnabled()) return { response: catActionJson({ error: "NOT_FOUND" }, 404) } as const;
+  if (!operationalRuntimeEnabled()) return { response: catActionJson({ error: "NOT_FOUND" }, 404) } as const;
   if (!hasExactSameOrigin(request)) {
     return {
       response: catActionJson(
-        { error: "FORBIDDEN_ORIGIN", message: "This request must come from the signed-in Preview application." },
+          { error: "FORBIDDEN_ORIGIN", message: "This request must come from the signed-in Local 801 application." },
         403,
       ),
     } as const;
@@ -67,4 +63,4 @@ export function catActionMutationFailure(error: unknown) {
   return catActionJson({ error: "CAT_ACTION_UNAVAILABLE", message: "The CAT action change could not be completed safely." }, 503);
 }
 
-export const __testing = { MAX_JSON_BYTES, previewMutationEnabled };
+export const __testing = { MAX_JSON_BYTES, operationalRuntimeEnabled };

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { operationalRuntimeEnabled } from "../src/lib/operational-runtime.ts";
 import { getProductionLaunchState, productionAuthRuntimeEnabled } from "../src/lib/production-launch-policy.ts";
 
 const key = (byte) => Buffer.alloc(32, byte).toString("base64");
@@ -86,6 +87,13 @@ test("a complete production configuration can satisfy the coded launch gate", ()
     ready: true,
     blockers: [],
   });
+});
+
+test("operational features run in synthetic Preview and fully gated Entra Production only", () => {
+  assert.equal(operationalRuntimeEnabled({ VERCEL_ENV: "preview", LOCAL801_PREVIEW_AUTH_ENABLED: "1" }), true);
+  assert.equal(operationalRuntimeEnabled(readyEnv()), true);
+  assert.equal(operationalRuntimeEnabled(readyEnv({ LOCAL801_PRODUCTION_LAUNCH_ENABLED: "0" })), false);
+  assert.equal(operationalRuntimeEnabled({ VERCEL_ENV: "production", LOCAL801_PREVIEW_AUTH_ENABLED: "1" }), false);
 });
 
 test("production launch blocks unsafe auth, scanner, PII, preview-only, and synthetic switches", () => {

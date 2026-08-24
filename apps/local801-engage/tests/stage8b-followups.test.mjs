@@ -166,7 +166,7 @@ test("existing route keeps PUT completion and adds protected PATCH editing", () 
   assert.match(route, /hasExactSameOrigin/);
   assert.match(route, /requirePreviewUser\("recordEngagement"\)/);
   assert.match(route, /MAX_JSON_BYTES = 4_096/);
-  assert.match(route, /VERCEL_ENV === "production"/);
+  assert.match(route, /operationalRuntimeEnabled\(\)/);
 });
 
 test("edit client only sends changed fields and uses PATCH", () => {

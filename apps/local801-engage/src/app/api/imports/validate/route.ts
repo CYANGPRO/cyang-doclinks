@@ -36,7 +36,7 @@ export async function GET() {
 export async function POST(request: Request) {
   if (!hasExactSameOrigin(request)) {
     return NextResponse.json(
-      { error: "FORBIDDEN_ORIGIN", message: "This import request must come from the signed-in Preview application." },
+      { error: "FORBIDDEN_ORIGIN", message: "This import request must come from the signed-in Local 801 application." },
       { status: 403, headers: { "Cache-Control": "no-store, max-age=0" } },
     );
   }

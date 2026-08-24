@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { requirePreviewUser } from "@/lib/authz.server";
 import { hasExactSameOrigin } from "@/lib/request-security";
+import { operationalRuntimeEnabled } from "@/lib/operational-runtime";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
 import {
   deleteEncryptedDocument,
@@ -12,7 +13,7 @@ import {
 } from "@/lib/document-storage";
 
 export async function POST(request: Request) {
-  if (process.env.VERCEL_ENV === "production" || process.env.LOCAL801_PREVIEW_AUTH_ENABLED !== "1") {
+  if (!operationalRuntimeEnabled()) {
     return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   }
 

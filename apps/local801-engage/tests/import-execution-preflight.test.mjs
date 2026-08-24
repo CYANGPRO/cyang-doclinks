@@ -221,8 +221,7 @@ test("Stage 12A migration remains additive and preflight controls themselves per
   assert.match(page, /Executor installed but disabled/);
   assert.match(page, /Authoritative execution preflight/);
   assert.match(page, /LOCAL801_PROTECTED_IMPORT_EXECUTION_ENABLED/);
-  assert.match(route, /VERCEL_ENV === "production"/);
-  assert.match(route, /LOCAL801_PREVIEW_AUTH_ENABLED !== "1"/);
+  assert.match(route, /operationalRuntimeEnabled\(\)/);
   assert.match(route, /hasExactSameOrigin\(request\)/);
   assert.match(route, /MAX_BODY_BYTES = 512/);
   assert.doesNotMatch(`${controls}\n${service}`, /INSERT INTO local801\.people|UPDATE local801\.people|INSERT INTO local801\.membership_events|INSERT INTO local801\.employment_events/);

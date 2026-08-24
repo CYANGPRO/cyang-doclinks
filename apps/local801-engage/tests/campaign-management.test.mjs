@@ -267,14 +267,13 @@ test("all campaign mutations deny non-management roles before SQL", async () => 
   }
 });
 
-test("campaign mutation HTTP routes are Preview-only, same-origin, permission checked, bounded, and scoped to operational fields", async () => {
+test("campaign mutation HTTP routes support gated Production and Preview while remaining same-origin, permission checked, bounded, and scoped", async () => {
   const helper = await readFile(new URL("../src/lib/campaign-mutation-http.ts", import.meta.url), "utf8");
   const createRoute = await readFile(new URL("../src/app/api/campaigns/route.ts", import.meta.url), "utf8");
   const campaignRoute = await readFile(new URL("../src/app/api/campaigns/[campaignHandle]/route.ts", import.meta.url), "utf8");
   const assignmentRoute = await readFile(new URL("../src/app/api/campaigns/[campaignHandle]/participants/[personHandle]/assignment/route.ts", import.meta.url), "utf8");
   const combined = `${helper}\n${createRoute}\n${campaignRoute}\n${assignmentRoute}`;
-  assert.match(helper, /VERCEL_ENV === "production"/);
-  assert.match(helper, /LOCAL801_PREVIEW_AUTH_ENABLED === "1"/);
+  assert.match(helper, /operationalRuntimeEnabled\(\)/);
   assert.match(helper, /hasExactSameOrigin\(request\)/);
   assert.match(helper, /requirePreviewUser\("manageCampaigns"\)/);
   assert.match(helper, /MAX_JSON_BYTES = 8_192/);

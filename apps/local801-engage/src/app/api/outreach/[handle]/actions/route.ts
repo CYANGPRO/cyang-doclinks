@@ -5,6 +5,7 @@ import {
   recordOutreachActionPosture,
   recordOutreachActionResponse,
 } from "@/lib/engagement-recording";
+import { operationalRuntimeEnabled } from "@/lib/operational-runtime";
 import { hasExactSameOrigin } from "@/lib/request-security";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
 
@@ -36,8 +37,8 @@ async function readJson(request: Request) {
 type RouteContext = { params: Promise<{ handle: string }> };
 
 export async function POST(request: Request, { params }: RouteContext) {
-  if (process.env.VERCEL_ENV === "production" || process.env.LOCAL801_PREVIEW_AUTH_ENABLED !== "1") return json({ error: "NOT_FOUND" }, 404);
-  if (!hasExactSameOrigin(request)) return json({ error: "FORBIDDEN_ORIGIN", message: "This request must come from the signed-in Preview application." }, 403);
+  if (!operationalRuntimeEnabled()) return json({ error: "NOT_FOUND" }, 404);
+  if (!hasExactSameOrigin(request)) return json({ error: "FORBIDDEN_ORIGIN", message: "This request must come from the signed-in Local 801 application." }, 403);
   const auth = await requirePreviewUser("recordEngagement");
   if (!auth.ok) {
     auth.response.headers.set("Cache-Control", noStore["Cache-Control"]);

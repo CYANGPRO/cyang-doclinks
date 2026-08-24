@@ -10,6 +10,9 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
   const shell = shellForRole(user?.role ?? null);
   const groups = user ? navGroupsForRole(user.role) : [];
   const mobile = user ? mobileNavForRole(user.role) : [];
+  const environmentLabel = user?.authentication === "production"
+    ? "Production workspace · Microsoft Entra ID"
+    : "Private preview · synthetic data only";
 
   return (
     <div className="app-frame">
@@ -37,7 +40,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
         <header className="topbar">
           <div>
             <strong>Local 801 Engage</strong>
-            <div className="preview-status">Private preview · synthetic data only</div>
+            <div className="preview-status">{environmentLabel}</div>
           </div>
           {user && shell.roleLabel ? (
             <div className="toolbar" style={{ marginTop: 0 }}>

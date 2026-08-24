@@ -26,7 +26,7 @@ type DurableAcceptance = {
   statusLocation: string;
 };
 
-export function ImportPreviewForm() {
+export function ImportPreviewForm({ durablePreviewAvailable = false }: { durablePreviewAvailable?: boolean }) {
   const router = useRouter();
   const [summary, setSummary] = useState<ImportReviewSummary | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -84,8 +84,8 @@ export function ImportPreviewForm() {
   }
 
   return (
-    <SectionCard title="Upload for persistent review" description="Choose controlled durable CSV processing or the existing synchronous fallback." badge={<StatusBadge tone="preview">No roster changes</StatusBadge>}>
-      <AlertBanner title="Synthetic files only" tone="preview">Durable Preview processing accepts generated CSV identities only and requires a clean malware scanner verdict before parsing. Production durable processing remains disabled.</AlertBanner>
+    <SectionCard title="Upload for persistent review" description="Upload an authorized roster workbook for encrypted, malware-scanned review before any approved roster changes." badge={<StatusBadge tone="preview">No automatic roster changes</StatusBadge>}>
+      <AlertBanner title="Review before execution">Uploads are scanned, encrypted, and retained for exception review. No authoritative roster change occurs until an authorized approver confirms the reviewed execution set.</AlertBanner>
       <form className="grid" onSubmit={submit}>
         <div className="field">
           <label htmlFor="file">Workbook or CSV</label>
@@ -94,8 +94,8 @@ export function ImportPreviewForm() {
         <div className="field">
           <label htmlFor="processingMode">Processing mode</label>
           <select id="processingMode" name="processingMode" defaultValue="synchronous">
-            <option value="synchronous">Existing synchronous fallback</option>
-            <option value="durable_preview">Durable Preview worker · CSV only</option>
+            <option value="synchronous">Encrypted protected review</option>
+            {durablePreviewAvailable ? <option value="durable_preview">Durable Preview worker · synthetic CSV only</option> : null}
           </select>
         </div>
         <div className="field">

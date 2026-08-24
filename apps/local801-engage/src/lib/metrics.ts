@@ -110,7 +110,7 @@ export async function getDashboardMetrics(
       activeCampaigns: rowToNumber(row.active_campaigns),
       openCatActions: rowToNumber(row.open_cat_actions),
       reportingDate: new Date().toISOString().slice(0, 10),
-      sourceSnapshot: "Neon synthetic preview",
+      sourceSnapshot: process.env.VERCEL_ENV === "production" ? "Protected Local 801 database" : "Neon synthetic preview",
       source: "database",
     };
   } catch {

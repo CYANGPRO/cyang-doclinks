@@ -12,7 +12,7 @@ const noStore = { "Cache-Control": "no-store, max-age=0" };
 export async function POST(request: Request, { params }: { params: Promise<{ batchId: string }> }) {
   if (!hasExactSameOrigin(request)) {
     return NextResponse.json(
-      { error: "FORBIDDEN", message: "This request must come from the signed-in preview." },
+      { error: "FORBIDDEN", message: "This request must come from the signed-in Local 801 application." },
       { status: 403, headers: noStore },
     );
   }

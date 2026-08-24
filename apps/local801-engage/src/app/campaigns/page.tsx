@@ -33,7 +33,7 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
       title="Campaigns"
       description="Create and manage outreach campaigns, then assign campaign participants to CAT organizers through audited operational controls."
     />
-    <SectionCard title="Create campaign" description="Start in draft while you prepare the population, or activate immediately for a synthetic Preview test." badge={<StatusBadge tone="preview">Preview mutation</StatusBadge>}>
+    <SectionCard title="Create campaign" description="Start in draft while you prepare the population, or activate immediately when the campaign is ready." badge={<StatusBadge tone="ready">Audited operation</StatusBadge>}>
       <CampaignCreateForm />
     </SectionCard>
     <SectionCard title="Campaign portfolio" badge={<StatusBadge tone="info">Aggregate SQL</StatusBadge>}>

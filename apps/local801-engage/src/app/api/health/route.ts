@@ -4,9 +4,10 @@ import { assertLocal801Isolation } from "@/lib/config";
 import { checkDatabaseReadiness } from "@/lib/db";
 import { checkStorageReadiness } from "@/lib/r2";
 import { validateEncryptionConfig } from "@/lib/encryption";
+import { operationalRuntimeEnabled } from "@/lib/operational-runtime";
 
 export async function GET() {
-  if (process.env.VERCEL_ENV === "production" || process.env.LOCAL801_PREVIEW_AUTH_ENABLED !== "1") {
+  if (!operationalRuntimeEnabled()) {
     return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   }
 

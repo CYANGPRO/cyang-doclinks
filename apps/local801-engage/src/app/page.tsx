@@ -24,10 +24,12 @@ export default async function HomePage() {
         description="A role-aware summary of current authorized work. Every metric is aggregated server-side and organization scoped."
         actions={membershipRole ? <Link className="button" href="/imports">Review imports</Link> : organizingRole ? <Link className="button" href="/outreach">Open my outreach</Link> : <Link className="button" href="/reports">Open reports</Link>}
       />
-      <AlertBanner title="Synthetic Preview" tone="preview">No real member data. Values below come from the isolated Preview database when available.</AlertBanner>
+      {user.authentication === "production"
+        ? <AlertBanner title="Production workspace">Values below come from the protected Local 801 production database and are limited to the signed-in user&apos;s authorized role.</AlertBanner>
+        : <AlertBanner title="Synthetic Preview" tone="preview">No real member data. Values below come from the isolated Preview database when available.</AlertBanner>}
 
       {metrics.source === "unavailable" ? (
-        <SectionCard><UnavailableState title="Operational metrics unavailable" description="The private Preview database could not provide aggregate metrics. No static values are substituted." /></SectionCard>
+        <SectionCard><UnavailableState title="Operational metrics unavailable" description="The protected Local 801 database could not provide aggregate metrics. No static values are substituted." /></SectionCard>
       ) : (
         <section className="metrics-grid" aria-label="Authorized dashboard metrics">
           {membershipRole ? <>

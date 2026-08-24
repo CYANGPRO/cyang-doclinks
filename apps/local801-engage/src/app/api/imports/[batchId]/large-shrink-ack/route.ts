@@ -5,6 +5,7 @@ import {
   ImportExecutionPreflightError,
 } from "@/lib/import-execution-preflight";
 import { hasExactSameOrigin } from "@/lib/request-security";
+import { operationalRuntimeEnabled } from "@/lib/operational-runtime";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
 
 export const dynamic = "force-dynamic";
@@ -18,11 +19,11 @@ function json(body: Record<string, unknown>, status = 200) {
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ batchId: string }> }) {
-  if (process.env.VERCEL_ENV === "production" || process.env.LOCAL801_PREVIEW_AUTH_ENABLED !== "1") {
+  if (!operationalRuntimeEnabled()) {
     return json({ error: "NOT_FOUND" }, 404);
   }
   if (!hasExactSameOrigin(request)) {
-    return json({ error: "FORBIDDEN", message: "This request must come from the signed-in Preview application." }, 403);
+    return json({ error: "FORBIDDEN", message: "This request must come from the signed-in Local 801 application." }, 403);
   }
   const mediaType = request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
   if (mediaType !== "application/json") return json({ error: "UNSUPPORTED_MEDIA_TYPE", message: "Request body must be JSON." }, 415);

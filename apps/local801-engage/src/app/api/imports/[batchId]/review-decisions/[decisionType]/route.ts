@@ -7,7 +7,7 @@ import { resolveWorkspaceContext } from "@/lib/workspace-context";
 export const dynamic = "force-dynamic";
 const noStore = { "Cache-Control": "no-store, max-age=0" };
 function isDecision(value: string): value is ImportReviewDecisionType { return value === "allow_proposed_new" || value === "acknowledge_existing_changes"; }
-function forbidden() { return NextResponse.json({ error: "FORBIDDEN", message: "This request must come from the signed-in preview." }, { status: 403, headers: noStore }); }
+function forbidden() { return NextResponse.json({ error: "FORBIDDEN", message: "This request must come from the signed-in Local 801 application." }, { status: 403, headers: noStore }); }
 function unavailable() { return NextResponse.json({ error: "REVIEW_UPDATE_FAILED", message: "The batch review decision could not be saved. No roster changes were made." }, { status: 409, headers: noStore }); }
 
 async function contextFor(request: Request, params: Promise<{ batchId: string; decisionType: string }>) {

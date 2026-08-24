@@ -32,9 +32,9 @@ test("note reads enforce writer, assignment, CAT, lead, and administrator visibi
   assert.match(notes, /decryptEnvelope/);
 });
 
-test("all Stage 7B mutation routes require exact same origin and Preview recordEngagement auth", () => {
+test("all Stage 7B mutation routes support gated Production and Preview with exact-origin recordEngagement auth", () => {
   for (const route of [engagementRoute, actionRoute, followupRoute]) {
-    assert.match(route, /VERCEL_ENV === "production"/);
+    assert.match(route, /operationalRuntimeEnabled\(\)/);
     assert.match(route, /hasExactSameOrigin\(request\)/);
     assert.match(route, /requirePreviewUser\("recordEngagement"\)/);
     assert.match(route, /Cache-Control/);

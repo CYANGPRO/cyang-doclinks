@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requirePreviewUser } from "@/lib/authz.server";
 import { completeOutreachFollowup, EngagementWriteError } from "@/lib/engagement-recording";
 import { FollowupUpdateError, updateOutreachFollowup } from "@/lib/follow-up-management";
+import { operationalRuntimeEnabled } from "@/lib/operational-runtime";
 import { hasExactSameOrigin } from "@/lib/request-security";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
 
@@ -43,17 +44,12 @@ async function readJson(request: Request) {
 
 type RouteContext = { params: Promise<{ handle: string; followupHandle: string }> };
 
-function previewOnly() {
-  if (process.env.VERCEL_ENV === "production") return false;
-  return process.env.LOCAL801_PREVIEW_AUTH_ENABLED === "1";
-}
-
 async function authorize(request: Request) {
-  if (!previewOnly()) return { response: json({ error: "NOT_FOUND" }, 404) } as const;
+  if (!operationalRuntimeEnabled()) return { response: json({ error: "NOT_FOUND" }, 404) } as const;
   if (!hasExactSameOrigin(request)) {
     return {
       response: json(
-        { error: "FORBIDDEN_ORIGIN", message: "This request must come from the signed-in Preview application." },
+        { error: "FORBIDDEN_ORIGIN", message: "This request must come from the signed-in Local 801 application." },
         403,
       ),
     } as const;
