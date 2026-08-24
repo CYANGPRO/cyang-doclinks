@@ -118,12 +118,8 @@ test("the configured bootstrap object can atomically rebind one legacy active sy
     const keyConfig = getPiiKeyConfiguration();
     const email = "owner@example.test";
     const currentSubject = "current-entra-subject";
-    const staleSubject = "stale-entra-subject";
     const protectedEmail = encryptPiiField(email, {
       organizationId, entity: "user", recordId: userId, field: "email",
-    }, keyConfig);
-    const protectedStaleSubject = encryptPiiField(staleSubject, {
-      organizationId, entity: "auth-identity", recordId: authIdentityId, field: "provider-subject",
     }, keyConfig);
     const userRow = {
       organization_slug: "local801",
@@ -167,9 +163,9 @@ test("the configured bootstrap object can atomically rebind one legacy active sy
         if (sql.includes("protected-user-identity")) return [{
           auth_identity_id: authIdentityId,
           user_id: userId,
-          provider_subject_encrypted_payload: protectedStaleSubject.encryptedPayload,
-          provider_subject_encryption_key_version: protectedStaleSubject.encryptionKeyVersion,
-          provider_subject_encryption_format_version: protectedStaleSubject.encryptionFormatVersion,
+          provider_subject_encrypted_payload: "stale-unreadable-ciphertext",
+          provider_subject_encryption_key_version: "retired-key",
+          provider_subject_encryption_format_version: 1,
         }];
         throw new Error(`Unexpected query: ${sql}`);
       },

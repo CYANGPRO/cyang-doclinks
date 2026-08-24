@@ -313,21 +313,25 @@ async function resolveIdentityBindings(
   if (byUser.length > 1) authError("IDENTITY_MISMATCH", "The Local 801 account has multiple provider bindings.");
   let requiresRebind = false;
   if (byUser[0]) {
-    const storedSubject = decryptPiiField(
-      encrypted(
-        byUser[0].provider_subject_encrypted_payload,
-        byUser[0].provider_subject_encryption_key_version,
-        byUser[0].provider_subject_encryption_format_version,
-      ),
-      { organizationId, entity: "auth-identity", recordId: byUser[0].auth_identity_id, field: "provider-subject" },
-      keyConfig,
-    );
-    const storedSubjectMatches = normalizePiiIdentifier(storedSubject) === normalizePiiIdentifier(identity.subject);
-    const indexedSubjectMatches = bySubject[0]?.auth_identity_id === byUser[0].auth_identity_id;
-    if (!storedSubjectMatches || !indexedSubjectMatches) {
-      if (allowBootstrapRebind && !bySubject[0]) requiresRebind = true;
-      else {
-      authError("IDENTITY_MISMATCH", "This Local 801 account is already linked to a different identity-provider subject.");
+    // A configured immutable bootstrap object with MFA can replace an orphaned/stale binding
+    // when its current subject is not linked to any CAT user. Do not require the stale ciphertext
+    // to decrypt first: the replacement transaction overwrites it and its indexes atomically.
+    if (allowBootstrapRebind && !bySubject[0]) {
+      requiresRebind = true;
+    } else {
+      const storedSubject = decryptPiiField(
+        encrypted(
+          byUser[0].provider_subject_encrypted_payload,
+          byUser[0].provider_subject_encryption_key_version,
+          byUser[0].provider_subject_encryption_format_version,
+        ),
+        { organizationId, entity: "auth-identity", recordId: byUser[0].auth_identity_id, field: "provider-subject" },
+        keyConfig,
+      );
+      const storedSubjectMatches = normalizePiiIdentifier(storedSubject) === normalizePiiIdentifier(identity.subject);
+      const indexedSubjectMatches = bySubject[0]?.auth_identity_id === byUser[0].auth_identity_id;
+      if (!storedSubjectMatches || !indexedSubjectMatches) {
+        authError("IDENTITY_MISMATCH", "This Local 801 account is already linked to a different identity-provider subject.");
       }
     }
   }
