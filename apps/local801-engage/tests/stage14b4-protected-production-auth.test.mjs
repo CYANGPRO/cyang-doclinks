@@ -70,7 +70,7 @@ test("an established protected subject binding is resolved before the bootstrap 
       mfaClaim: "amr",
       mfaValue: "mfa",
     }, {
-      query: async (sql) => {
+      query: async (sql, parameters) => {
         queries.push(sql);
         if (sql.includes("protected-organization")) return [{ id: organizationId, slug: "local801" }];
         if (sql.includes("protected-bound-subject")) return [{
@@ -153,13 +153,18 @@ test("the configured bootstrap object can atomically rebind one legacy active sy
       mfaClaim: "amr",
       mfaValue: "mfa",
     }, {
-      query: async (sql) => {
+      query: async (sql, parameters) => {
         queries.push(sql);
         if (sql.includes("protected-organization")) return [{ id: organizationId, slug: "local801" }];
         if (sql.includes("protected-bound-subject")) return [];
         if (sql.includes("protected-bootstrap-owner")) return [];
         if (sql.includes("protected-legacy-bootstrap-owner")) return [userRow];
-        if (sql.includes("protected-subject-lookup")) return [];
+        if (sql.includes("protected-subject-lookup")) {
+          assert.equal(parameters.length, 5);
+          assert.deepEqual(parameters.slice(0, 3), [organizationId, "auth:provider-subject:local801-oidc", "local801-oidc"]);
+          assert.doesNotMatch(sql, /\$6/);
+          return [];
+        }
         if (sql.includes("protected-user-identity")) return [{
           auth_identity_id: authIdentityId,
           user_id: userId,

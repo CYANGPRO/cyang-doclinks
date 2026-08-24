@@ -279,17 +279,17 @@ async function resolveIdentityBindings(
     JOIN local801.auth_identities auth_identity
       ON auth_identity.organization_id = subject_index.organization_id
       AND auth_identity.id = subject_index.entity_id
-      AND auth_identity.provider_id = $4::text
+      AND auth_identity.provider_id = $3::text
     JOIN local801.auth_identity_pii protected
       ON protected.organization_id = auth_identity.organization_id
       AND protected.auth_identity_id = auth_identity.id
     WHERE subject_index.organization_id = $1::uuid
       AND subject_index.entity_type = 'auth_identity'
       AND subject_index.index_domain = $2::text
-      AND subject_index.index_key_version = $5::text
-      AND subject_index.index_hash = $6::text
+      AND subject_index.index_key_version = $4::text
+      AND subject_index.index_hash = $5::text
     LIMIT 2
-  `, [organizationId, domain, userId, identity.providerId, subjectIndex.blindIndexKeyVersion, subjectIndex.blindIndex]);
+  `, [organizationId, domain, identity.providerId, subjectIndex.blindIndexKeyVersion, subjectIndex.blindIndex]);
   if (bySubject.length > 1) authError("IDENTITY_MISMATCH", "The identity-provider subject is not uniquely linked.");
   if (bySubject[0] && bySubject[0].user_id !== userId) {
     authError("IDENTITY_MISMATCH", "This identity-provider subject is already linked to a different Local 801 account.");
