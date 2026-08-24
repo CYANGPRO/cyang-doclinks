@@ -48,10 +48,13 @@ const IMPORT_MATCH_DOMAINS = Object.freeze({
   employee_identifier: "identifier:employee-identifier",
   member_identifier: "identifier:member-identifier",
   home_email: "contact:personal-email",
-  work_phone: "contact:phone",
-  cell_phone: "contact:phone",
-  home_phone: "contact:phone",
 } as const);
+
+const IMPORT_PHONE_PREFERENCE = Object.freeze([
+  "cell_phone",
+  "home_phone",
+  "work_phone",
+] as const);
 
 const PROVIDER_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 
@@ -312,7 +315,16 @@ export function buildSyntheticPiiBackfillPlan(dataset: PiiBackfillSourceDataset,
       if (normalized === null) continue;
       validityMask |= bit;
       addExactIndex(exactIndexes, normalized, organizationId, "import_row", row.id, `import:${name.replaceAll("_", "-")}`, config);
-      addExactIndex(exactIndexes, normalized, organizationId, "import_row", row.id, IMPORT_MATCH_DOMAINS[name], config);
+      const matchDomain = IMPORT_MATCH_DOMAINS[name as keyof typeof IMPORT_MATCH_DOMAINS];
+      if (matchDomain) addExactIndex(exactIndexes, normalized, organizationId, "import_row", row.id, matchDomain, config);
+    }
+    for (const name of IMPORT_PHONE_PREFERENCE) {
+      const raw = bundle[name];
+      if (!raw) continue;
+      const normalized = normalizedImportValue(name, raw);
+      if (normalized === null) continue;
+      addExactIndex(exactIndexes, normalized, organizationId, "import_row", row.id, "contact:phone", config);
+      break;
     }
     return Object.freeze({
       organizationId,

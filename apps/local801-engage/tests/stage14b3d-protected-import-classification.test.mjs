@@ -47,6 +47,14 @@ test("protected import planner emits complete v5 field metadata and destination-
   for (const domain of ["person:first-name", "person:last-name", "contact:work-email", "contact:personal-email", "contact:phone", "identifier:employee-identifier", "identifier:member-identifier"]) {
     assert.equal(domains.has(domain), true, domain);
   }
+  const logicalKeys = plan.exactIndexes.map((item) => [
+    item.organizationId, item.entityType, item.entityId, item.domain, item.keyVersion,
+  ].join("|"));
+  assert.equal(new Set(logicalKeys).size, logicalKeys.length, "protected exact-index keys must be unique");
+  assert.equal(plan.exactIndexes.filter((item) => item.domain === "contact:phone").length, 1);
+  for (const domain of ["import:work-phone", "import:cell-phone", "import:home-phone"]) {
+    assert.equal(domains.has(domain), true, domain);
+  }
 });
 
 test("invalid direct PII stays encrypted but is marked invalid instead of entering a blind index", () => {

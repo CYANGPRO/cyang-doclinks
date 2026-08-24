@@ -318,6 +318,8 @@ test("workflow uses trusted metadata, meaningful steps, and exits duplicate owne
   }
   assert.doesNotMatch(source, /start\([^)]*workflowRunId/);
   assert.doesNotMatch(source.match(/function throwForStep[\s\S]*?\n}/)?.[0] ?? "", /throw error;/);
+  assert.match(source, /local801-import-workflow-safe-failure/);
+  assert.doesNotMatch(source.match(/function logStepFailure[\s\S]*?\n}/)?.[0] ?? "", /\.message|\.stack/);
 });
 
 test("workflow failure persistence survives a failed cancellation probe", async () => {

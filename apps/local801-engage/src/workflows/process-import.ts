@@ -29,6 +29,24 @@ const retryableCodes: readonly ImportProcessingSafeErrorCode[] = [
   "INTERNAL_PROCESSING_FAILURE",
 ];
 
+const SAFE_DIAGNOSTIC_TOKEN = /^[A-Za-z0-9:_-]{1,120}$/;
+
+function safeDiagnosticToken(value: unknown) {
+  return typeof value === "string" && SAFE_DIAGNOSTIC_TOKEN.test(value) ? value : null;
+}
+
+function logStepFailure(step: string, error: unknown) {
+  const source = error && typeof error === "object" ? error as Record<string, unknown> : null;
+  console.error("[local801-import-workflow-safe-failure]", JSON.stringify({
+    event: "local801-import-workflow-safe-failure",
+    step,
+    safeCode: safeImportWorkerErrorCode(error),
+    errorName: safeDiagnosticToken(error instanceof Error ? error.name : null),
+    databaseCode: safeDiagnosticToken(source?.code),
+    constraint: safeDiagnosticToken(source?.constraint ?? source?.constraint_name),
+  }));
+}
+
 function throwForStep(error: unknown): never {
   if (error instanceof ImportWorkerError) {
     throwImportProcessingStepError(error.code, error.retryable);
@@ -40,49 +58,49 @@ function throwForStep(error: unknown): never {
 async function ensureJobStep(input: ImportWorkflowInput, trustedWorkflowRunId: string) {
   "use step";
   try { return await ensureImportProcessingJob(input, trustedWorkflowRunId); }
-  catch (error) { throwForStep(error); }
+  catch (error) { logStepFailure("ensure-job", error); throwForStep(error); }
 }
 
 async function scanSourceStep(input: ImportWorkflowInput, trustedWorkflowRunId: string) {
   "use step";
   try { return await scanImportSource(input, trustedWorkflowRunId); }
-  catch (error) { throwForStep(error); }
+  catch (error) { logStepFailure("scan-source", error); throwForStep(error); }
 }
 
 async function cancellationStep(input: ImportWorkflowInput, trustedWorkflowRunId: string) {
   "use step";
   try { return await acknowledgeImportCancellation(input, trustedWorkflowRunId); }
-  catch (error) { throwForStep(error); }
+  catch (error) { logStepFailure("cancellation", error); throwForStep(error); }
 }
 
 async function parseAndStageStep(input: ImportWorkflowInput, trustedWorkflowRunId: string) {
   "use step";
   try { return await parseAndStageImport(input, trustedWorkflowRunId); }
-  catch (error) { throwForStep(error); }
+  catch (error) { logStepFailure("parse-and-stage", error); throwForStep(error); }
 }
 
 async function validateStagedStep(input: ImportWorkflowInput, trustedWorkflowRunId: string) {
   "use step";
   try { return await validateStagedImport(input, trustedWorkflowRunId); }
-  catch (error) { throwForStep(error); }
+  catch (error) { logStepFailure("validate-staged", error); throwForStep(error); }
 }
 
 async function matchIdentitiesStep(input: ImportWorkflowInput, trustedWorkflowRunId: string) {
   "use step";
   try { return await matchImportIdentities(input, trustedWorkflowRunId); }
-  catch (error) { throwForStep(error); }
+  catch (error) { logStepFailure("match-identities", error); throwForStep(error); }
 }
 
 async function prepareReviewStep(input: ImportWorkflowInput, trustedWorkflowRunId: string) {
   "use step";
   try { return await prepareImportReview(input, trustedWorkflowRunId); }
-  catch (error) { throwForStep(error); }
+  catch (error) { logStepFailure("prepare-review", error); throwForStep(error); }
 }
 
 async function completeProcessingStep(input: ImportWorkflowInput, trustedWorkflowRunId: string) {
   "use step";
   try { return await completeImportProcessing(input, trustedWorkflowRunId); }
-  catch (error) { throwForStep(error); }
+  catch (error) { logStepFailure("complete-processing", error); throwForStep(error); }
 }
 
 async function recordFailureStep(
