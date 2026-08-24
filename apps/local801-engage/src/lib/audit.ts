@@ -7,6 +7,9 @@ import type { WorkspaceContext } from "./workspace-context.ts";
 
 export type AuditEventType =
   | "auth.sign_in"
+  | "policy.acknowledged"
+  | "session.mobile_device_attested"
+  | "session.mobile_push_registered"
   | "import.preview"
   | "import.upload"
   | "import.validation"
@@ -20,7 +23,7 @@ export type AuditEventType =
   | "import.review_decision_cleared"
   | "import.execute"
   | "record.create"
-  | "record.access"
+  | "record.read"
   | "record.update"
   | "role.change"
   | "report.run"

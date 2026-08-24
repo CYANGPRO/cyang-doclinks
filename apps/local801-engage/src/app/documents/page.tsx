@@ -1,7 +1,8 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
-  AlertBanner,
   DataTable,
+  DisclosureCard,
   EmptyState,
   PageHeader,
   Pagination,
@@ -11,7 +12,9 @@ import {
   UnavailableState,
 } from "@/components/DesignSystem";
 import { DocumentDeleteButton } from "@/components/DocumentDeleteButton";
+import { DocumentApprovalButton } from "@/components/DocumentApprovalButton";
 import { DocumentUploadForm } from "@/components/DocumentUploadForm";
+import { MobileDocumentIntake } from "@/components/MobileDocumentIntake";
 import { ProtectedPage } from "@/components/ProtectedPage";
 import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
@@ -22,9 +25,21 @@ import { resolveWorkspaceContext } from "@/lib/workspace-context";
 const visibilityLabels: Record<DocumentVisibility, string> = {
   local_admin_only: "Local admin only",
   membership_management: "Membership management",
-  cat_admin_only: "CAT admin only",
-  cat_lead_scope: "CAT lead scope",
-  cat_member_scope: "CAT members",
+  cat_admin_only: "801 administrator only",
+  cat_lead_scope: "LCAT scope",
+  cat_member_scope: "CATs",
+  uploader_hierarchy: "Me and higher roles",
+  everyone: "Everyone",
+};
+
+const visibilityDescriptions: Record<DocumentVisibility, string> = {
+  local_admin_only: "Visible only to System Owners and Local Administrators.",
+  membership_management: "Visible to System Owners, Local Administrators, and Membership Data Managers.",
+  cat_admin_only: "Visible to System Owners, Local Administrators, and 801 Administrators.",
+  cat_lead_scope: "Visible to System Owners, Local Administrators, 801 Administrators, and LCATs.",
+  cat_member_scope: "Visible to System Owners, Local Administrators, 801 Administrators, LCATs, and CATs.",
+  uploader_hierarchy: "Visible to you and users above your role in the Local 801 access hierarchy.",
+  everyone: "Visible to every approved user in this Local 801 workspace.",
 };
 
 const mediaTypeLabels: Record<string, string> = {
@@ -59,6 +74,10 @@ function createdDate(value: string) {
   }).format(new Date(value));
 }
 
+function uploaderLabel(value: string) {
+  return /^Protected user [0-9a-f-]{36}$/i.test(value) ? "Protected user" : value;
+}
+
 export default async function DocumentsPage({
   searchParams,
 }: {
@@ -69,6 +88,7 @@ export default async function DocumentsPage({
   if (!can(user.role, "viewDocuments")) redirect("/unauthorized");
 
   const input = await searchParams;
+  const hasCursor = typeof input.cursor === "string" && input.cursor.length > 0;
   let page: Awaited<ReturnType<typeof getDocumentsPage>> | null = null;
 
   try {
@@ -82,37 +102,44 @@ export default async function DocumentsPage({
   }
 
   const canManageDocuments = can(user.role, "manageDocuments");
-  const uploadOptions = canManageDocuments
-    ? documentUploadVisibilities(user.role).map((visibility) => ({ value: visibility, label: visibilityLabels[visibility] }))
-    : [];
+  const canApproveDocuments = can(user.role, "approveDocuments");
+  const uploadOptions = documentUploadVisibilities(user.role).map((visibility) => ({
+    value: visibility,
+    label: visibilityLabels[visibility],
+    description: visibilityDescriptions[visibility],
+  }));
 
-  return <ProtectedPage permission="viewDocuments"><div className="content">
+  return <ProtectedPage permission="viewDocuments"><div className="content route-documents-page library-first-page">
     <PageHeader
       eyebrow="Information"
       title="Documents"
-      description="Organization-scoped documents are server-filtered by visibility. Authorized uploads are malware-scanned before encryption and private storage."
+      description="Upload, review, approve, and open encrypted Local 801 documents available to you."
     />
-    <AlertBanner title="Private encrypted storage">
-      Storage keys, encryption metadata, integrity hashes, cleanup state, and raw object-store URLs are never exposed in this interface.
-    </AlertBanner>
-    {uploadOptions.length > 0 ? <DocumentUploadForm visibilityOptions={uploadOptions} /> : null}
+    {uploadOptions.length > 0 ? <DisclosureCard
+      title="Upload a document"
+      description="Choose a file and who should be able to see it. Files must pass malware scanning before encrypted storage."
+      className="route-primary-panel upload-record-panel"
+    >
+      <DocumentUploadForm visibilityOptions={uploadOptions} />
+    </DisclosureCard> : null}
+    {uploadOptions.length > 0 ? <MobileDocumentIntake visibilityOptions={uploadOptions} /> : null}
     <SectionCard
       title="Document library"
-      badge={<StatusBadge tone="info">{page ? `${page.documents.length} shown` : "Metadata unavailable"}</StatusBadge>}
+      description={page ? `${page.documents.length} ${page.documents.length === 1 ? "document is" : "documents are"} shown on this page.` : "The encrypted document index could not be loaded safely."}
     >
       {!page ? (
         <UnavailableState
-          title="Document metadata unavailable"
-          description="The encrypted document services remain unchanged; no synthetic document metadata is substituted."
+          title="Documents unavailable"
+          description="We couldn’t load the document list. The encrypted files themselves are left unchanged."
         />
       ) : page.documents.length === 0 ? (
         <EmptyState
-          title="No visible documents"
-          description="No document metadata is available within your authorized visibility scopes."
+          title="No documents to show"
+          description="No documents have been uploaded for you or shared with a scope you can access."
         />
       ) : <>
         <DataTable
-          caption="Authorized document metadata"
+          caption="Documents"
           headers={["Document", "Category", "File", "Visibility", "Uploader", "Created", "Action"]}
         >
           {page.documents.map((document) => <tr key={document.downloadHandle}>
@@ -125,12 +152,19 @@ export default async function DocumentsPage({
               <strong>{documentType(document.mediaType, document.originalFilename)}</strong>
               <div className="muted">{document.originalFilename ?? "Filename unavailable"}</div>
             </td>
-            <td>{visibilityLabels[document.visibility]}</td>
-            <td>{document.uploaderName}</td>
+            <td>
+              {visibilityLabels[document.visibility]}
+              <div className="muted">{visibilityDescriptions[document.visibility]}</div>
+            </td>
+            <td>{uploaderLabel(document.uploaderName)}</td>
             <td>{createdDate(document.createdAt)}</td>
             <td>
-              <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8 }}>
-                <a href={`/api/documents/${document.downloadHandle}/download`}>Download</a>
+              <div className="inline-actions">
+                <a className="button secondary compact-button" href={`/api/documents/${document.downloadHandle}/download`}>Download</a>
+                {canApproveDocuments && document.status === "under_review" ? (
+                  <DocumentApprovalButton handle={document.downloadHandle} title={document.title} />
+                ) : null}
+                {canManageDocuments ? <Link className="button secondary compact-button" href={`/documents/${document.downloadHandle}`}>Tags &amp; links</Link> : null}
                 {canManageDocuments ? (
                   <DocumentDeleteButton handle={document.downloadHandle} title={document.title} />
                 ) : null}
@@ -140,9 +174,13 @@ export default async function DocumentsPage({
         </DataTable>
         <Pagination
           label={`Showing up to ${page.pageSize} documents`}
+          historyBackFallbackHref={hasCursor ? `/documents?limit=${page.pageSize}` : null}
           nextHref={page.nextCursor ? `/documents?limit=${page.pageSize}&cursor=${encodeURIComponent(page.nextCursor)}` : null}
         />
       </>}
     </SectionCard>
+    <DisclosureCard title="How documents are protected" description="Storage and encryption details remain private." className="route-secondary-panel">
+      <p className="page-copy">Files are scanned before storage, encrypted, and checked against your role on every request. Storage keys, encryption metadata, integrity hashes, and raw storage URLs are never shown here.</p>
+    </DisclosureCard>
   </div></ProtectedPage>;
 }

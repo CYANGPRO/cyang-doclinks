@@ -55,7 +55,7 @@ export type EngagementWriteDependencies = {
 };
 
 const HANDLE_RE = /^[0-9a-f]{64}$/i;
-const organizationWideRoles = new Set<Role>(["system_owner", "local_admin", "cat_admin"]);
+const organizationWideRoles = new Set<Role>(["system_owner", "local_admin", "cat_admin", "cat_lead"]);
 const MAX_NOTE_CHARS = 2000;
 const MAX_BACKDATE_MS = 366 * 24 * 60 * 60 * 1000;
 const MAX_FUTURE_SKEW_MS = 10 * 60 * 1000;
@@ -154,7 +154,7 @@ async function resolvePersonId(context: WorkspaceContext, personHandleInput: unk
       AND person.archived_at IS NULL
       AND encode(public.digest($1::text || ':' || person.id::text, 'sha256'), 'hex') = $3::text
       AND (
-        $4::text IN ('system_owner','local_admin','cat_admin')
+        $4::text IN ('system_owner','local_admin','cat_admin','cat_lead')
         OR EXISTS (
           SELECT 1
           FROM local801.engagement_assignments assignment
@@ -192,7 +192,7 @@ async function resolveAssignment(
       AND assignment.status = 'open'
       AND encode(public.digest('assignment:' || $1::text || ':' || assignment.id::text, 'sha256'), 'hex') = $4::text
       AND (
-        $5::text IN ('system_owner','local_admin','cat_admin')
+        $5::text IN ('system_owner','local_admin','cat_admin','cat_lead')
         OR assignment.primary_user_id = $3::uuid
         OR assignment.backup_user_id = $3::uuid
       )
@@ -273,7 +273,7 @@ export async function getEngagementFormOptions(
         AND assignment.archived_at IS NULL
         AND assignment.status = 'open'
         AND (
-          $4::text IN ('system_owner','local_admin','cat_admin')
+          $4::text IN ('system_owner','local_admin','cat_admin','cat_lead')
           OR assignment.primary_user_id = $3::uuid
           OR assignment.backup_user_id = $3::uuid
         )
@@ -376,7 +376,7 @@ export async function recordEngagement(
           AND person.organization_id = $1::uuid
           AND person.archived_at IS NULL
           AND (
-            $11::text IN ('system_owner','local_admin','cat_admin')
+            $11::text IN ('system_owner','local_admin','cat_admin','cat_lead')
             OR (
               assignment.id IS NOT NULL
               AND (assignment.primary_user_id = actor.id OR assignment.backup_user_id = actor.id)
@@ -603,7 +603,7 @@ export async function completeOutreachFollowup(
           AND actor.organization_id = $1::uuid
           AND actor.deactivated_at IS NULL
           AND (
-            $5::text IN ('system_owner','local_admin','cat_admin')
+            $5::text IN ('system_owner','local_admin','cat_admin','cat_lead')
             OR EXISTS (
               SELECT 1
               FROM local801.engagement_assignments assignment

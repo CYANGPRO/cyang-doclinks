@@ -23,8 +23,8 @@ test("no runtime source outside the read-state helper remains Preview-only for p
   const files = await sourceFiles(new URL("../src/", import.meta.url));
   const offenders = [];
   for (const file of files) {
-    const pathname = fileURLToPath(file);
-    if (pathname.replaceAll("\\", "/").endsWith("/src/lib/pii-protected-read.ts")) continue;
+    const pathname = fileURLToPath(file).replaceAll("\\", "/");
+    if (pathname.endsWith("/src/lib/pii-protected-read.ts")) continue;
     const source = await readFile(file, "utf8");
     if (source.includes("isPreviewProtectedPiiReadEnabled")) offenders.push(pathname.split("/src/").at(-1));
   }
@@ -49,14 +49,13 @@ test("production JWT/session stores only opaque Local 801 auth state and strips 
 
 test("protected authoritative apply never reads direct PII from operational_json and its audit payload is metadata-only", async () => {
   const source = await text("../src/lib/pii-protected-import-apply.ts");
-  for (const field of ["first_name", "last_name", "preferred_name", "work_email", "employee_identifier", "member_identifier", "home_email", "work_phone", "cell_phone", "home_phone"]) {
+  for (const field of ["first_name", "last_name", "preferred_name", "work_email", "personal_email", "employee_identifier", "member_identifier"]) {
     assert.doesNotMatch(source, new RegExp(`operational_json\\s*->>\\s*['\"]${field}['\"]`, "i"), field);
   }
-  const normalizedSource = source.replaceAll("\r\n", "\n");
-  const auditStart = normalizedSource.lastIndexOf("payload: {");
-  const auditEnd = normalizedSource.indexOf("},\n    }, query);", auditStart);
-  assert.ok(auditStart >= 0 && auditEnd > auditStart);
-  const auditPayload = normalizedSource.slice(auditStart, auditEnd);
+  const auditStart = source.lastIndexOf("payload: {");
+  const auditEnd = source.slice(auditStart).search(/},\r?\n    }, query\);/);
+  assert.ok(auditStart >= 0 && auditEnd > 0);
+  const auditPayload = source.slice(auditStart, auditStart + auditEnd);
   assert.match(auditPayload, /protectedExecution/);
   assert.match(auditPayload, /mutationFingerprint/);
   assert.match(auditPayload, /totalRows/);

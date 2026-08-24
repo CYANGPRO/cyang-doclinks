@@ -45,6 +45,8 @@ if (process.env.LOCAL801_DATABASE_URL) {
 }
 
 const sql = postgres(databaseUrl, { max: 1, prepare: false, onnotice: () => {} });
+const raceSqlA = postgres(databaseUrl, { max: 1, prepare: false, onnotice: () => {} });
+const raceSqlB = postgres(databaseUrl, { max: 1, prepare: false, onnotice: () => {} });
 let integrationStep = "disposable database setup";
 function beginStep(step) {
   integrationStep = step;
@@ -77,6 +79,18 @@ const transaction = async (statements) => sql.begin(async (tx) => {
 });
 async function expectSqlState(promise, sqlstate, message) {
   await assert.rejects(promise, (error) => error?.code === sqlstate, message);
+}
+async function waitForBlockedRace(applicationName) {
+  for (let attempt = 0; attempt < 400; attempt += 1) {
+    const [activity] = await sql.unsafe(`
+      SELECT wait_event_type
+      FROM pg_catalog.pg_stat_activity
+      WHERE application_name = $1 AND state = 'active'
+    `, [applicationName]);
+    if (activity?.wait_event_type === "Lock") return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`Timed out waiting for ${applicationName} to block on a PostgreSQL lock.`);
 }
 
 try {
@@ -562,7 +576,7 @@ try {
       INSERT INTO local801.import_rows
         (organization_id, import_sheet_id, source_row_number, row_hash, normalized_json, state)
       SELECT $1, $2, value + 1,
-        encode(digest(jsonb_build_object(
+        encode(public.digest(jsonb_build_object(
           'first_name', 'Synthetic',
           'last_name', 'Member' || lpad(value::text, 5, '0'),
           'department', CASE WHEN value between 12001 and 17000 THEN 'Changed Department' ELSE 'Operations' END,
@@ -587,6 +601,13 @@ try {
 
   const firstBatch = await createBatch();
   const secondBatch = await createBatch();
+
+  // The synthetic fixture changes these tables by tens of thousands of rows in one
+  // connection. Refresh planner statistics before exercising the production reads,
+  // instead of racing Neon autovacuum and making the acceptance gate nondeterministic.
+  await sql.unsafe(`ANALYZE local801.import_batches, local801.import_files,
+    local801.import_sheets, local801.import_rows, local801.import_errors,
+    local801.import_match_candidates, local801.people, local801.person_identifiers`);
 
   const { getImportReviewDetail, getImportReviewSummary, setImportReviewDecision } = await import("../src/lib/import-review.ts");
   const { getDirectoryPage } = await import("../src/lib/directory.ts");
@@ -656,9 +677,11 @@ try {
   assert.equal(directory.people.length, 100);
   assert.equal(typeof directory.nextCursor, "string");
 
-  const [{ campaign_id: campaignId }] = await sql.unsafe(`
+  const [{ campaign_id: campaignId, campaign_handle: campaignHandle }] = await sql.unsafe(`
     INSERT INTO local801.outreach_campaigns (organization_id, name, status, created_by)
-    VALUES ($1, 'Synthetic 20K Campaign', 'active', $2) RETURNING id AS campaign_id
+    VALUES ($1, 'Synthetic 20K Campaign', 'active', $2)
+    RETURNING id AS campaign_id,
+      encode(public.digest('campaign:' || organization_id::text || ':' || id::text, 'sha256'), 'hex') AS campaign_handle
   `, [organizationId, userId]);
   await sql.unsafe(`
     INSERT INTO local801.outreach_campaign_population (organization_id, campaign_id, person_id)
@@ -678,32 +701,302 @@ try {
   `, [organizationId, campaignId, userId]);
   beginStep("getCampaignsPage aggregate keyset page");
   const campaigns = await getCampaignsPage(context, { pageSize: 25 }, query);
-  const campaign = campaigns.campaigns[0];
-  assert.match(campaign.handle, /^[a-f0-9]{64}$/);
-  assert.equal(campaign.startsOn, null);
-  assert.equal(campaign.endsOn, null);
-  assert.equal(campaign.launchedAt, null);
-  assert.deepEqual({
-    name: campaign.name,
-    status: campaign.status,
-    population: campaign.population,
-    assigned: campaign.assigned,
-    contacted: campaign.contacted,
-    completed: campaign.completed,
-    remaining: campaign.remaining,
-    completionPercentage: campaign.completionPercentage,
-  }, {
-    name: "Synthetic 20K Campaign", status: "active", population: 20000,
-    assigned: 18000, contacted: 12000, completed: 10000, remaining: 10000, completionPercentage: 50,
+  assert.deepEqual(campaigns.campaigns[0], {
+    handle: campaignHandle, name: "Synthetic 20K Campaign", status: "active",
+    startsOn: null, endsOn: null, launchedAt: null, population: 20000,
+    assigned: 18000, contacted: 12000, completed: 10000, unassigned: 2000,
+    overdue: 0, remaining: 10000, completionPercentage: 50,
   });
   beginStep("getCampaignPopulationPage bounded keyset page");
-  const population = await getCampaignPopulationPage(context, campaign.handle, { pageSize: 100 }, query);
+  const population = await getCampaignPopulationPage(context, campaignHandle, { pageSize: 100 }, query);
   assert.equal(population.total, 20000);
   assert.equal(population.people.length, 100);
   assert.equal(population.hasNext, true);
   assert.equal(typeof population.nextCursor, "string");
 
-  console.log(`PASS sql integration: migrations 0001-${expectedMigrationPrefixes.at(-1)}, durable-job CAS, replay-safe 25K CSV worker, and real 20K service queries completed in a disposable test database.`);
+  beginStep("Stage 17 correction integrity and PostgreSQL race guards");
+  const [{ id: integrityOrganizationId }] = await sql.unsafe(`
+    INSERT INTO local801.organizations (slug, name)
+    VALUES ('sql-stage17-integrity', 'SQL Stage 17 Integrity') RETURNING id
+  `);
+  const [{ id: integrityReviewerId }] = await sql.unsafe(`
+    INSERT INTO local801.users (organization_id, email, display_name)
+    VALUES ($1, 'stage17-reviewer@example.test', 'Stage 17 Reviewer') RETURNING id
+  `, [integrityOrganizationId]);
+  const integrityPeople = await sql.unsafe(`
+    INSERT INTO local801.people (organization_id, first_name, last_name, membership_status)
+    SELECT $1, 'Synthetic', label, 'unknown'
+    FROM unnest($2::text[]) AS labels(label)
+    RETURNING id, last_name
+  `, [integrityOrganizationId, ["DepartmentRace", "NoPrimaryRace", "ExistingPrimaryRace", "ArchivedTarget", "WorkEmailA", "WorkEmailB", "WorkEmailC"]]);
+  const integrityPerson = Object.fromEntries(integrityPeople.map((person) => [person.last_name, person.id]));
+  await sql.unsafe(`
+    INSERT INTO local801.person_pii
+      (organization_id, person_id,
+       first_name_encrypted_payload, first_name_encryption_key_version, first_name_encryption_format_version,
+       last_name_encrypted_payload, last_name_encryption_key_version, last_name_encryption_format_version,
+       name_sort_encrypted_payload, name_sort_encryption_key_version, name_sort_encryption_format_version)
+    SELECT $1, person.id, 'synthetic-first', 'v1', 1, 'synthetic-last', 'v1', 1,
+      'synthetic-sort', 'v1', 1
+    FROM local801.people person
+    WHERE person.organization_id = $1
+  `, [integrityOrganizationId]);
+  await sql.unsafe(`
+    INSERT INTO local801.pii_protection_state
+      (organization_id, write_mode, backfill_state, backfill_completed_at,
+       protected_read_enabled_at, protected_write_enabled_at, verified_at)
+    VALUES ($1, 'protected', 'complete', now(), now(), now(), now())
+  `, [integrityOrganizationId]);
+
+  const capture = (promise) => promise.then((value) => ({ value }), (error) => ({ error }));
+  let staleDepartmentRace;
+  await raceSqlA.begin(async (txA) => {
+    await txA.unsafe("SET LOCAL application_name TO 'local801-stage17-dq-a'");
+    await txA.unsafe(`SELECT local801.lock_data_quality_correction_target($1,$2,false,false,true,false,false,false)`,
+      [integrityOrganizationId, integrityPerson.DepartmentRace]);
+    await txA.unsafe(`UPDATE local801.people SET department = 'Operations' WHERE organization_id = $1 AND id = $2`,
+      [integrityOrganizationId, integrityPerson.DepartmentRace]);
+    staleDepartmentRace = capture(raceSqlB.begin(async (txB) => {
+      await txB.unsafe("SET LOCAL application_name TO 'local801-stage17-dq-b'");
+      await txB.unsafe(`SELECT local801.lock_data_quality_correction_target($1,$2,false,false,true,false,false,false)`,
+        [integrityOrganizationId, integrityPerson.DepartmentRace]);
+      await txB.unsafe(`UPDATE local801.people SET department = 'Finance' WHERE organization_id = $1 AND id = $2`,
+        [integrityOrganizationId, integrityPerson.DepartmentRace]);
+      await txB.unsafe(`INSERT INTO local801.audit_events
+        (organization_id, actor_user_id, event_type, subject_type, subject_id, event_hash)
+        VALUES ($1,$2,'record.update','data_quality_correction',$3,$4)`,
+        [integrityOrganizationId, integrityReviewerId, integrityPerson.DepartmentRace, "d".repeat(64)]);
+    }));
+    await waitForBlockedRace("local801-stage17-dq-b");
+  });
+  const departmentRaceResult = await staleDepartmentRace;
+  assert.equal(departmentRaceResult.error?.code, "P1702", "The losing Data Quality writer must fail stale after waiting.");
+  const [departmentRaceState] = await sql.unsafe(`
+    SELECT department,
+      (SELECT count(*)::int FROM local801.audit_events audit
+       WHERE audit.organization_id = $1 AND audit.event_hash = $3) AS losing_audits
+    FROM local801.people WHERE organization_id = $1 AND id = $2
+  `, [integrityOrganizationId, integrityPerson.DepartmentRace, "d".repeat(64)]);
+  assert.deepEqual(departmentRaceState, { department: "Operations", losing_audits: 0 });
+
+  await expectSqlState(sql.begin(async (tx) => {
+    await tx.unsafe(`SELECT local801.lock_data_quality_correction_target($1,$2,false,false,true,true,false,false)`,
+      [integrityOrganizationId, integrityPerson.DepartmentRace]);
+    await tx.unsafe(`UPDATE local801.people SET classification = 'Synthetic Classification' WHERE organization_id = $1 AND id = $2`,
+      [integrityOrganizationId, integrityPerson.DepartmentRace]);
+  }), "P1702", "A mixed correction must roll back if any requested field became stale.");
+  const [mixedState] = await sql.unsafe(`SELECT classification FROM local801.people WHERE organization_id = $1 AND id = $2`,
+    [integrityOrganizationId, integrityPerson.DepartmentRace]);
+  assert.equal(mixedState.classification, null);
+
+  await sql.unsafe(`UPDATE local801.people SET archived_at = now() WHERE organization_id = $1 AND id = $2`,
+    [integrityOrganizationId, integrityPerson.ArchivedTarget]);
+  await expectSqlState(sql.begin(async (tx) => {
+    await tx.unsafe(`SELECT local801.lock_data_quality_correction_target($1,$2,true,true,false,false,false,false)`,
+      [integrityOrganizationId, integrityPerson.ArchivedTarget]);
+    await tx.unsafe(`INSERT INTO local801.audit_events
+      (organization_id, actor_user_id, event_type, subject_type, subject_id, event_hash)
+      VALUES ($1,$2,'record.update','data_quality_correction',$3,$4)`,
+      [integrityOrganizationId, integrityReviewerId, integrityPerson.ArchivedTarget, "e".repeat(64)]);
+  }), "P1702", "An archived correction target must fail before protected writes or audit.");
+  const [archivedDataQualityState] = await sql.unsafe(`
+    SELECT
+      (SELECT count(*)::int FROM local801.person_identifiers WHERE organization_id = $1 AND person_id = $2) AS identifiers,
+      (SELECT count(*)::int FROM local801.person_contact_methods WHERE organization_id = $1 AND person_id = $2) AS contacts,
+      (SELECT count(*)::int FROM local801.audit_events WHERE organization_id = $1 AND event_hash = $3) AS audits
+  `, [integrityOrganizationId, integrityPerson.ArchivedTarget, "e".repeat(64)]);
+  assert.deepEqual(archivedDataQualityState, { identifiers: 0, contacts: 0, audits: 0 });
+
+  const ids = (await sql.unsafe(`SELECT gen_random_uuid() AS id FROM generate_series(1, 24)`)).map((row) => row.id);
+  let idOffset = 0;
+  const nextId = () => ids[idOffset++];
+  const submitCorrection = async (requestId, personId, field) => {
+    await sql.unsafe(`SELECT local801.submit_protected_contact_correction($1,$2,$3,$4,$5,$6,$7,1)`,
+      [integrityOrganizationId, requestId, personId, integrityReviewerId, field, "synthetic-encrypted-proposal", "v1"]);
+  };
+  const approveCorrection = (tx, requestId, contactId, field, hash) => tx.unsafe(`
+    SELECT local801.approve_protected_contact_correction(
+      $1,$2,$3,$4,$5,'assigned_only',$6,$7,1,$8,$9,
+      local801.contact_correction_revision(
+        $1,$2,
+        (SELECT contact.id
+         FROM local801.person_contact_methods contact
+         WHERE contact.organization_id = $1
+           AND contact.person_id = (SELECT person_id FROM local801.contact_correction_requests WHERE id = $2)
+           AND contact.contact_type = $5 AND contact.is_primary = true AND contact.archived_at IS NULL
+         ORDER BY contact.created_at, contact.id LIMIT 1),
+        (SELECT protected.xmin::text
+         FROM local801.person_contact_methods contact
+         JOIN local801.person_contact_method_pii protected
+           ON protected.organization_id = contact.organization_id AND protected.contact_method_id = contact.id
+         WHERE contact.organization_id = $1
+           AND contact.person_id = (SELECT person_id FROM local801.contact_correction_requests WHERE id = $2)
+           AND contact.contact_type = $5 AND contact.is_primary = true AND contact.archived_at IS NULL
+         ORDER BY contact.created_at, contact.id LIMIT 1)
+      )
+    )
+  `, [integrityOrganizationId, requestId, integrityReviewerId, contactId, field,
+    "synthetic-encrypted-contact", "v1", "v1", hash]);
+
+  const initialPhoneRequest = nextId();
+  const existingPhoneContact = nextId();
+  await submitCorrection(initialPhoneRequest, integrityPerson.ExistingPrimaryRace, "phone");
+  await sql.begin((tx) => approveCorrection(tx, initialPhoneRequest, existingPhoneContact, "phone", "1".repeat(64)));
+  const existingRaceRequestA = nextId();
+  const existingRaceRequestB = nextId();
+  await submitCorrection(existingRaceRequestA, integrityPerson.ExistingPrimaryRace, "phone");
+  await submitCorrection(existingRaceRequestB, integrityPerson.ExistingPrimaryRace, "phone");
+  const [{ revision: queueRevision }] = await sql.unsafe(`
+    SELECT local801.contact_correction_revision(
+      request.organization_id, request.id, current_contact.contact_method_id::uuid, current_contact.current_contact_version
+    ) AS revision
+    FROM local801.contact_correction_requests request
+    LEFT JOIN LATERAL (
+      SELECT contact.id::text AS contact_method_id, protected.xmin::text AS current_contact_version
+      FROM local801.person_contact_methods contact
+      JOIN local801.person_contact_method_pii protected
+        ON protected.organization_id = contact.organization_id AND protected.contact_method_id = contact.id
+      WHERE contact.organization_id = request.organization_id AND contact.person_id = request.person_id
+        AND contact.contact_type = request.field_name AND contact.is_primary = true AND contact.archived_at IS NULL
+      ORDER BY contact.created_at, contact.id LIMIT 1
+    ) current_contact ON true
+    WHERE request.organization_id = $1 AND request.id = $2
+  `, [integrityOrganizationId, existingRaceRequestA]);
+  assert.match(queueRevision, /^[0-9a-f]{64}$/, "The review queue must emit a valid opaque contact revision.");
+  let existingContactRace;
+  await raceSqlA.begin(async (txA) => {
+    await txA.unsafe("SET LOCAL application_name TO 'local801-stage17-contact-existing-a'");
+    await approveCorrection(txA, existingRaceRequestA, existingPhoneContact, "phone", "2".repeat(64));
+    await txA.unsafe(`INSERT INTO local801.audit_events
+      (organization_id, actor_user_id, event_type, subject_type, subject_id, event_hash)
+      VALUES ($1,$2,'record.update','contact_correction_request',$3,$4)`,
+      [integrityOrganizationId, integrityReviewerId, existingRaceRequestA, "2".repeat(64)]);
+    existingContactRace = capture(raceSqlB.begin(async (txB) => {
+      await txB.unsafe("SET LOCAL application_name TO 'local801-stage17-contact-existing-b'");
+      await approveCorrection(txB, existingRaceRequestB, existingPhoneContact, "phone", "3".repeat(64));
+      await txB.unsafe(`INSERT INTO local801.audit_events
+        (organization_id, actor_user_id, event_type, subject_type, subject_id, event_hash)
+        VALUES ($1,$2,'record.update','contact_correction_request',$3,$4)`,
+        [integrityOrganizationId, integrityReviewerId, existingRaceRequestB, "3".repeat(64)]);
+    }));
+    await waitForBlockedRace("local801-stage17-contact-existing-b");
+  });
+  const existingRaceResult = await existingContactRace;
+  assert.equal(existingRaceResult.error?.code, "P1701", "A second approval must not overwrite the same contact row.");
+  const [existingRaceState] = await sql.unsafe(`
+    SELECT request_a.state AS state_a, request_b.state AS state_b,
+      protected.contact_value_encrypted_payload AS stored_payload,
+      (SELECT count(*)::int FROM local801.audit_events WHERE organization_id = $1 AND event_hash = $5) AS losing_audits
+    FROM local801.contact_correction_requests request_a
+    JOIN local801.contact_correction_requests request_b ON request_b.id = $3
+    JOIN local801.person_contact_method_pii protected
+      ON protected.organization_id = request_a.organization_id AND protected.contact_method_id = $4
+    WHERE request_a.organization_id = $1 AND request_a.id = $2
+  `, [integrityOrganizationId, existingRaceRequestA, existingRaceRequestB, existingPhoneContact, "3".repeat(64)]);
+  assert.deepEqual(existingRaceState, {
+    state_a: "approved", state_b: "submitted", stored_payload: "synthetic-encrypted-contact", losing_audits: 0,
+  });
+  await expectSqlState(sql.begin((tx) => approveCorrection(
+    tx, existingRaceRequestA, existingPhoneContact, "phone", "4".repeat(64),
+  )), "P1701", "A decided contact request must not be replayed.");
+
+  const noPrimaryRequestA = nextId();
+  const noPrimaryRequestB = nextId();
+  const noPrimaryContactA = nextId();
+  const noPrimaryContactB = nextId();
+  await submitCorrection(noPrimaryRequestA, integrityPerson.NoPrimaryRace, "phone");
+  await submitCorrection(noPrimaryRequestB, integrityPerson.NoPrimaryRace, "phone");
+  let noPrimaryRace;
+  await raceSqlA.begin(async (txA) => {
+    await txA.unsafe("SET LOCAL application_name TO 'local801-stage17-contact-new-a'");
+    await approveCorrection(txA, noPrimaryRequestA, noPrimaryContactA, "phone", "5".repeat(64));
+    noPrimaryRace = capture(raceSqlB.begin(async (txB) => {
+      await txB.unsafe("SET LOCAL application_name TO 'local801-stage17-contact-new-b'");
+      await approveCorrection(txB, noPrimaryRequestB, noPrimaryContactB, "phone", "6".repeat(64));
+    }));
+    await waitForBlockedRace("local801-stage17-contact-new-b");
+  });
+  const noPrimaryRaceResult = await noPrimaryRace;
+  assert.equal(noPrimaryRaceResult.error?.code, "P1701");
+  const [noPrimaryState] = await sql.unsafe(`SELECT count(*)::int AS primary_count
+    FROM local801.person_contact_methods
+    WHERE organization_id = $1 AND person_id = $2 AND contact_type = 'phone'
+      AND is_primary = true AND archived_at IS NULL`, [integrityOrganizationId, integrityPerson.NoPrimaryRace]);
+  assert.equal(noPrimaryState.primary_count, 1);
+
+  const archivedRequest = nextId();
+  const archivedContact = nextId();
+  const archivedApprovalPerson = await sql.begin(async (tx) => {
+    const [{ id }] = await tx.unsafe(`
+      INSERT INTO local801.people (organization_id, first_name, last_name, membership_status)
+      VALUES ($1,'Synthetic','ArchivedApproval','unknown') RETURNING id
+    `, [integrityOrganizationId]);
+    await tx.unsafe(`INSERT INTO local801.person_pii
+      (organization_id, person_id,
+       first_name_encrypted_payload, first_name_encryption_key_version, first_name_encryption_format_version,
+       last_name_encrypted_payload, last_name_encryption_key_version, last_name_encryption_format_version,
+       name_sort_encrypted_payload, name_sort_encryption_key_version, name_sort_encryption_format_version)
+      VALUES ($1,$2,'synthetic-first','v1',1,'synthetic-last','v1',1,'synthetic-sort','v1',1)`,
+      [integrityOrganizationId, id]);
+    return id;
+  });
+  await submitCorrection(archivedRequest, archivedApprovalPerson, "phone");
+  await sql.unsafe(`UPDATE local801.people SET archived_at = now() WHERE organization_id = $1 AND id = $2`,
+    [integrityOrganizationId, archivedApprovalPerson]);
+  await expectSqlState(sql.begin((tx) => approveCorrection(
+    tx, archivedRequest, archivedContact, "phone", "7".repeat(64),
+  )), "P1701", "An approval must fail if the person was archived after service resolution.");
+  const [archivedApprovalState] = await sql.unsafe(`
+    SELECT request.state,
+      (SELECT count(*)::int FROM local801.person_contact_methods contact
+       WHERE contact.organization_id = $1 AND contact.person_id = $3) AS contacts
+    FROM local801.contact_correction_requests request
+    WHERE request.organization_id = $1 AND request.id = $2
+  `, [integrityOrganizationId, archivedRequest, archivedApprovalPerson]);
+  assert.deepEqual(archivedApprovalState, { state: "submitted", contacts: 0 });
+
+  const workRequestA = nextId();
+  const workRequestB = nextId();
+  const workContactA = nextId();
+  const workContactB = nextId();
+  await submitCorrection(workRequestA, integrityPerson.WorkEmailA, "work_email");
+  await submitCorrection(workRequestB, integrityPerson.WorkEmailB, "work_email");
+  let workEmailRace;
+  await raceSqlA.begin(async (txA) => {
+    await txA.unsafe("SET LOCAL application_name TO 'local801-stage17-work-email-a'");
+    await approveCorrection(txA, workRequestA, workContactA, "work_email", "8".repeat(64));
+    workEmailRace = capture(raceSqlB.begin(async (txB) => {
+      await txB.unsafe("SET LOCAL application_name TO 'local801-stage17-work-email-b'");
+      await approveCorrection(txB, workRequestB, workContactB, "work_email", "8".repeat(64));
+    }));
+    await waitForBlockedRace("local801-stage17-work-email-b");
+  });
+  const workEmailRaceResult = await workEmailRace;
+  assert.equal(workEmailRaceResult.error?.code, "23505", "Concurrent protected work-email duplicates must fail.");
+  const workRequestC = nextId();
+  const workContactC = nextId();
+  await submitCorrection(workRequestC, integrityPerson.WorkEmailC, "work_email");
+  await expectSqlState(sql.begin((tx) => approveCorrection(
+    tx, workRequestC, workContactC, "work_email", "8".repeat(64),
+  )), "23505", "Sequential protected work-email duplicates must fail.");
+  const [workEmailState] = await sql.unsafe(`
+    SELECT
+      (SELECT count(*)::int FROM local801.person_contact_methods contact
+       WHERE contact.organization_id = $1 AND contact.contact_type = 'work_email'
+         AND contact.archived_at IS NULL) AS active_contacts,
+      (SELECT count(*)::int FROM local801.pii_exact_indexes exact_index
+       WHERE exact_index.organization_id = $1 AND exact_index.entity_type = 'person_contact_method'
+         AND exact_index.index_domain = 'contact:work-email' AND exact_index.index_key_version = 'v1'
+         AND exact_index.index_hash = $4) AS exact_indexes,
+      (SELECT state FROM local801.contact_correction_requests WHERE organization_id = $1 AND id = $2) AS concurrent_loser_state,
+      (SELECT state FROM local801.contact_correction_requests WHERE organization_id = $1 AND id = $3) AS sequential_loser_state
+  `, [integrityOrganizationId, workRequestB, workRequestC, "8".repeat(64)]);
+  assert.deepEqual(workEmailState, {
+    active_contacts: 1, exact_indexes: 1, concurrent_loser_state: "submitted", sequential_loser_state: "submitted",
+  });
+
+  console.log(`PASS sql integration: migrations ${expectedMigrationPrefixes[0]}-${expectedMigrationPrefixes.at(-1)}, Stage 17 correction races, durable-job CAS, replay-safe 25K CSV worker, and real 20K service queries completed in a disposable test database.`);
 } finally {
+  await Promise.all([raceSqlA.end({ timeout: 5 }), raceSqlB.end({ timeout: 5 })]);
   await sql.end({ timeout: 5 });
 }

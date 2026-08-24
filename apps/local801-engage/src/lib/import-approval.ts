@@ -226,7 +226,7 @@ function identities(values: Record<string, string | null>) {
 }
 
 function validImportKind(value: string): value is ImportKind {
-  return value === "current_roster" || value === "new_hires"
+  return value === "current_roster" || value === "new_hires" || value === "recent_hires"
     || value === "membership_additions" || value === "membership_drops" || value === "legacy_cat";
 }
 
@@ -1100,7 +1100,7 @@ function evaluateDataset(
         plannedMembershipStatus = sourceStatus;
         if (row.resolution_type === "confirm_existing") eventAction = "correction";
       }
-    } else if (batch.import_kind === "new_hires") {
+    } else if (batch.import_kind === "new_hires" || batch.import_kind === "recent_hires") {
       const rowHireDate = clean(values.hire_date);
       if (rowHireDate && validIsoDate(rowHireDate)) eventDate = rowHireDate;
       else if (rowHireDate) blockingErrors += 1;
@@ -1144,7 +1144,7 @@ function evaluateDataset(
   if (conflicts > 0) addReason(reasons, "IDENTIFIER_CONFLICT", conflicts);
   if (unresolved > 0) addReason(reasons, "UNRESOLVED_ROWS", unresolved);
   if (stale > 0) addReason(reasons, "STALE_RESOLUTION", stale);
-  if (batch.import_kind === "new_hires" && missingNewHireDate > 0) addReason(reasons, "EFFECTIVE_DATE_REQUIRED", missingNewHireDate);
+  if ((batch.import_kind === "new_hires" || batch.import_kind === "recent_hires") && missingNewHireDate > 0) addReason(reasons, "EFFECTIVE_DATE_REQUIRED", missingNewHireDate);
 
   const previousPeople = new Set(dataset.previousSnapshot.map((row) => row.person_id).filter((id): id is string => Boolean(id)));
   const plannedPeople = new Set(actions.map((action) => action.existingPersonId).filter((id): id is string => Boolean(id)));

@@ -4,7 +4,7 @@ import { z } from "zod";
 
 const appSchema = z.object({
   LOCAL801_APP_URL: z.string().url().default("https://cat.cyang.io"),
-  LOCAL801_APP_NAME: z.string().default("Local 801 Engage"),
+  LOCAL801_APP_NAME: z.string().default("Engaging Local 801"),
   LOCAL801_APP_SHORT_NAME: z.string().default("801 Engage"),
   LOCAL801_THEME_COLOR: z.string().default("#134d8c"),
   SIGNUP_ENABLED: z.enum(["0", "1"]).default("0"),
@@ -16,6 +16,11 @@ const appSchema = z.object({
   LOCAL801_IMPORT_MAX_ROWS: z.coerce.number().int().positive().default(25000),
   LOCAL801_EXPORT_MAX_ROWS: z.coerce.number().int().positive().default(5000),
   LOCAL801_SMALL_CELL_THRESHOLD: z.coerce.number().int().min(2).default(5),
+  LOCAL801_SEARCH_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(10).max(600).default(60),
+  LOCAL801_IMPORT_RATE_LIMIT_PER_HOUR: z.coerce.number().int().min(1).max(100).default(10),
+  LOCAL801_EXPORT_RATE_LIMIT_PER_HOUR: z.coerce.number().int().min(1).max(200).default(20),
+  LOCAL801_DOWNLOAD_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).max(200).default(20),
+  LOCAL801_MUTATION_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(10).max(600).default(120),
   LOCAL801_PUSH_ENABLED: z.enum(["0", "1"]).default("0"),
   LOCAL801_PREVIEW_AUTH_ENABLED: z.enum(["0", "1"]).default("0"),
 });

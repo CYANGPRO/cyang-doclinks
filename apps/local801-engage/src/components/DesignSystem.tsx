@@ -1,5 +1,7 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { type ReactNode } from "react";
+import { CursorBackButton } from "@/components/CursorBackButton";
+import { SortableDataTable } from "@/components/SortableDataTable";
 
 export function PageHeader({ eyebrow, title, description, actions }: {
   eyebrow: string;
@@ -19,15 +21,16 @@ export function PageHeader({ eyebrow, title, description, actions }: {
   );
 }
 
-export function SectionCard({ title, description, badge, children, className = "" }: {
+export function SectionCard({ title, description, badge, children, className = "", id }: {
   title?: string;
   description?: string;
   badge?: ReactNode;
   children: ReactNode;
   className?: string;
+  id?: string;
 }) {
   return (
-    <section className={`section-card ${className}`.trim()}>
+    <section className={`section-card ${className}`.trim()} id={id}>
       {title || badge ? (
         <div className="section-heading">
           <div>{title ? <h2>{title}</h2> : null}{description ? <p>{description}</p> : null}</div>
@@ -39,19 +42,45 @@ export function SectionCard({ title, description, badge, children, className = "
   );
 }
 
-export function StatCard({ label, value, detail, tone = "default" }: {
+export function DisclosureCard({ title, description, badge, children, className = "", defaultOpen = false }: {
+  title: string;
+  description?: string;
+  badge?: ReactNode;
+  children: ReactNode;
+  className?: string;
+  defaultOpen?: boolean;
+}) {
+  return (
+    <details className={`section-card expandable-card ${className}`.trim()} open={defaultOpen}>
+      <summary>
+        <span>
+          <strong>{title}</strong>
+          {description ? <span className="expandable-description">{description}</span> : null}
+        </span>
+        <span className="expandable-meta">{badge}<span className="expandable-chevron" aria-hidden="true">+</span></span>
+      </summary>
+      <div className="expandable-body">{children}</div>
+    </details>
+  );
+}
+
+export function StatCard({ label, value, detail, tone = "default", href }: {
   label: string;
   value: ReactNode;
   detail?: ReactNode;
   tone?: "default" | "brand" | "attention" | "danger";
+  href?: string;
 }) {
-  return (
-    <article className={`stat-card stat-card-${tone}`}>
-      <div className="stat-label">{label}</div>
-      <div className="stat-value">{value}</div>
-      {detail ? <div className="stat-detail">{detail}</div> : null}
-    </article>
-  );
+  const content = <>
+    <div className="stat-label">{label}</div>
+    <div className="stat-value">{value}</div>
+    {detail ? <div className="stat-detail">{detail}</div> : null}
+    {href ? <span aria-hidden="true" style={{ color: "var(--text-subtle)", position: "absolute", right: 12, top: 10 }}>→</span> : null}
+  </>;
+
+  return href
+    ? <Link className={`stat-card stat-card-${tone}`} href={href} style={{ color: "inherit", position: "relative", textDecoration: "none" }}>{content}</Link>
+    : <article className={`stat-card stat-card-${tone}`}>{content}</article>;
 }
 
 export type StatusTone = "neutral" | "info" | "ready" | "pending" | "warning" | "blocked" | "danger" | "preview";
@@ -99,14 +128,19 @@ export function FilterBar({ children }: { children: ReactNode }) {
   return <div className="filter-bar">{children}</div>;
 }
 
-export function Pagination({ nextHref, previousHref, label }: {
+export function Pagination({ nextHref, previousHref, historyBackFallbackHref, label }: {
   nextHref?: string | null;
   previousHref?: string | null;
+  historyBackFallbackHref?: string | null;
   label: string;
 }) {
   return (
     <nav className="pagination" aria-label="Pagination">
-      <span className="pagination-previous">{previousHref ? <Link className="button secondary" href={previousHref}>Previous</Link> : null}</span>
+      <span className="pagination-previous">{previousHref
+        ? <Link className="button secondary" href={previousHref}>Previous</Link>
+        : historyBackFallbackHref
+          ? <CursorBackButton fallbackHref={historyBackFallbackHref} />
+          : null}</span>
       <span className="pagination-label">{label}</span>
       <span className="pagination-next">{nextHref ? <Link className="button secondary" href={nextHref}>Next</Link> : null}</span>
     </nav>
@@ -118,18 +152,7 @@ export function DataTable({ caption, headers, children }: {
   headers: string[];
   children: ReactNode;
 }) {
-  return (
-    <div>
-      <p className="table-scroll-hint">Swipe horizontally to see all columns.</p>
-      <div className="table-scroll" tabIndex={0} role="region" aria-label={caption}>
-        <table className="data-table">
-          <caption className="sr-only">{caption}</caption>
-          <thead><tr>{headers.map((header) => <th scope="col" key={header}>{header}</th>)}</tr></thead>
-          <tbody>{children}</tbody>
-        </table>
-      </div>
-    </div>
-  );
+  return <SortableDataTable caption={caption} headers={headers}>{children}</SortableDataTable>;
 }
 
 export function ReviewSummary({ children }: { children: ReactNode }) {

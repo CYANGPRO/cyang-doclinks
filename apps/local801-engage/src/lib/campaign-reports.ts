@@ -126,7 +126,7 @@ export async function getCampaignReport(
       WHERE organization_id = $1::uuid
         AND status <> 'archived'
       GROUP BY status
-      ORDER BY campaign_count DESC, status ASC
+      ORDER BY status ASC
       LIMIT 20
     `, [context.organizationId]),
     query<CampaignRow>(`
@@ -154,9 +154,7 @@ export async function getCampaignReport(
       LEFT JOIN assignment_counts assignment ON assignment.campaign_id = summary.campaign_id
       WHERE summary.organization_id = $1::uuid
         AND summary.status <> 'archived'
-      ORDER BY
-        CASE summary.status WHEN 'active' THEN 0 WHEN 'draft' THEN 1 WHEN 'closed' THEN 2 ELSE 3 END,
-        summary.name ASC
+      ORDER BY summary.name ASC
       LIMIT 50
     `, [context.organizationId]),
   ]);

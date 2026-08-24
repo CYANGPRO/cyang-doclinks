@@ -151,7 +151,7 @@ export async function hydrateEngagementReportFromProtectedPii(
     organizers: organizers.map((row) => ({
       label: protectedOrganizerLabel(row.user_id, usersById, organizationId, keyConfig),
       eventCount: count(row.event_count),
-    })),
+    })).toSorted((left, right) => left.label.localeCompare(right.label, undefined, { sensitivity: "base" })),
   };
 }
 

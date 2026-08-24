@@ -125,6 +125,21 @@ test("CAT members cannot record a general engagement without an open assignment 
   }, { query, now: () => new Date("2026-08-14T19:00:00Z") }), /Select a current outreach assignment/i);
 });
 
+test("LCATs can record organization-wide general outreach without a prior assignment", async () => {
+  const statements = [];
+  const leadContext = { ...context, role: "cat_lead" };
+  const query = queryFor({ "engagement-recording:resolve-person": [{ id: PERSON }] });
+  await recordEngagement(leadContext, {
+    personHandle: "a".repeat(64), contactMethod: "phone", outcome: "contacted",
+  }, {
+    query,
+    now: () => new Date("2026-08-14T19:00:00Z"),
+    prepareAudit: async () => ({ sql: "/* audit */ select 1" }),
+    runTransaction: async (items) => statements.push(...items),
+  });
+  assert.match(statements[0].sql, /'system_owner','local_admin','cat_admin','cat_lead'/);
+});
+
 test("follow-up completion is scoped to the authorized employee and audited atomically", async () => {
   const statements = [];
   const query = queryFor({

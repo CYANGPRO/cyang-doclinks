@@ -4,7 +4,10 @@ import { requirePreviewUser } from "@/lib/authz.server";
 import { downloadDocument } from "@/lib/document-storage";
 import { resolveDocumentDownloadId } from "@/lib/documents";
 import { writeSecuritySignal } from "@/lib/security-signal";
+import { operationalRuntimeEnabled } from "@/lib/operational-runtime";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
+import { enforceWorkspaceRateLimit, RateLimitError } from "@/lib/rate-limit";
+import { rateLimitResponse } from "@/lib/rate-limit-response";
 
 const safeDocumentMediaTypes = new Set([
   "application/pdf",
@@ -47,6 +50,7 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ handle: string }> },
 ) {
+  if (!operationalRuntimeEnabled()) return jsonNoStore({ error: "NOT_FOUND" }, 404);
   const auth = await requirePreviewUser("viewDocuments");
   if (!auth.ok) {
     auth.response.headers.set("Cache-Control", "private, no-store, max-age=0, must-revalidate");
@@ -55,6 +59,7 @@ export async function GET(
 
   try {
     const context = await resolveWorkspaceContext(auth.user);
+    await enforceWorkspaceRateLimit(context, "download");
     const { handle } = await params;
     const documentId = await resolveDocumentDownloadId(context, handle);
     if (!documentId) {
@@ -62,9 +67,17 @@ export async function GET(
     }
 
     const downloaded = await downloadDocument({
-      actor: { organizationId: context.organizationId, role: context.role },
+      actor: { organizationId: context.organizationId, userId: context.userId, role: context.role },
       organizationId: context.organizationId,
       documentId,
+    });
+    await writeAuditEvent({
+      eventType: "record.read",
+      actorId: context.userId,
+      organizationId: context.organizationId,
+      subjectType: "document",
+      subjectId: documentId,
+      payload: { operation: "download", byteSize: downloaded.plaintext.byteLength },
     });
 
     const filename = safeDownloadFilename(downloaded.originalFilename);
@@ -72,15 +85,6 @@ export async function GET(
       ? downloaded.mediaType
       : "application/octet-stream";
 
-    // Fail closed: protected bytes are not released if the access event cannot be durably recorded.
-    await writeAuditEvent({
-      eventType: "record.access",
-      actorId: context.userId,
-      organizationId: context.organizationId,
-      subjectType: "document",
-      subjectId: documentId,
-      payload: { operation: "download", outcome: "success", byteSize: downloaded.plaintext.byteLength, mediaType },
-    });
     writeSecuritySignal("warn", "protected_access", {
       outcome: "success", operation: "document.download", actorId: context.userId,
       organizationId: context.organizationId, subjectId: documentId,
@@ -98,7 +102,8 @@ export async function GET(
         "X-Content-Type-Options": "nosniff",
       },
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof RateLimitError) return rateLimitResponse(error);
     return jsonNoStore({ error: "DOCUMENT_UNAVAILABLE" }, 503);
   }
 }

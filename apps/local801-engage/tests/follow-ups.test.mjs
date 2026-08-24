@@ -11,9 +11,9 @@ test("follow-up queue requires recordEngagement permission", () => {
 });
 
 test("CAT roles cannot broaden follow-up scope", () => {
-  assert.match(service, /organizationWideRoles = new Set<Role>\(\["system_owner", "local_admin", "cat_admin"\]\)/);
+  assert.match(service, /organizationWideRoles = new Set<Role>\(\["system_owner", "local_admin", "cat_admin", "cat_lead"\]\)/);
   assert.match(service, /return organizationWideRoles\.has\(role\) \? requested : "mine"/);
-  assert.match(page, /Your CAT role is limited to follow-ups assigned to you/);
+  assert.match(page, /Your CAT role only shows follow-ups assigned to you for people in your current assignment scope/);
 });
 
 test("CAT follow-up scope requires current open employee assignments", () => {
@@ -21,7 +21,7 @@ test("CAT follow-up scope requires current open employee assignments", () => {
 });
 
 test("administrators can select all authorized follow-ups", () => {
-  assert.match(page, /<option value="authorized">All authorized follow-ups<\/option>/);
+  assert.match(page, /<option value="authorized">Team follow-ups<\/option>/);
   assert.match(service, /const organizationWide = effectiveScope === "authorized"/);
 });
 
@@ -61,7 +61,7 @@ test("Stage 8A reuses the existing completion component", () => {
 });
 
 test("completed follow-ups are read-only", () => {
-  assert.match(page, /Completed follow-ups are read-only in this view/);
+  assert.match(page, /Completed work remains available for 14 days/);
   assert.match(page, /item\.status === "open"/);
 });
 

@@ -258,7 +258,7 @@ export const IMPORT_EXECUTION_SQL = `
       WHERE gate.organization_slug = 'local801-preview'
         AND gate.state = 'under_review'
         AND gate.processing_stage = 'ready_for_review'
-        AND gate.import_kind IN ('current_roster','new_hires','membership_additions','membership_drops')
+        AND gate.import_kind IN ('current_roster','new_hires','recent_hires','membership_additions','membership_drops')
         AND gate.file_count = 1
         AND gate.source_file_id IS NOT NULL
         AND gate.source_sha256 IS NOT NULL
@@ -475,7 +475,7 @@ export const IMPORT_EXECUTION_SQL = `
       NULLIF(btrim(target.normalized_json ->> 'work_location'), ''),
       batch.source_file_id
     FROM target_rows target CROSS JOIN gate_facts batch
-    WHERE batch.import_kind = 'new_hires'
+    WHERE batch.import_kind IN ('new_hires','recent_hires')
     RETURNING id
   ),
   inserted_snapshot AS (

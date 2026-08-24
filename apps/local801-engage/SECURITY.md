@@ -1,6 +1,6 @@
-# Local 801 Engage Security
+# Engaging Local 801 security
 
-Local 801 Engage is private, invitation-only, MFA-required, and independently deployed from DocLinks. Preview role cookies and all seeded records are synthetic-only test mechanisms. **Real member data remains prohibited until the Stage 14 production-readiness gates are complete and final approval is explicit.**
+Engaging Local 801 is private, invitation-only, MFA-required, and independently deployed from DocLinks. Preview role cookies and all seeded records are synthetic-only test mechanisms. **Real member data remains prohibited until the remaining production-readiness gates in `docs/ROADMAP_TO_COMPLETION.md` are complete and final approval is explicit.**
 
 ## Implemented controls
 
@@ -17,6 +17,9 @@ Local 801 Engage is private, invitation-only, MFA-required, and independently de
 - shared malware scanning through `https://scan.cyang.io` with per-application HMAC authentication, bounded requests, scanner fail-closed behavior, and no scanner-side file retention;
 - Stage 12 authoritative import execution remains Preview-only, synthetic-only, fingerprint-bound, and disabled by default;
 - Stage 14A production launch interlock: Vercel Production authentication cannot run unless the explicit launch flag and every coded security prerequisite are satisfied;
+- Stage 23 synthetic Production-origin pilot interlock: real-origin identity/device acceptance can run only after every other launch prerequisite passes, while final launch and Production durable imports remain closed;
+- atomic PostgreSQL rate-limit buckets for high-risk search, import, export, download, and mutation paths, with Production fail-closed behavior;
+- redacted durable document-download auditing and read-only R2/database object reconciliation;
 - secret-safe Stage 14 production-readiness reporting in Settings and `npm run security:production-readiness`; blocker output contains status codes only, never credentials or raw configuration values;
 - CSP, frame/object restrictions, no-store application response caching, noindex directives, COOP/CORP, and HSTS on production builds;
 - the service worker caches only fixed static/offline assets, not authenticated application responses;
@@ -57,8 +60,8 @@ Document deletion first archives and marks the database record as cleanup-pendin
 
 - Apply and pass synthetic acceptance for the implemented protected-PII migrations, read/write paths, search, import, and reporting behavior.
 - Complete a formal authorization/tenant-isolation review for every page, Route Handler, mutation, export, and background task.
-- Complete rate-limit coverage for high-risk search, import, export, download, and mutation paths.
-- Complete audit coverage for private storage operations and operational orphan/cleanup procedures.
+- Apply/accept migration `0024` and exercise limiter threshold/outage behavior in the isolated target.
+- Run private-storage reconciliation and rehearse orphan/cleanup recovery against the dedicated bucket.
 - Configure production monitoring/alerting with sensitive-data filtering and verify alert delivery.
 - Configure backups and complete a documented restore exercise.
 - Document and test object-key and PII-key rotation procedures.
@@ -66,4 +69,4 @@ Document deletion first archives and marks the database record as cleanup-pendin
 - Complete final production OIDC/MFA, scanner, R2, database, TLS/domain, and session-revocation acceptance.
 - Present the completed production review package for explicit launch approval.
 
-Real member data remains prohibited until these controls are implemented, tested, and approved. Native authenticated web reporting is the application reporting architecture; there is no Power BI runtime dependency.
+Real member data remains prohibited until these controls are implemented, tested, and approved. Native authenticated web reporting is the sole application reporting architecture.

@@ -135,7 +135,8 @@ function decryptUserDisplayName(row: ProtectedUserRow, organizationId: string, k
   );
 }
 
-async function loadProtectedPeople(organizationId: string, query: DatabaseQuery) {
+async function loadProtectedPeople(organizationId: string, handles: readonly string[], query: DatabaseQuery) {
+  if (handles.length === 0) return [];
   const rows = await query<ProtectedPersonRow>(`
     /* pii-protected-outreach-read:people */
     SELECT person_id::text,
@@ -144,14 +145,22 @@ async function loadProtectedPeople(organizationId: string, query: DatabaseQuery)
       preferred_name_encrypted_payload, preferred_name_encryption_key_version, preferred_name_encryption_format_version
     FROM local801.person_pii
     WHERE organization_id = $1::uuid
+      AND encode(public.digest($1::text || ':' || person_id::text, 'sha256'), 'hex') = ANY($2::text[])
     ORDER BY person_id
     LIMIT ${PREVIEW_ROW_LIMIT + 1}
-  `, [organizationId]);
+  `, [organizationId, handles]);
   if (rows.length > PREVIEW_ROW_LIMIT) blocked("PREVIEW_BOUND_EXCEEDED", "Protected person read exceeded its bounded row limit.");
+  if (rows.length > handles.length) blocked("DUPLICATE_COMPANION", "Protected person lookup returned duplicate companions.");
   return rows;
 }
 
-async function loadProtectedWorkEmails(organizationId: string, userId: string, query: DatabaseQuery) {
+async function loadProtectedWorkEmails(
+  organizationId: string,
+  userId: string,
+  personIds: readonly string[],
+  query: DatabaseQuery,
+) {
+  if (personIds.length === 0) return [];
   const rows = await query<ProtectedContactRow>(`
     /* pii-protected-outreach-read:work-email */
     SELECT DISTINCT ON (contact.person_id)
@@ -161,6 +170,7 @@ async function loadProtectedWorkEmails(organizationId: string, userId: string, q
     JOIN local801.person_contact_method_pii protected
       ON protected.organization_id = contact.organization_id AND protected.contact_method_id = contact.id
     WHERE contact.organization_id = $1::uuid
+      AND contact.person_id = ANY($3::uuid[])
       AND contact.contact_type = 'work_email'
       AND contact.is_primary = true
       AND contact.archived_at IS NULL
@@ -180,8 +190,9 @@ async function loadProtectedWorkEmails(organizationId: string, userId: string, q
       )
     ORDER BY contact.person_id, contact.created_at, contact.id
     LIMIT ${PREVIEW_ROW_LIMIT + 1}
-  `, [organizationId, userId]);
+  `, [organizationId, userId, personIds]);
   if (rows.length > PREVIEW_ROW_LIMIT) blocked("PREVIEW_BOUND_EXCEEDED", "Protected contact read exceeded its bounded row limit.");
+  if (rows.length > personIds.length) blocked("DUPLICATE_COMPANION", "Protected contact lookup returned duplicate companions.");
   return rows;
 }
 
@@ -198,10 +209,8 @@ export async function hydrateOutreachQueueFromProtectedPii(
   const keyConfig = dependencies.keyConfig ?? getPiiKeyConfiguration(env);
   await assertPiiProtectedReadState(organizationId, query, mode);
 
-  const [people, contacts] = await Promise.all([
-    loadProtectedPeople(organizationId, query),
-    loadProtectedWorkEmails(organizationId, userId, query),
-  ]);
+  const people = await loadProtectedPeople(organizationId, page.people.map((person) => person.handle), query);
+  const contacts = await loadProtectedWorkEmails(organizationId, userId, people.map((person) => person.person_id), query);
   const peopleByHandle = uniqueMap(people, (row) => personHandle(organizationId, row.person_id), "person");
   const contactByPersonId = uniqueMap(contacts, (row) => row.person_id, "primary work-email");
 
@@ -235,10 +244,8 @@ export async function hydrateOutreachWorkspaceFromProtectedPii(
   const keyConfig = dependencies.keyConfig ?? getPiiKeyConfiguration(env);
   await assertPiiProtectedReadState(organizationId, query, mode);
 
-  const [people, contacts] = await Promise.all([
-    loadProtectedPeople(organizationId, query),
-    loadProtectedWorkEmails(organizationId, userId, query),
-  ]);
+  const people = await loadProtectedPeople(organizationId, [workspace.handle], query);
+  const contacts = await loadProtectedWorkEmails(organizationId, userId, people.map((person) => person.person_id), query);
   const peopleByHandle = uniqueMap(people, (row) => personHandle(organizationId, row.person_id), "person");
   const protectedPerson = peopleByHandle.get(workspace.handle);
   if (!protectedPerson) blocked("COMPANION_MISSING", "The employee workspace is missing its protected PII companion.");
@@ -326,4 +333,17 @@ export async function hydrateEngagementFormOptionsFromProtectedPii(
       return { ...assignee, label: decryptUserDisplayName(row, organizationId, keyConfig) };
     }),
   };
+}
+
+export async function hydrateOutreachAssigneeOptionsFromProtectedPii(
+  organizationId: string,
+  options: EngagementFormOptions["assignees"],
+  dependencies: { query?: DatabaseQuery; env?: NodeJS.ProcessEnv; keyConfig?: PiiKeyConfiguration } = {},
+) {
+  const hydrated = await hydrateEngagementFormOptionsFromProtectedPii(organizationId, {
+    assignments: [],
+    assignees: options,
+    actionDefinitions: [],
+  }, dependencies);
+  return hydrated.assignees;
 }

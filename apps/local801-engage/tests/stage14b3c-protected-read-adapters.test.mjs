@@ -112,7 +112,9 @@ test("Directory renders names and authorized work email from protected companion
   const last = envelope("Person", "person", personId, "last-name", keyConfig);
   const preferred = envelope("Protected Preferred", "person", personId, "preferred-name", keyConfig);
   const workEmail = envelope("protected.person@example.test", "person-contact", contactId, "contact-value", keyConfig);
-  const query = async (sql) => {
+  const directoryQueries = [];
+  const query = async (sql, parameters) => {
+    directoryQueries.push({ sql, parameters });
     if (sql.includes("pii-protected-read:acceptance-state")) return state();
     if (sql.includes("pii-protected-read:directory-people")) return [{
       person_id: personId,
@@ -139,6 +141,7 @@ test("Directory renders names and authorized work email from protected companion
   const page = {
     people: [{
       handle: personHandle(),
+      employeeReference: "L801-100001",
       displayName: "WRONG LEGACY NAME",
       firstName: "Wrong",
       lastName: "Legacy",
@@ -148,6 +151,7 @@ test("Directory renders names and authorized work email from protected companion
       classification: "Tester",
       workLocation: "Test",
       workEmail: "wrong.legacy@example.test",
+      workPhone: null,
     }],
     term: "",
     pageSize: 50,
@@ -161,8 +165,14 @@ test("Directory renders names and authorized work email from protected companion
   const result = await hydrateDirectoryPageFromProtectedPii(organizationId, page, { query, env: environment, keyConfig });
   assert.equal(result.people[0].firstName, "Protected");
   assert.equal(result.people[0].lastName, "Person");
-  assert.equal(result.people[0].displayName, "Protected Preferred");
+  assert.equal(result.people[0].displayName, "Protected Person");
   assert.equal(result.people[0].workEmail, "protected.person@example.test");
+  const peopleQuery = directoryQueries.find((entry) => entry.sql.includes("pii-protected-read:directory-people"));
+  const contactQuery = directoryQueries.find((entry) => entry.sql.includes("pii-protected-read:directory-work-email"));
+  assert.deepEqual(peopleQuery.parameters, [organizationId, [personHandle()]]);
+  assert.deepEqual(contactQuery.parameters, [organizationId, false, [personId]]);
+  assert.match(peopleQuery.sql, /digest\(concat\(\$1::uuid::text, ':', person_id::text\)/);
+  assert.match(contactQuery.sql, /contact\.person_id = ANY\(\$3::uuid\[\]\)/);
 });
 
 test("protected-read adapters contain no PII database mutation statements", async () => {

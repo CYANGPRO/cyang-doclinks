@@ -188,8 +188,8 @@ test("large campaign populations stay aggregate-first, opaque, and detail-bounde
   assert.equal("person_id" in detail.people[0], false);
   assert.match(detail.people[0].personHandle, /^[0-9a-f]{64}$/);
   assert.match(detailSql, /member\.organization_id = \$1/);
-  assert.match(detailSql, /person_handle > \$5::text/);
-  assert.match(detailSql, /public\.digest\(\$1::text \|\| ':' \|\| person\.id::text/);
+  assert.match(detailSql, /person_handle > \$7::text/);
+  assert.match(detailSql, /digest\(\$1::text \|\| ':' \|\| person\.id::text/);
   assert.doesNotMatch(detailSql, /OFFSET/i);
   assert.doesNotMatch(detailSql, /disabled_at/);
 });
@@ -263,7 +263,14 @@ test("upload Origin, cache namespace, focus contrast, and legacy boundary are ha
   assert.match(legacy, /@deprecated[\s\S]*Do not use this[\s\S]*20K approval executor/);
   assert.match(integration, /LOCAL801_SQL_TEST_DATABASE_URL/);
   assert.match(integration, /Disposable test database must not already contain local801/);
-  assert.match(architecture, /migration verification must pass before a draft migration is applied to Preview or Production/i);
+  assert.match(integration, /migrations\.map\(\(_, index\) => String\(index \+ 1\)\.padStart\(4, "0"\)\)/);
+  assert.doesNotMatch(integration, /expectedMigrationPrefixes = \["0001"/);
+  assert.match(integration, /Stage 17 correction integrity and PostgreSQL race guards/);
+  assert.match(integration, /waitForBlockedRace/);
+  assert.match(integration, /losing Data Quality writer must fail stale/);
+  assert.match(integration, /second approval must not overwrite the same contact row/);
+  assert.match(integration, /Concurrent protected work-email duplicates must fail/);
+  assert.match(architecture, /Every SQL integration gate and migration verification must pass before a draft migration is applied to Preview or Production/);
 });
 
 test("import persistence removes per-person identity query loops and uses 500-row chunks", async () => {

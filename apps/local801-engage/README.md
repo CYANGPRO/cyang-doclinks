@@ -1,6 +1,8 @@
-# Local 801 Engage
+# Engaging Local 801
 
-Local 801 Engage is a separate private application project for Local 801 membership data, CAT engagement, campaign management, contract actions, secure documents, reporting, and PWA installation.
+Engaging Local 801 is a separate private application project for Local 801 membership data, CAT engagement, campaign management, contract actions, secure documents, reporting, and PWA installation.
+
+The authoritative path from the accepted synthetic Preview baseline to a controlled production PWA is [`docs/ROADMAP_TO_COMPLETION.md`](docs/ROADMAP_TO_COMPLETION.md). Merged code and Preview evidence do not authorize Production or real member data.
 
 It intentionally lives outside the root DocLinks application and must be deployed as a separate project with its own database, object storage bucket, authentication secret, encryption keys, push credentials, and monitoring project.
 
@@ -19,7 +21,7 @@ npm run db:migrations:verify
 ## Boundaries
 
 - Root DocLinks routes, database, storage, public links, billing, and production deployment are not reused.
-- Local 801 Engage is prepared for `cat.cyang.io`, application-specific cookies, and separate runtime secrets.
+- Engaging Local 801 is prepared for `cat.cyang.io`, application-specific cookies, and separate runtime secrets.
 - Development data must be synthetic only. Real roster and CAT files belong in `local-sensitive-samples/`, which is ignored by git.
 
 ## Infrastructure
@@ -32,7 +34,7 @@ npm run db:migrations:verify
 
 ## Reporting
 
-Reporting is built directly into Local 801 Engage as authenticated custom web reports. The application uses its own organization-scoped reporting views and server-side report services for membership, new hires, engagement, campaigns, CAT actions, data quality, and future report views. Power BI is not part of the application architecture and no Power BI credentials, embed tokens, gateways, or runtime variables are required.
+Reporting is built directly into Engaging Local 801 as authenticated custom web reports. The application uses its own organization-scoped reporting views and server-side report services for membership, new hires, engagement, campaigns, CAT actions, data quality, and future report views. These in-application web reports are the sole reporting direction.
 
 Report access continues to use the application's existing permissions and fail-closed behavior. Any downloadable exports remain application-controlled and subject to export limits, privacy rules, and audit requirements.
 

@@ -2,15 +2,17 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { AlertBanner, SectionCard, StatusBadge } from "@/components/DesignSystem";
+import { AlertBanner, SectionCard } from "@/components/DesignSystem";
 
-export type DocumentUploadVisibilityOption = Readonly<{ value: string; label: string }>;
+export type DocumentUploadVisibilityOption = Readonly<{ value: string; label: string; description: string }>;
 
 export function DocumentUploadForm({ visibilityOptions }: { visibilityOptions: readonly DocumentUploadVisibilityOption[] }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [selectedVisibility, setSelectedVisibility] = useState(visibilityOptions[0]?.value ?? "");
+  const selectedOption = visibilityOptions.find((option) => option.value === selectedVisibility) ?? visibilityOptions[0];
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -30,8 +32,9 @@ export function DocumentUploadForm({ visibilityOptions }: { visibilityOptions: r
         return;
       }
       setSuccess(true);
-      setMessage("Document uploaded, malware-scanned, encrypted, and shared with the selected role scope.");
+      setMessage("Document uploaded successfully. It was scanned, encrypted, and is ready for approval by an authorized viewer.");
       formElement.reset();
+      setSelectedVisibility(visibilityOptions[0]?.value ?? "");
       router.refresh();
     } catch {
       setMessage("The document could not be uploaded securely. Nothing was shared. Try again.");
@@ -42,43 +45,52 @@ export function DocumentUploadForm({ visibilityOptions }: { visibilityOptions: r
 
   return (
     <SectionCard
-      title="Upload document"
-      description="Upload a document and choose the authorized role scope that may see and download it."
-      badge={<StatusBadge tone="ready">Malware scan required</StatusBadge>}
+      title="Upload a document"
+      description="Choose a file and its visibility. New files remain under review until an approved user confirms them."
     >
-      <AlertBanner title="Scan before storage">
-        Plaintext bytes are sent to the shared malware scanner over HTTPS. Only a clean verdict proceeds to AES-256-GCM encryption and private R2 storage.
+      <AlertBanner title="Files are scanned before they’re stored">
+        A file must pass the malware scan before Engaging Local 801 encrypts it and saves it in private storage.
       </AlertBanner>
-      <form className="grid" onSubmit={submit}>
-        <div className="field">
-          <label htmlFor="document-title">Title</label>
-          <input id="document-title" name="title" type="text" maxLength={255} required />
+      <form className="stack" onSubmit={submit}>
+        <div className="form-grid">
+          <div className="field">
+            <label htmlFor="document-title">Title</label>
+            <input id="document-title" name="title" type="text" maxLength={255} required />
+          </div>
+          <div className="field">
+            <label htmlFor="document-category">Category</label>
+            <input id="document-category" name="category" type="text" maxLength={100} placeholder="Member communications" required />
+          </div>
+          <div className="field">
+            <label htmlFor="document-visibility">Who can view it</label>
+            <select
+              id="document-visibility"
+              name="visibility"
+              required
+              defaultValue={visibilityOptions[0]?.value ?? ""}
+              onChange={(event) => setSelectedVisibility(event.currentTarget.value)}
+              aria-describedby="document-visibility-description"
+            >
+              {visibilityOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+            <div className="field-help" id="document-visibility-description">
+              {selectedOption?.description ?? "No sharing option is available."}
+            </div>
+          </div>
+          <div className="field">
+            <label htmlFor="document-file">File</label>
+            <input id="document-file" name="file" type="file" accept=".pdf,.docx,.xlsx,.csv,.txt" required />
+            <div className="field-help">PDF, Word, Excel, CSV, or text. The normal upload-size limit still applies.</div>
+          </div>
         </div>
-        <div className="field">
-          <label htmlFor="document-category">Category</label>
-          <input id="document-category" name="category" type="text" maxLength={100} placeholder="Member communications" required />
+        <div className="form-actions">
+          <button className="button" disabled={busy || visibilityOptions.length === 0} type="submit">
+            {busy ? "Scanning and uploading…" : "Upload document"}
+          </button>
         </div>
-        <div className="field">
-          <label htmlFor="document-visibility">Share with</label>
-          <select id="document-visibility" name="visibility" required defaultValue={visibilityOptions[0]?.value ?? ""}>
-            {visibilityOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor="document-file">File</label>
-          <input id="document-file" name="file" type="file" accept=".pdf,.docx,.xlsx,.csv,.txt" required />
-          <div className="muted">PDF, Word, Excel, CSV, or text. Existing server upload-size limits apply.</div>
-        </div>
-        <button className="button" disabled={busy || visibilityOptions.length === 0} type="submit">
-          {busy ? "Scanning and encrypting..." : "Upload document"}
-        </button>
       </form>
       {message ? (
-        <p
-          className="form-message"
-          style={success ? { color: "var(--success)" } : undefined}
-          role={success ? "status" : "alert"}
-        >
+        <p className={`form-message${success ? " success" : ""}`} role={success ? "status" : "alert"}>
           {message}
         </p>
       ) : null}

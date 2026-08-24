@@ -104,7 +104,7 @@ function response(value: unknown): EmployeeActionResponse {
 }
 
 function hasDefinitionManagement(context: WorkspaceContext) {
-  return can(context.role, "manageCampaigns") || can(context.role, "manageCatActions");
+  return can(context.role, "manageActionCatalog");
 }
 
 function requireEngagementAccess(context: WorkspaceContext) {
@@ -173,7 +173,9 @@ export async function listEmployeeActionDefinitions(
   context: WorkspaceContext,
   query: DatabaseQuery = queryLocal801,
 ): Promise<EmployeeActionDefinition[]> {
-  requireEngagementAccess(context);
+  if (!can(context.role, "recordEngagement") && !can(context.role, "manageActionCatalog")) {
+    throw new Error("Employee action catalog access is not authorized.");
+  }
   const rows = await query<DefinitionRow>(`
     /* employee-actions:definitions */
     SELECT id, name AS label, engagement_level, scope_type AS scope
@@ -320,12 +322,22 @@ export async function createEmployeeActionDefinition(
         WHERE actor.id = $8::uuid
           AND actor.organization_id = $1::uuid
           AND actor.deactivated_at IS NULL
+          AND EXISTS (
+            SELECT 1
+            FROM local801.workspace_user_roles user_role
+            JOIN local801.workspace_roles role
+              ON role.id = user_role.role_id
+             AND role.organization_id = $1::uuid
+            WHERE user_role.user_id = actor.id
+              AND role.code = $9::text
+              AND role.code IN ('system_owner','local_admin','membership_data_manager','cat_admin','cat_lead','cat_member')
+          )
         RETURNING id
       )
       SELECT CASE WHEN count(*) = 1 THEN true ELSE 1 / count(*)::integer = 1 END AS action_created
       FROM inserted
     `,
-    parameters: [context.organizationId, actionId, label, engagementLevel, scopeType, campaignId, catActionId, context.userId],
+    parameters: [context.organizationId, actionId, label, engagementLevel, scopeType, campaignId, catActionId, context.userId, context.role],
   };
   const auditStatement = await prepareAudit({
     eventType: "config.change",

@@ -143,10 +143,10 @@ test("Reports page makes CAT Actions a ready navigation tab and renders aggregat
   const source = readFileSync(new URL("../src/app/reports/page.tsx", import.meta.url), "utf8");
   assert.match(source, /\"cat-actions\"/);
   assert.match(source, /getCatActionReport/);
-  assert.match(source, /CAT action overview/);
-  assert.match(source, /CAT action status/);
-  assert.match(source, /Task status/);
-  assert.match(source, /CAT action performance/);
+  assert.match(source, /CAT Action totals/);
+  assert.match(source, /CAT Actions by status/);
+  assert.match(source, /Tasks by status/);
+  assert.match(source, /CAT Action performance/);
   assert.match(source, /viewReports/);
   assert.doesNotMatch(source, /catActionId|assignedTo|personId|strategyHash/i);
 });

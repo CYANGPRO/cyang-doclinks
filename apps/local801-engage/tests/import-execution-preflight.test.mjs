@@ -217,11 +217,12 @@ test("Stage 12A migration remains additive and preflight controls themselves per
   for (const table of ["people", "person_identifiers", "person_contact_methods", "membership_events", "employment_events", "membership_snapshots", "membership_snapshot_rows"]) {
     assert.doesNotMatch(migration, new RegExp(`(?:INSERT\\s+INTO|UPDATE|DELETE\\s+FROM)\\s+local801\\.${table}\\b`, "i"));
   }
-  assert.match(page, /Authoritative execution remains explicitly gated/);
-  assert.match(page, /Executor installed but disabled/);
-  assert.match(page, /Authoritative execution preflight/);
+  assert.match(page, /Approval required before changes are applied/);
+  assert.match(page, /Applying changes is temporarily unavailable/);
+  assert.match(page, /Final approval and apply/);
   assert.match(page, /LOCAL801_PROTECTED_IMPORT_EXECUTION_ENABLED/);
   assert.match(route, /operationalRuntimeEnabled\(\)/);
+  assert.match(route, /enforceWorkspaceRateLimit\(context, "import"\)/);
   assert.match(route, /hasExactSameOrigin\(request\)/);
   assert.match(route, /MAX_BODY_BYTES = 512/);
   assert.doesNotMatch(`${controls}\n${service}`, /INSERT INTO local801\.people|UPDATE local801\.people|INSERT INTO local801\.membership_events|INSERT INTO local801\.employment_events/);

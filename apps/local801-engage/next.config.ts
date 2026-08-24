@@ -60,6 +60,16 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: appRoot,
   },
+  async redirects() {
+    return [
+      {
+        source: "/reports",
+        has: [{ type: "query", key: "view", value: "data-quality" }],
+        destination: "/reports/data-quality",
+        permanent: false,
+      },
+    ];
+  },
   async headers() {
     return [
       {

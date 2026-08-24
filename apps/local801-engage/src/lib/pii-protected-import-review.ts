@@ -64,6 +64,8 @@ type DetailRow = {
   first_name: string | null;
   last_name: string | null;
   work_email: string | null;
+  work_phone: string | null;
+  personal_email: string | null;
   department: string | null;
   classification: string | null;
   membership_status: string | null;
@@ -265,6 +267,7 @@ export async function getProtectedImportReviewDetail(
     )
     SELECT import_row_id, sheet_name, source_row_number, category,
       NULL::text AS first_name, NULL::text AS last_name, NULL::text AS work_email,
+      NULL::text AS personal_email, NULL::text AS work_phone,
       normalized_json ->> 'department' AS department,
       normalized_json ->> 'classification' AS classification,
       normalized_json ->> 'membership_status' AS membership_status,

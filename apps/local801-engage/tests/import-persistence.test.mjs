@@ -272,11 +272,11 @@ test("import review UI uses validation-error wording, refreshes the queue, and r
   const importUi = `${form}\n${detail}\n${queue}`;
 
   assert.doesNotMatch(form, />Conflicts</);
-  assert.match(form, />Validation errors</);
+  assert.match(form, /Rows with validation errors/);
   assert.match(form, /useRouter\(\)/);
   assert.match(form, /setSummary\(body\);\s*router\.refresh\(\)/);
   assert.doesNotMatch(form, /window\.location|location\.reload/);
-  assert.match(detail, /Exception-based import review/);
+  assert.match(detail, /eyebrow="Data imports"/);
   assert.match(detail, /Unchanged existing/);
   assert.doesNotMatch(importUi, /<button[^>]*>\s*(Approve|Merge|Create Person|Accept match|Reject match|Resolve match)/i);
   assert.doesNotMatch(importUi, /(INSERT|UPDATE|DELETE)[\s\S]*local801\.(people|person_identifiers|person_contact_methods|membership_events|employment_events|membership_snapshots|membership_snapshot_rows|import_approvals)/i);
@@ -411,4 +411,93 @@ test("0003 is additive and directly scopes nullable file-level errors", async ()
   assert.match(migration, /foreign key \(import_batch_id\) references local801\.import_batches\(id\) on delete cascade/i);
   assert.match(migration, /organization_id, import_batch_id, created_at, id/i);
   assert.doesNotMatch(migration, /alter table local801\.(people|membership_events|import_approvals)/i);
+});
+
+test("import history uses bounded organization-scoped keyset pages and opaque cursors", async () => {
+  const statements = [];
+  const rows = Array.from({ length: 11 }, (_, index) => ({
+    id: `11111111-1111-4111-8111-${String(index + 1).padStart(12, "0")}`,
+    import_kind: "current_roster",
+    state: "validated",
+    original_filename: `synthetic-${index + 1}.csv`,
+    byte_size: 100,
+    created_at: new Date(Date.UTC(2026, 7, 18, 12, 0, 20 - index)).toISOString(),
+    total_rows: 1,
+    error_count: 0,
+    processing_stage: null,
+    processed_row_count: null,
+    total_row_count: null,
+    processing_error_code: null,
+    cursor_token: String(index + 1).padStart(64, "a"),
+  }));
+  const page = await persistence.getImportBatchesPage(
+    { organizationId: "11111111-1111-4111-8111-111111111111", userId: "user", role: "membership_data_manager" },
+    { pageSize: 10 },
+    async (sql, parameters) => {
+      statements.push({ sql, parameters });
+      return rows;
+    },
+  );
+
+  assert.equal(page.pageSize, 10);
+  assert.equal(page.items.length, 10);
+  assert.equal(page.previousCursor, null);
+  assert.equal(page.items.some((item) => "cursor_token" in item), false);
+  assert.ok(page.nextCursor);
+  const cursor = JSON.parse(Buffer.from(page.nextCursor, "base64url").toString("utf8"));
+  assert.deepEqual(Object.keys(cursor).sort(), ["createdAt", "direction", "token"]);
+  assert.equal(cursor.direction, "after");
+  assert.match(cursor.token, /^[0-9a-f]{64}$/);
+  assert.equal(JSON.stringify(cursor).includes(rows[9].id), false);
+  assert.match(statements[0].sql, /\/\* imports:batch-keyset-page \*\//);
+  assert.match(statements[0].sql, /WHERE batch\.organization_id = \$1::uuid/);
+  assert.match(statements[0].sql, /\(created_at, cursor_token\) < \(\$2::timestamptz, \$3::text\)/);
+  assert.match(statements[0].sql, /ORDER BY created_at DESC, cursor_token DESC/);
+  assert.deepEqual(statements[0].parameters, ["11111111-1111-4111-8111-111111111111", null, null, 11]);
+
+  const secondPage = await persistence.getImportBatchesPage(
+    { organizationId: "11111111-1111-4111-8111-111111111111", userId: "user", role: "local_admin" },
+    { cursor: page.nextCursor, pageSize: 10 },
+    async (_sql, parameters) => {
+      assert.deepEqual(parameters, ["11111111-1111-4111-8111-111111111111", cursor.createdAt, cursor.token, 11]);
+      return [rows[10]];
+    },
+  );
+  const previous = JSON.parse(Buffer.from(secondPage.previousCursor, "base64url").toString("utf8"));
+  assert.equal(previous.direction, "before");
+  assert.equal(secondPage.nextCursor, null);
+
+  const backToFirstPage = await persistence.getImportBatchesPage(
+    { organizationId: "11111111-1111-4111-8111-111111111111", userId: "user", role: "local_admin" },
+    { cursor: secondPage.previousCursor, pageSize: 10 },
+    async (sql, parameters) => {
+      assert.match(sql, /\(created_at, cursor_token\) > \(\$2::timestamptz, \$3::text\)/);
+      assert.match(sql, /ORDER BY created_at ASC, cursor_token ASC/);
+      assert.deepEqual(parameters, ["11111111-1111-4111-8111-111111111111", previous.createdAt, previous.token, 11]);
+      return rows.slice(0, 10).reverse();
+    },
+  );
+  assert.deepEqual(backToFirstPage.items.map((item) => item.id), rows.slice(0, 10).map((item) => item.id));
+  assert.equal(backToFirstPage.previousCursor, null);
+  assert.ok(backToFirstPage.nextCursor);
+
+  await persistence.getImportBatchesPage(
+    { organizationId: "22222222-2222-4222-8222-222222222222", userId: "user", role: "local_admin" },
+    { cursor: page.nextCursor, pageSize: 10 },
+    async (_sql, parameters) => {
+      assert.deepEqual(parameters, ["22222222-2222-4222-8222-222222222222", cursor.createdAt, cursor.token, 11]);
+      return [];
+    },
+  );
+});
+
+test("import history ignores malformed cursors and normalizes unbounded page sizes", async () => {
+  await persistence.getImportBatchesPage(
+    { organizationId: "11111111-1111-4111-8111-111111111111", userId: "user", role: "local_admin" },
+    { cursor: "not-a-cursor", pageSize: 500_000 },
+    async (_sql, parameters) => {
+      assert.deepEqual(parameters, ["11111111-1111-4111-8111-111111111111", null, null, 21]);
+      return [];
+    },
+  );
 });

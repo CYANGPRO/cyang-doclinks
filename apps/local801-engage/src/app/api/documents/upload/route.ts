@@ -8,6 +8,8 @@ import { getImportMalwareScanner as getSharedMalwareScanner } from "@/lib/import
 import { hasExactSameOrigin } from "@/lib/request-security";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
 import { writeSecuritySignal } from "@/lib/security-signal";
+import { enforceWorkspaceRateLimit, RateLimitError } from "@/lib/rate-limit";
+import { rateLimitResponse } from "@/lib/rate-limit-response";
 
 const multipartOverheadAllowanceBytes = 1_048_576;
 
@@ -26,7 +28,7 @@ export async function POST(request: Request) {
     return jsonNoStore({ error: "FORBIDDEN_ORIGIN", message: "Document uploads must come from the signed-in Local 801 application." }, 403);
   }
 
-  const auth = await requirePreviewUser("manageDocuments");
+  const auth = await requirePreviewUser("uploadDocuments");
   if (!auth.ok) {
     auth.response.headers.set("Cache-Control", "private, no-store, max-age=0, must-revalidate");
     return auth.response;
@@ -49,6 +51,7 @@ export async function POST(request: Request) {
     if (!(file instanceof File)) {
       return jsonNoStore({ error: "INVALID_UPLOAD", message: "Select a document to upload." }, 400);
     }
+    await enforceWorkspaceRateLimit(context, "mutation");
 
     const result = await uploadDocument({
       actor: { organizationId: context.organizationId, userId: context.userId, role: context.role },
@@ -66,6 +69,7 @@ export async function POST(request: Request) {
 
     return jsonNoStore({ documentUpload: "ok", ...result }, 201);
   } catch (error) {
+    if (error instanceof RateLimitError) return rateLimitResponse(error);
     if (error instanceof DocumentUploadError) {
       if (error.code === "MALWARE_REJECTED" || error.code === "SCANNER_TEMPORARY_FAILURE" || error.code === "SCANNER_UNAVAILABLE") {
         writeSecuritySignal(error.code === "MALWARE_REJECTED" ? "warn" : "error", "scanner.failure", {

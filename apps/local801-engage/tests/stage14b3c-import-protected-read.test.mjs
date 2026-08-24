@@ -234,9 +234,9 @@ test("Data Imports queue wires cutover-aware protected filename hydration", () =
   const page = readFileSync(new URL("../src/app/imports/page.tsx", import.meta.url), "utf8");
   assert.match(page, /hydrateImportBatchQueueFromProtectedPii/);
   assert.match(page, /getPiiProtectedReadMode/);
-  assert.match(page, /Protected-read Preview/);
-  assert.match(page, /Protected PII/);
-  assert.match(page, /Import queue unavailable/);
+  assert.match(page, /protectedReadMode = getPiiProtectedReadMode\(\)/);
+  assert.match(page, /protectedReadMode !== "legacy"/);
+  assert.match(page, /Imports unavailable/);
 });
 
 test("Data Imports detail wires cutover-aware filename, review rows, and protected execution", () => {
@@ -245,7 +245,7 @@ test("Data Imports detail wires cutover-aware filename, review rows, and protect
   assert.match(page, /hydrateImportReviewDetailFromProtectedPii/);
   assert.match(page, /getPiiProtectedReadMode/);
   assert.match(page, /Protected-read Preview/);
-  assert.match(page, /Protected PII mode/);
+  assert.match(page, /Member information is protected/);
   assert.match(page, /LOCAL801_PROTECTED_IMPORT_PREPARATION_ENABLED/);
   assert.match(page, /LOCAL801_PROTECTED_IMPORT_EXECUTION_ENABLED/);
   assert.match(page, /mode=\{executionMode\}/);

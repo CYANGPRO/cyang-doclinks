@@ -15,7 +15,7 @@ test("outreach queue requires recordEngagement before database access", () => {
 
 test("CAT outreach scope is based on current open assignments", () => {
   assert.match(service, /scope_assignment\.archived_at IS NULL[\s\S]*scope_assignment\.status = 'open'[\s\S]*primary_user_id = \$2::uuid OR scope_assignment\.backup_user_id = \$2::uuid/);
-  assert.match(service, /organizationWideRoles = new Set<Role>\(\["system_owner", "local_admin", "cat_admin"\]\)/);
+  assert.match(service, /organizationWideRoles = new Set<Role>\(\["system_owner", "local_admin", "cat_admin", "cat_lead"\]\)/);
 });
 
 test("employee action person scope is hardened to open assignments", () => {
@@ -25,7 +25,9 @@ test("employee action person scope is hardened to open assignments", () => {
 test("browser-facing employee identifiers are opaque SHA-256 handles", () => {
   assert.match(service, /encode\(public\.digest\(\$1::text \|\| ':' \|\| person_id::text, 'sha256'\), 'hex'\) AS person_handle/);
   assert.match(service, /const HANDLE_RE = \/\^\[0-9a-f\]\{64\}\$\/i/);
-  assert.match(queuePage, /href=\{`\/outreach\/\$\{person\.handle\}`\}/);
+  assert.match(queuePage, /fieldPersonHref\(person\.handle, canonicalFieldContext\)/);
+  assert.match(queuePage, /member360Href\(person\.handle, currentQueueHref\)/);
+  assert.doesNotMatch(queuePage, /person\.id|person_id/);
 });
 
 test("outreach queue uses deterministic priority and keyset ordering", () => {
@@ -60,22 +62,23 @@ test("work email respects directory visibility and assignment scope", () => {
 test("employee workspace reuses Action Readiness and delegates restricted narrative note reads", () => {
   assert.match(service, /getEmployeeActionProfile\(context, row\.person_id, query\)/);
   assert.match(service, /listRecentEngagementHistory\(context, row\.person_id, query\)/);
-  assert.match(workspacePage, /Narrative notes display only when the signed-in role and assignment scope allow them/);
+  assert.match(workspacePage, /Notes follow your role and assignment access/);
   assert.doesNotMatch(workspacePage, /note_hash|noteHash/i);
 });
 
 test("Stage 7B workspace is operational through protected client controls", () => {
   assert.match(workspacePage, /EngagementRecorder/);
   assert.match(workspacePage, /FollowupCompleteButton/);
-  assert.match(engagementRecorder, /Record conversation/);
+  assert.match(engagementRecorder, /Record a conversation/);
   assert.match(engagementRecorder, /Create a follow-up/);
   assert.match(engagementRecorder, /Declines all actions/);
 });
 
 test("outreach queue exposes the approved operational focus controls", () => {
   assert.match(queuePage, /Needs attention/);
-  assert.match(queuePage, /Never engaged/);
-  assert.match(queuePage, /90\+ days stale/);
-  assert.match(queuePage, /My current assignments/);
-  assert.match(queuePage, /All authorized employees/);
+  assert.match(queuePage, /No conversation recorded/);
+  assert.match(queuePage, /90\+ days since contact/);
+  assert.match(queuePage, /My assignments/);
+  assert.match(queuePage, /Everyone I can access/);
+  assert.match(queuePage, /Open outreach record/);
 });

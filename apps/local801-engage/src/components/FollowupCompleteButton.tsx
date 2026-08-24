@@ -3,13 +3,13 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-export function FollowupCompleteButton({ employeeHandle, followupHandle }: { employeeHandle: string; followupHandle: string }) {
+export function FollowupCompleteButton({ employeeHandle, followupHandle, personName }: { employeeHandle: string; followupHandle: string; personName: string }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function complete() {
-    if (busy) return;
+    if (busy || !window.confirm(`Mark the follow-up for ${personName} complete? Completed follow-ups are read-only.`)) return;
     setBusy(true);
     setError(null);
     try {
@@ -27,8 +27,8 @@ export function FollowupCompleteButton({ employeeHandle, followupHandle }: { emp
     }
   }
 
-  return <div style={{ display: "grid", gap: 4 }}>
+  return <div className="inline-actions vertical-actions">
     <button className="button secondary" type="button" disabled={busy} onClick={complete}>{busy ? "Completing…" : "Mark complete"}</button>
-    {error ? <div className="form-message" role="alert">{error}</div> : null}
+    {error ? <div className="form-message compact-message" role="alert">{error}</div> : null}
   </div>;
 }

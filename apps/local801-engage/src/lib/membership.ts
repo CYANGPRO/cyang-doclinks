@@ -8,6 +8,8 @@ export type MembershipSummary = {
   represented: number | "—";
   members: number | "—";
   nonmembers: number | "—";
+  additionsThisMonth: number | "—";
+  dropsThisMonth: number | "—";
   netChange: number | "—";
   snapshotDate: string | null;
   sourceLabel: string;
@@ -27,6 +29,8 @@ type MembershipSummaryRow = {
   represented: number | string;
   members: number | string;
   nonmembers: number | string;
+  additions_this_month: number | string;
+  drops_this_month: number | string;
   net_change: number | string;
 };
 
@@ -35,6 +39,8 @@ export function unavailableMembershipSummary(): MembershipSummary {
     represented: "—",
     members: "—",
     nonmembers: "—",
+    additionsThisMonth: "—",
+    dropsThisMonth: "—",
     netChange: "—",
     snapshotDate: null,
     sourceLabel: "Approved snapshot unavailable",
@@ -84,6 +90,22 @@ export async function getMembershipSummary(
             WHERE snapshot_row.membership_status = 'nonmember'
           ) AS nonmembers,
           COALESCE((
+            SELECT count(*)
+            FROM local801.membership_events event
+            WHERE event.organization_id = $1
+              AND event.event_type = 'addition'
+              AND event.effective_date >= date_trunc('month', current_date)::date
+              AND event.effective_date < (date_trunc('month', current_date) + interval '1 month')::date
+          ), 0) AS additions_this_month,
+          COALESCE((
+            SELECT count(*)
+            FROM local801.membership_events event
+            WHERE event.organization_id = $1
+              AND event.event_type = 'drop'
+              AND event.effective_date >= date_trunc('month', current_date)::date
+              AND event.effective_date < (date_trunc('month', current_date) + interval '1 month')::date
+          ), 0) AS drops_this_month,
+          COALESCE((
             SELECT
               count(*) FILTER (WHERE event.event_type = 'addition')
               - count(*) FILTER (WHERE event.event_type = 'drop')
@@ -108,6 +130,8 @@ export async function getMembershipSummary(
       represented: finiteNumber(row.represented),
       members: finiteNumber(row.members),
       nonmembers: finiteNumber(row.nonmembers),
+      additionsThisMonth: finiteNumber(row.additions_this_month),
+      dropsThisMonth: finiteNumber(row.drops_this_month),
       netChange: finiteNumber(row.net_change),
       snapshotDate,
       sourceLabel: `Approved snapshot · ${snapshotDate}`,
@@ -136,7 +160,7 @@ export async function getMembershipBreakdowns(
       ORDER BY snapshot_date DESC, approved_at DESC NULLS LAST, created_at DESC, id DESC
       LIMIT 1
     ), current_people AS (
-      SELECT person.department, person.classification, person.job_status, person.work_location, snapshot_row.membership_status
+      SELECT person.department, person.classification, person.section, snapshot_row.membership_status
       FROM latest_snapshot snapshot
       JOIN local801.membership_snapshot_rows snapshot_row
         ON snapshot_row.snapshot_id = snapshot.id AND snapshot_row.organization_id = $1
@@ -152,17 +176,13 @@ export async function getMembershipBreakdowns(
         count(*), count(*) FILTER (WHERE membership_status = 'member')
       FROM current_people GROUP BY 2
       UNION ALL
-      SELECT 'job_status', COALESCE(NULLIF(btrim(job_status), ''), 'Unspecified'),
-        count(*), count(*) FILTER (WHERE membership_status = 'member')
-      FROM current_people GROUP BY 2
-      UNION ALL
-      SELECT 'location', COALESCE(NULLIF(btrim(work_location), ''), 'Unspecified'),
+      SELECT 'location', COALESCE(NULLIF(btrim(section), ''), 'Unspecified'),
         count(*), count(*) FILTER (WHERE membership_status = 'member')
       FROM current_people GROUP BY 2
     )
     SELECT dimension, label, represented, members
     FROM grouped
-    ORDER BY dimension, label
+    ORDER BY dimension, label ASC
     LIMIT 150
   `, [context.organizationId]);
   return rows.map((row) => {

@@ -75,7 +75,7 @@ function baseDataset(): Omit<PiiBackfillSourceDataset, "users" | "importFiles" |
 function envelope(row: EligibleRow): Pick<EncryptedPiiField, "encryptedPayload" | "encryptionKeyVersion" | "encryptionFormatVersion"> {
   const fieldSetVersion = Number(row.direct_pii_field_set_version);
   if (typeof row.direct_pii_encrypted_payload !== "string" || typeof row.encryption_key_version !== "string"
-    || Number(row.encryption_format_version) !== 1 || (fieldSetVersion !== 2 && fieldSetVersion !== 3)) {
+    || Number(row.encryption_format_version) !== 1 || ![2, 3, 4].includes(fieldSetVersion)) {
     throw new Error("Protected import execution requires a valid direct-PII companion.");
   }
   const presence = Number(row.direct_pii_presence_mask);

@@ -17,7 +17,7 @@ function config() {
   });
 }
 
-test("protected import planner emits v3 field metadata and destination-compatible blind indexes", () => {
+test("protected import planner emits v4 field metadata and destination-compatible blind indexes", () => {
   const plan = buildSyntheticPiiBackfillPlan({
     users: [], authIdentities: [], people: [], identifiers: [], contacts: [], corrections: [], importFiles: [], pushSubscriptions: [],
     importRows: [{
@@ -33,7 +33,7 @@ test("protected import planner emits v3 field metadata and destination-compatibl
     }],
   }, config());
   const row = plan.importRows[0];
-  assert.equal(row.fieldSetVersion, 3);
+  assert.equal(row.fieldSetVersion, 4);
   assert.equal(row.presenceMask, 1 | 2 | 8 | 16);
   assert.equal(row.validityMask, row.presenceMask);
   assert.match(row.integrityHash, /^[0-9a-f]{64}$/);
@@ -60,18 +60,29 @@ test("invalid direct PII stays encrypted but is marked invalid instead of enteri
 });
 
 test("protected import classifier never reads direct PII from normalized_json and uses keyed integrity", () => {
-  for (const field of ["first_name", "last_name", "preferred_name", "work_email", "employee_identifier", "member_identifier", "home_email", "work_phone", "cell_phone", "home_phone"]) {
+  for (const field of ["first_name", "last_name", "preferred_name", "work_email", "personal_email", "employee_identifier", "member_identifier"]) {
     assert.doesNotMatch(PROTECTED_IMPORT_REVIEW_CLASSIFICATION_CTE, new RegExp(`normalized_json\\s*->>\\s*['\"]${field}['\"]`, "i"));
   }
   assert.match(PROTECTED_IMPORT_REVIEW_CLASSIFICATION_CTE, /protected\.row_integrity_hash AS row_hash/);
   assert.match(PROTECTED_IMPORT_REVIEW_CLASSIFICATION_CTE, /local801\.pii_exact_indexes/);
   assert.match(PROTECTED_IMPORT_REVIEW_CLASSIFICATION_CTE, /direct_pii_presence_mask/);
   assert.match(PROTECTED_IMPORT_REVIEW_CLASSIFICATION_CTE, /direct_pii_validity_mask/);
+  assert.match(PROTECTED_IMPORT_REVIEW_CLASSIFICATION_CTE, /direct_person_name_matches AS/);
+  assert.match(PROTECTED_IMPORT_REVIEW_CLASSIFICATION_CTE, /direct_contact_matches AS/);
+  assert.doesNotMatch(PROTECTED_IMPORT_REVIEW_CLASSIFICATION_CTE, /SELECT 1 FROM import_indexes imported/);
+});
+
+test("protected classification recovers missing live identities from approved snapshot lineage", () => {
+  assert.match(PROTECTED_IMPORT_REVIEW_CLASSIFICATION_CTE, /prior_approved_snapshot AS MATERIALIZED/);
+  assert.match(PROTECTED_IMPORT_REVIEW_CLASSIFICATION_CTE, /prior_snapshot_import_rows AS MATERIALIZED/);
+  assert.match(PROTECTED_IMPORT_REVIEW_CLASSIFICATION_CTE, /snapshot_row\.row_hash = import_row\.row_hash/);
+  assert.match(PROTECTED_IMPORT_REVIEW_CLASSIFICATION_CTE, /prior_index\.index_hash = current_index\.index_hash/);
+  assert.match(PROTECTED_IMPORT_REVIEW_CLASSIFICATION_CTE, /SELECT import_row_id, person_id, evidence_type\s+FROM prior_snapshot_evidence/);
 });
 
 test("protected review service does not select direct import PII from normalized_json", async () => {
   const source = await readFile(new URL("../src/lib/pii-protected-import-review.ts", import.meta.url), "utf8");
-  for (const field of ["first_name", "last_name", "preferred_name", "work_email", "employee_identifier", "member_identifier", "home_email", "work_phone", "cell_phone", "home_phone"]) {
+  for (const field of ["first_name", "last_name", "preferred_name", "work_email", "personal_email", "employee_identifier", "member_identifier"]) {
     assert.doesNotMatch(source, new RegExp(`normalized_json\\s*->>\\s*['\"]${field}['\"]`, "i"));
   }
   assert.match(source, /NULL::text AS first_name/);

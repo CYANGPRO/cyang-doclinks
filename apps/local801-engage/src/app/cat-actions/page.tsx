@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   DataTable,
+  DisclosureCard,
   EmptyState,
   FilterBar,
   PageHeader,
@@ -36,8 +37,9 @@ function dateTime(value: string | null) {
   }).format(new Date(value));
 }
 
-function href(page: CatActionPortfolioPage, cursor: string) {
-  const query = new URLSearchParams({ limit: String(page.pageSize), cursor });
+function href(page: CatActionPortfolioPage, cursor: string | null) {
+  const query = new URLSearchParams({ limit: String(page.pageSize) });
+  if (cursor) query.set("cursor", cursor);
   if (page.term) query.set("q", page.term);
   if (page.status) query.set("status", page.status);
   return `/cat-actions?${query}`;
@@ -53,6 +55,7 @@ export default async function CatActionsPage({
   if (!can(user.role, "manageCatActions")) redirect("/unauthorized");
 
   const input = await searchParams;
+  const hasCursor = typeof input.cursor === "string" && input.cursor.length > 0;
   let page: Awaited<ReturnType<typeof getCatActionsPage>> | null = null;
   let options: Awaited<ReturnType<typeof getCatActionManagementOptions>> | null = null;
   try {
@@ -70,23 +73,23 @@ export default async function CatActionsPage({
     // Fail closed. No synthetic CAT action data or mutation options are substituted.
   }
 
-  return <ProtectedPage permission="manageCatActions"><div className="content">
+  return <ProtectedPage permission="manageCatActions"><div className="content route-cat-actions-page queue-first-page">
     <PageHeader
-      eyebrow="Organizing"
+      eyebrow="Programs"
       title="CAT Actions"
-      description="Operational CAT action workload, owners, due dates, and completion from the organization-scoped database. Strategy content remains outside this view."
+      description="Plan CAT work, assign tasks, and keep an eye on due dates and completion."
     />
 
-    <SectionCard title="Create CAT action" description="Creates only the operational action shell. Restricted strategy content is not accepted by this workflow.">
-      {options ? <CatActionCreateForm cycles={options.contractCycles} />
-        : <UnavailableState title="Action creation unavailable" description="Creation controls are withheld because authorized management options could not be loaded." />}
-    </SectionCard>
-
-    <SectionCard title="Action filters" description="Search and pagination are performed on the server and remain bounded to the authorized organization.">
+    <DisclosureCard
+      title="Filter CAT Actions"
+      description="Search by action or contract cycle and narrow the list by status."
+      defaultOpen={Boolean(page?.term || page?.status)}
+      className="route-secondary-panel queue-filter-panel"
+    >
       <form action="/cat-actions" method="get">
         <FilterBar>
           <div className="field">
-            <label htmlFor="cat-action-search">Search actions</label>
+            <label htmlFor="cat-action-search">Search</label>
             <input id="cat-action-search" name="q" type="search" maxLength={100} defaultValue={page?.term ?? ""} placeholder="Action or contract cycle" />
           </div>
           <div className="field">
@@ -99,31 +102,31 @@ export default async function CatActionsPage({
             </select>
           </div>
           <div className="field">
-            <label htmlFor="cat-action-limit">Rows</label>
+            <label htmlFor="cat-action-limit">Results per page</label>
             <select id="cat-action-limit" name="limit" defaultValue={String(page?.pageSize ?? 25)}>
               <option value="25">25</option>
               <option value="50">50</option>
               <option value="100">100</option>
             </select>
           </div>
-          <button className="button" type="submit">Update actions</button>
+          <button className="button" type="submit">Apply filters</button>
         </FilterBar>
       </form>
-    </SectionCard>
+    </DisclosureCard>
 
-    {page ? <section className="metrics-grid" aria-label="CAT action workload summary">
+    {page ? <section className="metrics-grid" aria-label="CAT Action summary">
       <StatCard label="Actions" value={page.total} detail="Current filters" tone="brand" />
-      <StatCard label="Active" value={page.summary.activeActions} detail="Active CAT actions" />
-      <StatCard label="Open tasks" value={page.summary.openTasks} detail="Outstanding work" tone="attention" />
-      <StatCard label="Completed tasks" value={page.summary.completedTasks} detail="Completed work" />
+      <StatCard label="Active" value={page.summary.activeActions} detail="Active CAT Actions" />
+      <StatCard label="Open tasks" value={page.summary.openTasks} detail="Still to do" tone="attention" />
+      <StatCard label="Completed tasks" value={page.summary.completedTasks} detail="Finished work" />
       <StatCard label="Overdue tasks" value={page.summary.overdueTasks} detail="Open and past due" tone={page.summary.overdueTasks ? "danger" : "default"} />
     </section> : null}
 
-    <SectionCard title="Action portfolio" badge={<StatusBadge tone={page ? "info" : "warning"}>{page ? `${page.total} actions` : "Unavailable"}</StatusBadge>}>
-      {!page ? <UnavailableState title="CAT actions unavailable" description="No CAT action or task details are shown because an authorized database context could not be established." />
-        : page.actions.length === 0 ? <EmptyState title="No matching CAT actions" description="No active, draft, or closed CAT actions match the current filters." />
+    <SectionCard title="CAT Action work records" description={page ? `${page.total} ${page.total === 1 ? "action matches" : "actions match"} the current filters.` : "The action list could not be loaded safely."}>
+      {!page ? <UnavailableState title="CAT Actions unavailable" description="We couldn’t load CAT Action or task details safely." />
+        : page.actions.length === 0 ? <EmptyState title="No matching CAT Actions" description="No CAT Actions match the filters you chose." />
         : <>
-          <DataTable caption="CAT action portfolio" headers={["Action", "Cycle", "Tasks", "Open", "Completed", "Overdue", "Assigned", "Next due"]}>
+          <DataTable caption="CAT Actions" headers={["Action", "Cycle", "Tasks", "Open", "Completed", "Overdue", "Assigned", "Next due"]}>
             {page.actions.map((action) => <tr key={action.handle}>
               <td>
                 <strong><Link href={`/cat-actions/${action.handle}`}>{action.name}</Link></strong>
@@ -140,9 +143,15 @@ export default async function CatActionsPage({
           </DataTable>
           <Pagination
             label={`Showing up to ${page.pageSize} of ${page.total} actions`}
+            historyBackFallbackHref={hasCursor ? href(page, null) : null}
             nextHref={page.nextCursor ? href(page, page.nextCursor) : null}
           />
         </>}
     </SectionCard>
+
+    <DisclosureCard title="Create a CAT Action" description="Create the work record here; restricted strategy stays in its protected area." className="route-secondary-panel create-record-panel">
+      {options ? <CatActionCreateForm cycles={options.contractCycles} />
+        : <UnavailableState title="Action creation unavailable" description="We couldn’t load the options needed to create a CAT Action." />}
+    </DisclosureCard>
   </div></ProtectedPage>;
 }

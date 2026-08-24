@@ -49,6 +49,7 @@ function campaignResolution(overrides = {}) {
     starts_on: "2026-08-20",
     ends_on: "2026-09-20",
     launched_at: null,
+    population_count: 1,
     ...overrides,
   };
 }
@@ -96,7 +97,6 @@ test("create campaign is organization scoped, role rechecked in SQL, and atomic 
   const state = deps();
   const result = await createCampaign(context(), {
     name: " Synthetic Campaign ",
-    status: "active",
     startsOn: "2026-08-20",
     endsOn: "2026-09-20",
   }, state.values);
@@ -111,10 +111,26 @@ test("create campaign is organization scoped, role rechecked in SQL, and atomic 
   assert.match(statement.sql, /role\.code IN \('system_owner','local_admin','cat_admin'\)/);
   assert.match(statement.sql, /CASE WHEN \$6::text = 'active' THEN now\(\)/);
   assert.deepEqual(statement.parameters.slice(0, 4), [organizationId, campaignId, userId, "cat_admin"]);
-  assert.deepEqual(statement.parameters.slice(4), ["Synthetic Campaign", "active", "2026-08-20", "2026-09-20"]);
+  assert.deepEqual(statement.parameters.slice(4), ["Synthetic Campaign", "draft", "2026-08-20", "2026-09-20"]);
   assert.equal(state.audits[0].eventType, "record.create");
   assert.equal(state.audits[0].subjectType, "outreach_campaign");
   assert.equal("name" in state.audits[0].payload, false);
+});
+
+test("campaigns must start as drafts and need a participant before activation", async () => {
+  const activeCreate = deps();
+  await assert.rejects(
+    createCampaign(context(), { name: "Unsafe", status: "active" }, activeCreate.values),
+    (error) => error instanceof CampaignMutationError && error.code === "CAMPAIGN_MUST_START_DRAFT",
+  );
+  assert.equal(activeCreate.transactions.length, 0);
+
+  const emptyActivation = deps({ query: async () => [campaignResolution({ population_count: 0 })] });
+  await assert.rejects(
+    updateCampaign(context(), { campaignHandle, status: "active" }, emptyActivation.values),
+    (error) => error instanceof CampaignMutationError && error.code === "CAMPAIGN_POPULATION_REQUIRED",
+  );
+  assert.equal(emptyActivation.transactions.length, 0);
 });
 
 test("update campaign enforces lifecycle transitions and audits operational changes", async () => {
@@ -136,6 +152,7 @@ test("update campaign enforces lifecycle transitions and audits operational chan
   assert.match(statement.sql, /UPDATE local801\.outreach_campaigns campaign/);
   assert.match(statement.sql, /campaign\.organization_id = \$1::uuid/);
   assert.match(statement.sql, /campaign\.status = \$13::text/);
+  assert.match(statement.sql, /FROM local801\.outreach_campaign_population population/);
   assert.match(statement.sql, /launched_at = CASE/);
   assert.doesNotMatch(statement.sql, /campaign_instructions/);
   assert.equal(state.audits[0].eventType, "record.update");
@@ -267,13 +284,14 @@ test("all campaign mutations deny non-management roles before SQL", async () => 
   }
 });
 
-test("campaign mutation HTTP routes support gated Production and Preview while remaining same-origin, permission checked, bounded, and scoped", async () => {
+test("campaign mutation HTTP routes are launch-gated, same-origin, permission checked, rate limited, bounded, and scoped to operational fields", async () => {
   const helper = await readFile(new URL("../src/lib/campaign-mutation-http.ts", import.meta.url), "utf8");
   const createRoute = await readFile(new URL("../src/app/api/campaigns/route.ts", import.meta.url), "utf8");
   const campaignRoute = await readFile(new URL("../src/app/api/campaigns/[campaignHandle]/route.ts", import.meta.url), "utf8");
   const assignmentRoute = await readFile(new URL("../src/app/api/campaigns/[campaignHandle]/participants/[personHandle]/assignment/route.ts", import.meta.url), "utf8");
   const combined = `${helper}\n${createRoute}\n${campaignRoute}\n${assignmentRoute}`;
   assert.match(helper, /operationalRuntimeEnabled\(\)/);
+  assert.match(helper, /enforceWorkspaceRateLimit\(context, "mutation"\)/);
   assert.match(helper, /hasExactSameOrigin\(request\)/);
   assert.match(helper, /requirePreviewUser\("manageCampaigns"\)/);
   assert.match(helper, /MAX_JSON_BYTES = 8_192/);

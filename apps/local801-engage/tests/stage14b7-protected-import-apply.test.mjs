@@ -40,7 +40,7 @@ test("protected mutation fingerprint exactly binds source, review, and sorted mu
 
 test("protected apply SQL is set-based, protected-companion aware, and never reads direct PII from operational JSON", () => {
   assert.match(PROTECTED_IMPORT_APPLY_SQL, /protected_import_execution_mutations/);
-  assert.match(PROTECTED_IMPORT_APPLY_SQL, /mutation\.operational_json \?\| ARRAY\[[\s\S]*'first_name'[\s\S]*'home_email'[\s\S]*'home_phone'[\s\S]*\]/);
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /mutation\.operational_json \?\| ARRAY\['first_name','last_name','preferred_name','work_email','personal_email','employee_identifier','member_identifier'\]/);
   assert.match(PROTECTED_IMPORT_APPLY_SQL, /INSERT INTO local801\.person_pii/);
   assert.match(PROTECTED_IMPORT_APPLY_SQL, /INSERT INTO local801\.person_identifier_pii/);
   assert.match(PROTECTED_IMPORT_APPLY_SQL, /INSERT INTO local801\.person_contact_method_pii/);
@@ -49,11 +49,78 @@ test("protected apply SQL is set-based, protected-companion aware, and never rea
   assert.match(PROTECTED_IMPORT_APPLY_SQL, /state = 'executed'/);
   assert.match(PROTECTED_IMPORT_APPLY_SQL, /INSERT INTO local801\.import_approvals/);
   assert.match(PROTECTED_IMPORT_APPLY_SQL, /SET state = 'approved'/);
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /COALESCE\(NULLIF\(btrim\(mutation\.operational_json ->> 'hire_date'\), ''\)::date, batch\.effective_date\)/);
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /batch\.import_kind IN \('new_hires','recent_hires'\)/);
   assert.doesNotMatch(PROTECTED_IMPORT_APPLY_SQL, /operational_json\s*->>\s*'first_name'/i);
   assert.doesNotMatch(PROTECTED_IMPORT_APPLY_SQL, /operational_json\s*->>\s*'last_name'/i);
   assert.doesNotMatch(PROTECTED_IMPORT_APPLY_SQL, /operational_json\s*->>\s*'work_email'/i);
   assert.doesNotMatch(PROTECTED_IMPORT_APPLY_SQL, /operational_json\s*->>\s*'employee_identifier'/i);
   assert.doesNotMatch(PROTECTED_IMPORT_APPLY_SQL, /operational_json\s*->>\s*'member_identifier'/i);
+});
+
+test("current-roster snapshots use the rows returned by insert and update CTEs", () => {
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /RETURNING id, membership_status, department, work_location, classification/);
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /RETURNING person\.id, person\.membership_status, person\.department, person\.work_location, person\.classification/);
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /applied_people AS MATERIALIZED/);
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /inserted_snapshot_rows AS[\s\S]*JOIN applied_people person ON person\.id = mutation\.target_person_id/);
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /membership_event_rows AS MATERIALIZED[\s\S]*JOIN applied_people person ON person\.id = mutation\.target_person_id/);
+  assert.doesNotMatch(PROTECTED_IMPORT_APPLY_SQL, /SELECT 1 \/ CASE/);
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /counts\.applied_people_count = counts\.mutation_count/);
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /counts\.snapshot_row_count = counts\.mutation_count/);
+});
+
+test("same-date current-roster replacement supersedes the prior snapshot atomically", () => {
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /superseded_same_date_snapshot AS[\s\S]*SET status = 'superseded'/);
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /snapshot\.snapshot_date = batch\.snapshot_date/);
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /snapshot\.source_import_batch_id IS DISTINCT FROM batch\.id/);
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /supersession_barrier/);
+});
+
+function reconciledResult({ mutations, newPeople }) {
+  return {
+    approved_batch_count: 1,
+    executed_set_count: 1,
+    inserted_approval_count: 1,
+    mutation_count: mutations,
+    applied_people_count: mutations,
+    person_pii_count: mutations,
+    new_people_count: newPeople,
+    snapshot_count: 1,
+    snapshot_row_count: mutations,
+    reconciliation_ok: true,
+  };
+}
+
+test("all-new current roster reconciles every applied and snapshot row", () => {
+  assert.doesNotThrow(() => __testing.assertAtomicApplyReconciled(
+    reconciledResult({ mutations: 787, newPeople: 787 }),
+    { mutationCount: 787, newPeopleCount: 787, importKind: "current_roster" },
+  ));
+});
+
+test("mixed new and existing current roster reconciles exact counts", () => {
+  assert.doesNotThrow(() => __testing.assertAtomicApplyReconciled(
+    reconciledResult({ mutations: 6, newPeople: 2 }),
+    { mutationCount: 6, newPeopleCount: 2, importKind: "current_roster" },
+  ));
+});
+
+test("snapshot reconciliation mismatch raises a named safe rollback error", () => {
+  const result = reconciledResult({ mutations: 6, newPeople: 2 });
+  result.snapshot_row_count = 5;
+  assert.throws(
+    () => __testing.assertAtomicApplyReconciled(
+      result,
+      { mutationCount: 6, newPeopleCount: 2, importKind: "current_roster" },
+    ),
+    (error) => {
+      assert.equal(error.code, "ATOMIC_RECONCILIATION_FAILED");
+      assert.equal(error.status, 503);
+      assert.match(error.message, /not committed.*exactly match.*No roster changes were applied/i);
+      assert.doesNotMatch(error.message, /division|SQLSTATE|member|email/i);
+      return true;
+    },
+  );
 });
 
 test("protected apply implementation revalidates under locks before any authoritative writes", async () => {
@@ -70,6 +137,12 @@ test("protected apply implementation revalidates under locks before any authorit
 });
 
 test("identifier and primary work-email application reuses matching protected indexes instead of blindly duplicating entities", () => {
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /AS identifier_item\(item\)/);
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /identifier_item\.item ->> 'personIdentifierId'/);
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /AS contact_item\(item\)/);
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /contact_item\.item ->> 'contactMethodId'/);
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /contact_item\.item ->> 'contactType'/);
+  assert.doesNotMatch(PROTECTED_IMPORT_APPLY_SQL, /jsonb_array_elements\(mutation\.contact_protected_json\) item/);
   assert.match(PROTECTED_IMPORT_APPLY_SQL, /resolved_identifiers AS MATERIALIZED/);
   assert.match(PROTECTED_IMPORT_APPLY_SQL, /existing_index\.index_hash = candidate\.index_hash/);
   assert.match(PROTECTED_IMPORT_APPLY_SQL, /existing_person_id IS DISTINCT FROM target_person_id/);
@@ -77,6 +150,22 @@ test("identifier and primary work-email application reuses matching protected in
   assert.match(PROTECTED_IMPORT_APPLY_SQL, /contact\.archived_at IS NULL/);
   assert.match(PROTECTED_IMPORT_APPLY_SQL, /archived_primary_contacts AS/);
   assert.match(PROTECTED_IMPORT_APPLY_SQL, /promoted_existing_contacts AS/);
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /counts\.contact_candidate_count = counts\.contact_applied_count/);
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /counts\.inserted_contact_count = counts\.inserted_contact_pii_count/);
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /counts\.inserted_contact_count = counts\.inserted_contact_index_count/);
+});
+
+test("contact reconciliation mismatches fail the application-level atomic guard", () => {
+  const result = reconciledResult({ mutations: 787, newPeople: 0 });
+  result.contact_candidate_count = 1472;
+  result.contact_applied_count = 1;
+  assert.throws(
+    () => __testing.assertAtomicApplyReconciled(
+      result,
+      { mutationCount: 787, newPeopleCount: 0, importKind: "current_roster" },
+    ),
+    (error) => error.code === "ATOMIC_RECONCILIATION_FAILED" && error.status === 503,
+  );
 });
 
 test("membership event planning preserves legacy change-only semantics", () => {
@@ -92,6 +181,7 @@ test("membership event planning preserves legacy change-only semantics", () => {
   const priorDrops = new Map([["a", "nonmember"], ["b", "member"], ["d", "nonmember"]]);
   assert.deepEqual(membershipTesting.expectedMembershipEvents("membership_drops", mutations, priorDrops), ["b", "c"]);
   assert.deepEqual(membershipTesting.expectedMembershipEvents("new_hires", mutations, prior), []);
+  assert.deepEqual(membershipTesting.expectedMembershipEvents("recent_hires", mutations, prior), []);
 });
 
 test("protected membership reconciliation locks prior state and deletes only transaction-local no-op events", async () => {

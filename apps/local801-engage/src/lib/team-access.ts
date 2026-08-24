@@ -28,6 +28,7 @@ export type TeamMember = {
   lastAuthenticatedAt: string | null;
   lastMfaAt: string | null;
   identityLinked: boolean;
+  onboardingStatus: "pending" | "processing" | "invited" | "ready" | "failed" | "not_managed";
 };
 
 export type TeamAccessPage = {
@@ -45,6 +46,7 @@ type TeamRow = {
   last_authenticated_at: string | Date | null;
   last_mfa_at: string | Date | null;
   identity_linked: boolean;
+  onboarding_status: string | null;
 };
 
 type TargetRow = {
@@ -125,6 +127,11 @@ function timestamp(value: string | Date | null) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
+function onboardingStatus(value: string | null, identityLinked: boolean): TeamMember["onboardingStatus"] {
+  if (value === "pending" || value === "processing" || value === "invited" || value === "ready" || value === "failed") return value;
+  return identityLinked ? "ready" : "not_managed";
+}
+
 async function resolveTarget(context: WorkspaceContext, handleInput: unknown, query: DatabaseQuery) {
   requireManager(context);
   const handle = requireHandle(handleInput);
@@ -172,11 +179,13 @@ export async function getTeamAccessPage(context: WorkspaceContext, query: Databa
       EXISTS (
         SELECT 1 FROM local801.auth_identities identity
         WHERE identity.organization_id = $1::uuid AND identity.user_id = app_user.id
-      ) AS identity_linked
+      ) AS identity_linked, onboarding.status AS onboarding_status
     FROM local801.users app_user
     JOIN local801.workspace_user_roles user_role ON user_role.user_id = app_user.id
     JOIN local801.workspace_roles role
       ON role.id = user_role.role_id AND role.organization_id = $1::uuid
+    LEFT JOIN local801.user_identity_onboarding onboarding
+      ON onboarding.organization_id = app_user.organization_id AND onboarding.user_id = app_user.id
     WHERE app_user.organization_id = $1::uuid
     ORDER BY app_user.deactivated_at NULLS FIRST, lower(app_user.display_name), app_user.id
     LIMIT 500
@@ -194,6 +203,7 @@ export async function getTeamAccessPage(context: WorkspaceContext, query: Databa
         lastAuthenticatedAt: timestamp(row.last_authenticated_at),
         lastMfaAt: timestamp(row.last_mfa_at),
         identityLinked: row.identity_linked,
+        onboardingStatus: onboardingStatus(row.onboarding_status, row.identity_linked),
       }] : [];
     }),
     assignableRoles: context.role === "system_owner" ? assignableRoles : lowerRoles,
@@ -213,13 +223,13 @@ export async function provisionTeamMember(
   const query = dependencies.query ?? queryLocal801;
   const transaction = dependencies.transaction ?? runLocal801Transaction;
   const id = (dependencies.uuid ?? randomUUID)();
-  const [existing] = await query<{ exists: boolean }>(`
-    SELECT EXISTS (
-      SELECT 1 FROM local801.users app_user
-      WHERE app_user.organization_id = $1::uuid AND lower(app_user.email) = lower($2::text)
-    ) AS exists
+  const [existing] = await query<Record<string, unknown>>(`
+    SELECT 1
+    FROM local801.users app_user
+    WHERE app_user.organization_id = $1::uuid AND lower(app_user.email) = lower($2::text)
+    LIMIT 1
   `, [context.organizationId, email]);
-  if (existing?.exists) throw new TeamAccessError("EMAIL_EXISTS", "A Local 801 user already exists for that email address.", 409);
+  if (existing) throw new TeamAccessError("EMAIL_EXISTS", "A Local 801 user already exists for that email address. Use Retry onboarding in the existing user’s row.", 409);
 
   const mutation: DatabaseStatement = {
     sql: `WITH ${managerActorCte()}, selected_role AS (
@@ -238,8 +248,13 @@ export async function provisionTeamMember(
       SELECT inserted_user.id, selected_role.id, actor.id
       FROM inserted_user CROSS JOIN selected_role CROSS JOIN actor
       RETURNING user_id
+    ), inserted_onboarding AS (
+      INSERT INTO local801.user_identity_onboarding (organization_id, user_id, status)
+      SELECT $1::uuid, inserted_role.user_id, 'pending'
+      FROM inserted_role
+      RETURNING user_id
     )
-    SELECT CASE WHEN count(*) = 1 THEN true ELSE 1 / count(*)::integer = 1 END AS user_provisioned FROM inserted_role`,
+    SELECT CASE WHEN count(*) = 1 THEN true ELSE 1 / count(*)::integer = 1 END AS user_provisioned FROM inserted_onboarding`,
     parameters: [context.organizationId, context.userId, context.role, id, email, role, displayName],
   };
   const audit = await prepareAtomicAuditStatement({
@@ -247,7 +262,45 @@ export async function provisionTeamMember(
     subjectType: "workspace_user", subjectId: id, payload: { role, provisioned: true },
   }, query);
   await transaction([mutation, audit]);
-  return { created: true };
+  return { created: true, userId: id, email, displayName, role };
+}
+
+export async function resolveTeamMemberOnboardingTarget(
+  context: WorkspaceContext,
+  handleInput: unknown,
+  query: DatabaseQuery = queryLocal801,
+) {
+  const handle = requireHandle(handleInput);
+  const target = await resolveTarget(context, handle, query);
+  assertTargetManageable(context.role, target.role);
+  if (target.deactivated_at !== null) throw new TeamAccessError("USER_DEACTIVATED", "Reactivate this user before retrying onboarding.", 409);
+  const [authorization] = await query<{ authorized: boolean }>(`
+    SELECT EXISTS (
+      SELECT 1
+      FROM local801.users actor
+      JOIN local801.workspace_user_roles actor_user_role ON actor_user_role.user_id = actor.id
+      JOIN local801.workspace_roles actor_role
+        ON actor_role.id = actor_user_role.role_id AND actor_role.organization_id = actor.organization_id
+      WHERE actor.organization_id = $1::uuid
+        AND actor.id = $2::uuid
+        AND actor.deactivated_at IS NULL
+        AND actor_role.code = $3::text
+        AND actor_role.code IN ('system_owner','local_admin')
+    ) AS authorized
+  `, [context.organizationId, context.userId, context.role]);
+  if (authorization?.authorized !== true) throw new TeamAccessError("FORBIDDEN", "Team access management is not authorized.", 403);
+  const page = await getTeamAccessPage(context, query);
+  const { hydrateTeamAccessPageFromProtectedPii } = await import("./pii-protected-read.ts");
+  const hydrated = await hydrateTeamAccessPageFromProtectedPii(context.organizationId, page, { query });
+  const member = hydrated.members.find((candidate) => candidate.handle === handle);
+  if (!member) throw new TeamAccessError("USER_NOT_FOUND", "The team member is no longer available.", 409);
+  return {
+    organizationId: context.organizationId,
+    userId: target.id,
+    email: member.email,
+    displayName: member.displayName,
+    role: target.role,
+  };
 }
 
 export async function changeTeamMemberRole(
@@ -380,4 +433,4 @@ export async function revokeTeamMemberSessions(
   return { revoked: true };
 }
 
-export const __testing = { assignableRoles, lowerRoles, normalizeEmail, normalizeName, normalizeRole, assertRoleAssignable, assertTargetManageable };
+export const __testing = { assignableRoles, lowerRoles, normalizeEmail, normalizeName, normalizeRole, assertRoleAssignable, assertTargetManageable, onboardingStatus };

@@ -37,13 +37,14 @@ export type NormalizedNewHireSearch = {
   assignment: NewHireAssignmentFilter;
   contact: NewHireContactFilter;
   membershipStatus: NewHireMembershipFilter;
-  daysWithin: 30 | 60 | 90 | null;
+  daysWithin: 14 | 30 | 60 | 90 | null;
   pageSize: number;
   cursor: NewHireCursor | null;
 };
 
 export type NewHireQueuePerson = {
   handle: string;
+  employeeReference: string;
   displayName: string;
   hireDate: string;
   daysSinceHire: number;
@@ -53,10 +54,10 @@ export type NewHireQueuePerson = {
   workLocation: string | null;
   jobStatus: string | null;
   workEmail: string | null;
-  homeEmail: string | null;
   workPhone: string | null;
   cellPhone: string | null;
   homePhone: string | null;
+  homeEmail: string | null;
   assigned: boolean;
   primaryOrganizers: string | null;
   backupOrganizers: string | null;
@@ -74,7 +75,7 @@ export type NewHireQueuePage = {
   assignment: NewHireAssignmentFilter;
   contact: NewHireContactFilter;
   membershipStatus: NewHireMembershipFilter;
-  daysWithin: 30 | 60 | 90 | null;
+  daysWithin: 14 | 30 | 60 | 90 | null;
   pageSize: number;
   total: number;
   summary: {
@@ -88,6 +89,7 @@ export type NewHireQueuePage = {
 
 type NewHireRow = {
   person_id: string | null;
+  employee_reference: number | string | null;
   preferred_name: string | null;
   first_name: string | null;
   last_name: string | null;
@@ -97,10 +99,7 @@ type NewHireRow = {
   work_location: string | null;
   job_status: string | null;
   work_email: string | null;
-  home_email: string | null;
   work_phone: string | null;
-  cell_phone: string | null;
-  home_phone: string | null;
   hire_date: string | Date | null;
   days_since_hire: unknown;
   open_assignment_count: unknown;
@@ -165,9 +164,9 @@ function normalizePageSize(value: unknown) {
   return NEW_HIRE_PAGE_SIZES.includes(parsed as (typeof NEW_HIRE_PAGE_SIZES)[number]) ? parsed : DEFAULT_NEW_HIRE_PAGE_SIZE;
 }
 
-function normalizeDays(value: unknown): 30 | 60 | 90 | null {
+function normalizeDays(value: unknown): 14 | 30 | 60 | 90 | null {
   const parsed = Number(scalarString(value));
-  return parsed === 30 || parsed === 60 || parsed === 90 ? parsed : null;
+  return parsed === 14 || parsed === 30 || parsed === 60 || parsed === 90 ? parsed : null;
 }
 
 function decodeCursor(value: unknown): NewHireCursor | null {
@@ -230,7 +229,7 @@ export async function getNewHireQueue(
   input: NewHireSearchInput = {},
   query: DatabaseQuery = queryLocal801,
 ): Promise<NewHireQueuePage> {
-  if (!can(context.role, "manageImports")) throw new NewHireAccessError();
+  if (!can(context.role, "assignNewHires")) throw new NewHireAccessError();
   const normalized = normalizeNewHireSearch(input);
   const cursor = normalized.cursor;
 
@@ -259,19 +258,16 @@ export async function getNewHireQueue(
     ), signals AS (
       SELECT
         person.id AS person_id,
+        person.employee_reference,
         person.preferred_name,
         person.first_name,
         person.last_name,
         person.membership_status,
         COALESCE(NULLIF(trim(hire.hire_department), ''), person.department) AS department,
         person.classification,
-        person.job_status,
-        COALESCE(NULLIF(trim(hire.hire_work_location), ''), person.work_location) AS work_location,
+        COALESCE(NULLIF(trim(person.section), ''), NULLIF(trim(hire.hire_work_location), ''), person.work_location) AS work_location,
         work_email.contact_value AS work_email,
-        contact_details.home_email,
-        contact_details.work_phone,
-        contact_details.cell_phone,
-        contact_details.home_phone,
+        work_phone.contact_value AS work_phone,
         hire.hire_date,
         GREATEST(0, current_date - hire.hire_date) AS days_since_hire,
         COALESCE(assignment.open_assignment_count, 0) AS open_assignment_count,
@@ -300,6 +296,18 @@ export async function getNewHireQueue(
         ORDER BY method.created_at ASC, method.id ASC
         LIMIT 1
       ) work_email ON true
+      LEFT JOIN LATERAL (
+        SELECT method.contact_value
+        FROM local801.person_contact_methods method
+        WHERE method.organization_id = $1::uuid
+          AND method.person_id = person.id
+          AND method.contact_type = 'phone'
+          AND method.is_primary = true
+          AND method.archived_at IS NULL
+          AND method.visibility = 'authorized_directory'
+        ORDER BY method.created_at ASC, method.id ASC
+        LIMIT 1
+      ) work_phone ON true
       LEFT JOIN LATERAL (
         SELECT
           max(method.contact_value) FILTER (WHERE method.contact_type = 'personal_email' AND method.contact_label = 'home') AS home_email,
@@ -412,7 +420,8 @@ export async function getNewHireQueue(
   const bounded = dataRows.slice(0, normalized.pageSize);
   const people: NewHireQueuePerson[] = bounded.map((row) => ({
     handle: outreachHandle(context.organizationId, row.person_id!),
-    displayName: row.preferred_name?.trim() || `${row.first_name} ${row.last_name}`,
+    employeeReference: `L801-${String(row.employee_reference).padStart(6, "0")}`,
+    displayName: `${row.first_name} ${row.last_name}`,
     hireDate: dateOnly(row.hire_date)!,
     daysSinceHire: finiteCount(row.days_since_hire),
     membershipStatus: normalizeMembershipValue(row.membership_status),
@@ -421,10 +430,10 @@ export async function getNewHireQueue(
     workLocation: row.work_location,
     jobStatus: row.job_status,
     workEmail: row.work_email,
-    homeEmail: row.home_email,
     workPhone: row.work_phone,
-    cellPhone: row.cell_phone,
-    homePhone: row.home_phone,
+    cellPhone: null,
+    homePhone: null,
+    homeEmail: null,
     assigned: finiteCount(row.open_assignment_count) > 0,
     primaryOrganizers: row.primary_organizers,
     backupOrganizers: row.backup_organizers,

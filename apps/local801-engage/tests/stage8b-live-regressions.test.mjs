@@ -16,12 +16,13 @@ test("Stage 8B Directory offers employee workspace navigation only to engagement
   assert.match(directoryPage, /import Link from "next\/link"/);
   assert.match(directoryPage, /const canOpenEmployee = can\(user\.role, "recordEngagement"\)/);
   assert.match(directoryPage, /href=\{`\/outreach\/\$\{person\.handle\}`\}/);
-  assert.match(directoryPage, />Open employee<\/Link>/);
-  assert.match(directoryPage, /canOpenEmployee \? <td>/);
+  assert.match(directoryPage, />Outreach record <span aria-hidden="true">→<\/span><\/Link>/);
+  assert.match(directoryPage, /canOpenEmployee \? <td className="directory-action-cell">/);
 });
 
-test("Stage 8B successful follow-up edits use success feedback rather than error red", () => {
+test("Stage 8B successful follow-up edits use success feedback rather than error styling", () => {
   assert.match(followupEditForm, /setMessage\("Follow-up updated\."\)/);
-  assert.match(followupEditForm, /role="status" style=\{\{ color: "var\(--success\)" \}\}/);
-  assert.match(followupEditForm, /role="alert">\{error\}/);
+  assert.match(followupEditForm, /className="form-message success" role="status">\{message\}<\/div>/);
+  assert.match(followupEditForm, /className="form-message" role="alert">\{error\}<\/div>/);
+  assert.doesNotMatch(followupEditForm, /style=\{\{ color: "var\(--success\)" \}\}/);
 });

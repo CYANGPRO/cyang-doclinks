@@ -4,6 +4,12 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { can, type Permission, type Role } from "./access.ts";
 import { getAppConfig } from "./config.ts";
 import { queryLocal801 } from "./db.ts";
+import {
+  canAccessStoredDocument,
+  canChooseDocumentVisibility,
+  parseDocumentVisibility,
+  type DocumentVisibility,
+} from "./document-access.ts";
 import { decryptEnvelope, encryptEnvelope } from "./encryption.ts";
 import { deleteObject, generateStorageKey, getObject, putObject, type StorageKind } from "./r2.ts";
 import { writeSecuritySignal } from "./security-signal.ts";
@@ -26,24 +32,9 @@ const REPORT_MEDIA_TYPES = new Set([
   "text/csv",
 ]);
 
-export const DOCUMENT_VISIBILITIES = [
-  "local_admin_only",
-  "membership_management",
-  "cat_admin_only",
-  "cat_lead_scope",
-  "cat_member_scope",
-] as const;
-export type DocumentVisibility = (typeof DOCUMENT_VISIBILITIES)[number];
-const documentVisibilitySet = new Set<string>(DOCUMENT_VISIBILITIES);
-const documentVisibilityPermissions: Record<DocumentVisibility, Permission> = {
-  local_admin_only: "viewLocalAdminDocuments",
-  membership_management: "viewPersonLevelReports",
-  cat_admin_only: "viewRestrictedStrategy",
-  cat_lead_scope: "viewTeamScope",
-  cat_member_scope: "viewCatMemberDocuments",
-};
+export { DOCUMENT_VISIBILITIES, parseDocumentVisibility, type DocumentVisibility } from "./document-access.ts";
 
-export type StorageActor = { organizationId: string; role: Role };
+export type StorageActor = { organizationId: string; userId?: string; role: Role };
 export type EncryptedStorageResult = {
   id: string;
   storageKey: string;
@@ -67,6 +58,8 @@ type StoredObjectRow = {
   media_type: string | null;
   original_filename?: string | null;
   visibility?: string | null;
+  created_by?: string | null;
+  uploaded_by_role?: string | null;
   requires_person_level_permission?: boolean;
 };
 
@@ -76,17 +69,22 @@ function authorize(actor: StorageActor, organizationId: string, permission: Perm
   }
 }
 
-export function parseDocumentVisibility(value: unknown): DocumentVisibility {
-  if (typeof value !== "string" || !documentVisibilitySet.has(value)) {
-    throw new Error("Unsupported document visibility.");
-  }
-  return value as DocumentVisibility;
+function authorizeDocumentUploadVisibility(actor: StorageActor, visibilityValue: unknown) {
+  const visibility = parseDocumentVisibility(visibilityValue);
+  if (!canChooseDocumentVisibility(actor.role, visibility)) throw new Error("Forbidden.");
+  return visibility;
 }
 
-function authorizeDocumentVisibility(actor: StorageActor, visibilityValue: unknown) {
-  const visibility = parseDocumentVisibility(visibilityValue);
-  if (!can(actor.role, documentVisibilityPermissions[visibility])) throw new Error("Forbidden.");
-  return visibility;
+function authorizeStoredDocument(
+  actor: StorageActor,
+  row: Pick<StoredObjectRow, "visibility" | "created_by" | "uploaded_by_role">,
+) {
+  if (!canAccessStoredDocument(actor, {
+    visibility: row.visibility,
+    createdBy: row.created_by,
+    uploadedByRole: row.uploaded_by_role,
+  })) throw new Error("Forbidden.");
+  return parseDocumentVisibility(row.visibility);
 }
 
 async function assertCreatedByBelongsToOrganization(createdBy: string, organizationId: string) {
@@ -228,9 +226,10 @@ export async function storeEncryptedDocument(input: {
   content: Buffer | Uint8Array | string;
   mediaType: string;
 }): Promise<EncryptedStorageResult> {
-  authorize(input.actor, input.organizationId, "manageDocuments");
+  authorize(input.actor, input.organizationId, "uploadDocuments");
   const visibility = parseDocumentVisibility(input.visibility);
-  authorizeDocumentVisibility(input.actor, visibility);
+  if (input.actor.userId && input.actor.userId !== input.createdBy) throw new Error("Forbidden.");
+  authorizeDocumentUploadVisibility(input.actor, visibility);
   await assertCreatedByBelongsToOrganization(input.createdBy, input.organizationId);
   const category = validateText(input.category, "Document category", 100);
   const title = validateText(input.title, "Document title");
@@ -242,9 +241,9 @@ export async function storeEncryptedDocument(input: {
       `
         INSERT INTO local801.documents (
           organization_id, category, title, original_filename, media_type, byte_size,
-          visibility, status, created_by, storage_key, encryption_key_version, sha256
+          visibility, status, created_by, uploaded_by_role, storage_key, encryption_key_version, sha256
         )
-        SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+        SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
         FROM local801.users creator
         WHERE creator.id = $9 AND creator.organization_id = $1 AND creator.deactivated_at IS NULL
         RETURNING id
@@ -259,6 +258,7 @@ export async function storeEncryptedDocument(input: {
         visibility,
         input.status,
         input.createdBy,
+        input.actor.role,
         key,
         prepared.encryptionKeyVersion,
         prepared.sha256,
@@ -279,14 +279,15 @@ export async function downloadDocument(input: { actor: StorageActor; organizatio
   authorize(input.actor, input.organizationId, "viewDocuments");
   const [row] = await queryLocal801<StoredObjectRow>(
     `
-      SELECT id, storage_key, encryption_key_version, sha256, media_type, original_filename, visibility
+      SELECT id, storage_key, encryption_key_version, sha256, media_type, original_filename,
+        visibility, created_by, uploaded_by_role
       FROM local801.documents
       WHERE id = $1 AND organization_id = $2 AND archived_at IS NULL
     `,
     [input.documentId, input.organizationId],
   );
   if (!row) throw new Error("Document not found.");
-  authorizeDocumentVisibility(input.actor, row.visibility);
+  authorizeStoredDocument(input.actor, row);
   return {
     id: row.id,
     plaintext: await decryptStoredObject(row),
@@ -302,10 +303,15 @@ export async function deleteEncryptedDocument(input: {
   organizationId: string;
   documentId: string;
 }) {
-  authorize(input.actor, input.organizationId, "manageDocuments");
-  const [document] = await queryLocal801<{ organization_id: string; visibility: string }>(
+  if (input.actor.organizationId !== input.organizationId) throw new Error("Forbidden.");
+  const [document] = await queryLocal801<{
+    organization_id: string;
+    visibility: string;
+    created_by: string | null;
+    uploaded_by_role: string | null;
+  }>(
     `
-      SELECT organization_id, visibility
+      SELECT organization_id, visibility, created_by, uploaded_by_role
       FROM local801.documents
       WHERE id = $1 AND organization_id = $2
     `,
@@ -313,7 +319,9 @@ export async function deleteEncryptedDocument(input: {
   );
   if (!document) return { deleted: false as const };
   if (document.organization_id !== input.organizationId) throw new Error("Forbidden.");
-  const visibility = authorizeDocumentVisibility(input.actor, document.visibility);
+  const isOwner = Boolean(input.actor.userId && input.actor.userId === document.created_by);
+  if (!isOwner && !can(input.actor.role, "manageDocuments")) throw new Error("Forbidden.");
+  const visibility = authorizeStoredDocument(input.actor, document);
 
   const [row] = await queryLocal801<{ storage_key: string }>(
     `

@@ -117,6 +117,15 @@ export async function hydrateFollowupQueueFromProtectedPii(
   const keyConfig = dependencies.keyConfig ?? getPiiKeyConfiguration(env);
   await assertPiiProtectedReadState(organizationId, query, mode);
 
+  const requestedPersonHandles = [...new Set(page.items.map((item) => item.employeeHandle))];
+  const requestedUserHandles = [...new Set(page.items.flatMap((item) => [
+    item.assignedToHandle,
+    ...item.assigneeOptions.map((option) => option.handle),
+  ]).filter((handle): handle is string => Boolean(handle)))];
+  if (requestedPersonHandles.length > PREVIEW_ROW_LIMIT || requestedUserHandles.length > PREVIEW_ROW_LIMIT) {
+    blocked("PREVIEW_BOUND_EXCEEDED", "Protected Follow-ups hydration exceeded its bounded row limit.");
+  }
+
   const [people, users] = await Promise.all([
     query<ProtectedPersonRow>(`
       /* pii-protected-followup-read:people */
@@ -126,18 +135,20 @@ export async function hydrateFollowupQueueFromProtectedPii(
         preferred_name_encrypted_payload, preferred_name_encryption_key_version, preferred_name_encryption_format_version
       FROM local801.person_pii
       WHERE organization_id = $1::uuid
+        AND encode(public.digest(concat($1::uuid::text, ':', person_id::text), 'sha256'), 'hex') = ANY($2::text[])
       ORDER BY person_id
       LIMIT ${PREVIEW_ROW_LIMIT + 1}
-    `, [organizationId]),
+    `, [organizationId, requestedPersonHandles]),
     query<ProtectedUserRow>(`
       /* pii-protected-followup-read:users */
       SELECT user_id::text,
         display_name_encrypted_payload, display_name_encryption_key_version, display_name_encryption_format_version
       FROM local801.user_pii
       WHERE organization_id = $1::uuid
+        AND encode(public.digest(concat('user:', $1::uuid::text, ':', user_id::text), 'sha256'), 'hex') = ANY($2::text[])
       ORDER BY user_id
       LIMIT ${PREVIEW_ROW_LIMIT + 1}
-    `, [organizationId]),
+    `, [organizationId, requestedUserHandles]),
   ]);
 
   if (people.length > PREVIEW_ROW_LIMIT || users.length > PREVIEW_ROW_LIMIT) {

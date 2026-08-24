@@ -4,6 +4,10 @@ import { NextResponse } from "next/server";
 import { requirePreviewUser } from "./authz.server.ts";
 import { hasExactSameOrigin } from "./request-security.ts";
 import { TeamAccessError } from "./team-access.ts";
+import { EntraOnboardingError } from "./entra-user-onboarding.ts";
+import { enforceWorkspaceRateLimit, RateLimitError } from "./rate-limit.ts";
+import { rateLimitResponse } from "./rate-limit-response.ts";
+import { resolveWorkspaceContext } from "./workspace-context.ts";
 
 const MAX_JSON_BYTES = 4_096;
 const noStore = { "Cache-Control": "private, no-store, max-age=0, must-revalidate" };
@@ -18,7 +22,15 @@ export async function authorizeTeamMutation(request: Request) {
   }
   const auth = await requirePreviewUser("manageUsers");
   if (!auth.ok) return { response: auth.response } as const;
-  return { auth } as const;
+  try {
+    const context = await resolveWorkspaceContext(auth.user);
+    await enforceWorkspaceRateLimit(context, "mutation");
+    return { auth, context } as const;
+  } catch (error) {
+    return { response: rateLimitResponse(error instanceof RateLimitError
+      ? error
+      : new RateLimitError("RATE_LIMIT_UNAVAILABLE")) } as const;
+  }
 }
 
 export async function readTeamJson(request: Request) {
@@ -67,6 +79,7 @@ function safeFailureDiagnostic(error: unknown) {
 
 export function teamMutationFailure(error: unknown) {
   if (error instanceof TeamAccessError) return teamJson({ error: error.code, message: error.message }, error.status);
+  if (error instanceof EntraOnboardingError) return teamJson({ error: error.code, message: error.message }, error.status);
   console.error("[local801-team-safe-failure]", JSON.stringify(safeFailureDiagnostic(error)));
   return teamJson({ error: "TEAM_ACCESS_UNAVAILABLE", message: "The team access change could not be completed safely." }, 503);
 }

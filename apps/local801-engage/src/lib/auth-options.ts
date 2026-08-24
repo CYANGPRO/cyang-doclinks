@@ -3,6 +3,11 @@ import "server-only";
 import type { NextAuthOptions } from "next-auth";
 import type { OAuthConfig } from "next-auth/providers/oauth";
 import {
+  safeProductionAuthClaimPresence,
+  safeProductionAuthFailureCode,
+  safeProductionAuthInternalFailure,
+} from "./auth-failure-diagnostics.ts";
+import {
   authorizeProductionIdentity,
   getProductionAuthConfig,
   productionAuthClaimShape,

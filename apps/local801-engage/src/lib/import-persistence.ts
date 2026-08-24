@@ -24,6 +24,7 @@ const mediaTypes = new Set([
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ]);
 export const MAX_IMPORT_ERROR_EXPORT_ROWS = 50_000;
+export const DEFAULT_IMPORT_BATCH_PAGE_SIZE = 20;
 
 export type ImportActor = StorageActor & { userId: string };
 export type ImportPersistenceDependencies = {
@@ -122,6 +123,7 @@ function identifierValues(values: Record<string, string | null>) {
     ["employee_identifier", values.employee_identifier],
     ["member_identifier", values.member_identifier],
     ["work_email", values.work_email],
+    ["personal_email", values.personal_email],
   ].filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].trim() !== "");
 }
 
@@ -453,36 +455,96 @@ export async function persistImportReview(input: {
   }
 }
 
-export async function listImportBatches(actor: ImportActor, query: DatabaseQuery = queryLocal801) {
-  if (!can(actor.role, "manageImports")) throw new Error("Forbidden.");
-  return query<{
-    id: string;
-    import_kind: string;
-    state: string;
-    original_filename: string | null;
-    byte_size: number | null;
-    created_at: string;
-    total_rows: number;
-    error_count: number;
-    processing_stage: string | null;
-    processed_row_count: number | null;
-    total_row_count: number | null;
-    processing_error_code: string | null;
-  }>(
-    `
-      SELECT batch.id, batch.import_kind, batch.state, file.original_filename, file.byte_size, batch.created_at,
-        batch.processing_stage, batch.processed_row_count, batch.total_row_count, batch.processing_error_code,
-        (SELECT count(*)::int FROM local801.import_rows row WHERE row.organization_id = batch.organization_id AND row.import_sheet_id IN (SELECT id FROM local801.import_sheets WHERE import_file_id = file.id AND organization_id = batch.organization_id)) AS total_rows,
-        (SELECT count(*)::int FROM local801.import_errors error WHERE error.organization_id = batch.organization_id AND error.import_batch_id = batch.id) AS error_count
-      FROM local801.import_batches batch
-      LEFT JOIN LATERAL (SELECT original_filename, byte_size, id FROM local801.import_files WHERE import_batch_id = batch.id AND organization_id = batch.organization_id ORDER BY created_at ASC LIMIT 1) file ON true
-      WHERE batch.organization_id = $1
-      ORDER BY batch.created_at DESC, batch.id DESC
-      LIMIT 20
-    `,
-    [actor.organizationId],
-  );
+export type ImportBatchQueueItem = {
+  id: string;
+  import_kind: string;
+  state: string;
+  original_filename: string | null;
+  byte_size: number | null;
+  created_at: string;
+  total_rows: number;
+  error_count: number;
+  processing_stage: string | null;
+  processed_row_count: number | null;
+  total_row_count: number | null;
+  processing_error_code: string | null;
+};
+
+type ImportBatchQueueRow = ImportBatchQueueItem & { cursor_token: string };
+type ImportBatchCursor = { direction: "before" | "after"; createdAt: string; token: string };
+
+function importBatchCursor(value: unknown): ImportBatchCursor | null {
+  if (typeof value !== "string" || value.length > 500) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as Record<string, unknown>;
+    const date = typeof parsed.createdAt === "string" ? new Date(parsed.createdAt) : null;
+    const token = typeof parsed.token === "string" && /^[0-9a-f]{64}$/i.test(parsed.token) ? parsed.token.toLowerCase() : null;
+    const direction = parsed.direction === "before" || parsed.direction === "after" ? parsed.direction : null;
+    return date && !Number.isNaN(date.getTime()) && date.toISOString() === parsed.createdAt && token && direction
+      ? { direction, createdAt: parsed.createdAt, token }
+      : null;
+  } catch {
+    return null;
+  }
 }
+
+function encodeImportBatchCursor(direction: ImportBatchCursor["direction"], row: ImportBatchQueueRow) {
+  return Buffer.from(JSON.stringify({ direction, createdAt: new Date(row.created_at).toISOString(), token: row.cursor_token })).toString("base64url");
+}
+
+export async function getImportBatchesPage(
+  actor: ImportActor,
+  input: { cursor?: unknown; pageSize?: unknown } = {},
+  query: DatabaseQuery = queryLocal801,
+) {
+  if (!can(actor.role, "manageImports")) throw new Error("Forbidden.");
+  const requestedPageSize = Number(input.pageSize);
+  const pageSize = [10, 20, 50, 100].includes(requestedPageSize) ? requestedPageSize : DEFAULT_IMPORT_BATCH_PAGE_SIZE;
+  const cursor = importBatchCursor(input.cursor);
+  const comparison = cursor?.direction === "before" ? ">" : "<";
+  const ordering = cursor?.direction === "before" ? "ASC" : "DESC";
+  const rows = await query<ImportBatchQueueRow>(
+    `
+      /* imports:batch-keyset-page */
+      WITH visible_batches AS (
+        SELECT batch.id, batch.import_kind, batch.state, file.original_filename, file.byte_size, batch.created_at,
+          batch.processing_stage, batch.processed_row_count, batch.total_row_count, batch.processing_error_code,
+          encode(public.digest(batch.organization_id::text || ':' || batch.id::text, 'sha256'), 'hex') AS cursor_token,
+          (SELECT count(*)::int FROM local801.import_rows row WHERE row.organization_id = batch.organization_id AND row.import_sheet_id IN (SELECT id FROM local801.import_sheets WHERE import_file_id = file.id AND organization_id = batch.organization_id)) AS total_rows,
+          (SELECT count(*)::int FROM local801.import_errors error WHERE error.organization_id = batch.organization_id AND error.import_batch_id = batch.id) AS error_count
+        FROM local801.import_batches batch
+        LEFT JOIN LATERAL (SELECT original_filename, byte_size, id FROM local801.import_files WHERE import_batch_id = batch.id AND organization_id = batch.organization_id ORDER BY created_at ASC LIMIT 1) file ON true
+        WHERE batch.organization_id = $1::uuid
+      )
+      SELECT * FROM visible_batches
+      WHERE ($2::timestamptz IS NULL OR (created_at, cursor_token) ${comparison} ($2::timestamptz, $3::text))
+      ORDER BY created_at ${ordering}, cursor_token ${ordering}
+      LIMIT $4::integer
+    `,
+    [actor.organizationId, cursor?.createdAt ?? null, cursor?.token ?? null, pageSize + 1],
+  );
+  const hasExtra = rows.length > pageSize;
+  const bounded = rows.slice(0, pageSize);
+  if (cursor?.direction === "before") bounded.reverse();
+  const first = bounded[0];
+  const last = bounded.at(-1);
+  return {
+    items: bounded.map(({ cursor_token: _cursorToken, ...item }) => item),
+    previousCursor: first && (cursor?.direction === "after" || (cursor?.direction === "before" && hasExtra))
+      ? encodeImportBatchCursor("before", first)
+      : null,
+    nextCursor: last && (hasExtra || cursor?.direction === "before")
+      ? encodeImportBatchCursor("after", last)
+      : null,
+    pageSize,
+  };
+}
+
+export async function listImportBatches(actor: ImportActor, query: DatabaseQuery = queryLocal801) {
+  return (await getImportBatchesPage(actor, {}, query)).items;
+}
+
+export const __importBatchTesting = { importBatchCursor };
 
 export async function getImportBatch(actor: ImportActor, batchId: string, query: DatabaseQuery = queryLocal801) {
   if (!can(actor.role, "manageImports")) throw new Error("Forbidden.");
@@ -504,6 +566,22 @@ export async function getImportBatch(actor: ImportActor, batchId: string, query:
     `,
     [batchId, actor.organizationId],
   );
+  return batch ?? null;
+}
+
+export async function getImportProcessingStatus(actor: ImportActor, batchId: string, query: DatabaseQuery = queryLocal801) {
+  if (!can(actor.role, "manageImports")) throw new Error("Forbidden.");
+  const [batch] = await query<{
+    processing_stage: string | null;
+    processed_row_count: number | null;
+    total_row_count: number | null;
+    processing_error_code: string | null;
+  }>(`
+    SELECT processing_stage, processed_row_count, total_row_count, processing_error_code
+    FROM local801.import_batches
+    WHERE id = $1::uuid AND organization_id = $2::uuid
+    LIMIT 1
+  `, [batchId, actor.organizationId]);
   return batch ?? null;
 }
 

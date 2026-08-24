@@ -192,13 +192,14 @@ test("all CAT action mutations deny non-management roles before SQL", async () =
   }
 });
 
-test("CAT action mutation HTTP routes support gated Production and Preview while remaining same-origin, permission checked, bounded, and strategy-free", async () => {
+test("CAT action mutation HTTP routes are launch-gated, same-origin, permission checked, rate limited, bounded, and strategy-free", async () => {
   const helper = await readFile(new URL("../src/lib/cat-action-mutation-http.ts", import.meta.url), "utf8");
   const createRoute = await readFile(new URL("../src/app/api/cat-actions/route.ts", import.meta.url), "utf8");
   const actionRoute = await readFile(new URL("../src/app/api/cat-actions/[actionHandle]/route.ts", import.meta.url), "utf8");
   const taskCreateRoute = await readFile(new URL("../src/app/api/cat-actions/[actionHandle]/tasks/route.ts", import.meta.url), "utf8");
   const taskRoute = await readFile(new URL("../src/app/api/cat-actions/[actionHandle]/tasks/[taskHandle]/route.ts", import.meta.url), "utf8");
   assert.match(helper, /operationalRuntimeEnabled\(\)/);
+  assert.match(helper, /enforceWorkspaceRateLimit\(context, "mutation"\)/);
   assert.match(helper, /hasExactSameOrigin\(request\)/);
   assert.match(helper, /requirePreviewUser\("manageCatActions"\)/);
   assert.match(helper, /MAX_JSON_BYTES = 8_192/);

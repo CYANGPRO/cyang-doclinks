@@ -31,21 +31,11 @@ export function DocumentDeleteButton({ handle, title }: { handle: string; title:
   }
 
   return (
-    <div style={{ display: "grid", gap: 4 }}>
-      <button
-        className="button danger"
-        style={{ fontSize: ".78rem", minHeight: 32, padding: "5px 9px" }}
-        type="button"
-        onClick={remove}
-        disabled={busy}
-      >
+    <div className="inline-actions vertical-actions document-delete-control">
+      <button className="button danger compact-button" type="button" onClick={remove} disabled={busy}>
         {busy ? "Deleting..." : "Delete"}
       </button>
-      {error ? (
-        <div className="form-message" style={{ fontSize: ".76rem", margin: 0, maxWidth: 260 }} role="alert">
-          {error}
-        </div>
-      ) : null}
+      {error ? <div className="form-message compact-message" role="alert">{error}</div> : null}
     </div>
   );
 }

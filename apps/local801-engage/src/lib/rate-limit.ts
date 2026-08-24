@@ -2,6 +2,7 @@ import "server-only";
 
 import { createHash, createHmac } from "node:crypto";
 import { queryLocal801, type DatabaseQuery } from "./db.ts";
+import type { WorkspaceContext } from "./workspace-context.ts";
 
 export const rateLimitPolicies = [
   "authentication",
@@ -210,4 +211,60 @@ export async function cleanupExpiredRateLimits(batchSize = 250, query: DatabaseQ
     throw new Error("Local 801 rate-limit cleanup returned an invalid result.");
   }
   return deleted;
+}
+
+// Compatibility surface for the restored workspace workflows. These routes now
+// consume the same CIS-hardened distributed limiter used by authentication and
+// other production endpoints; the older per-route bucket table is not revived.
+export type RateLimitScope = "search" | "import" | "export" | "download" | "mutation";
+
+const workspacePolicy: Record<RateLimitScope, RateLimitPolicy> = {
+  search: "search",
+  import: "import",
+  export: "download_export",
+  download: "download_export",
+  mutation: "administrative_mutation",
+};
+
+export class RateLimitError extends Error {
+  readonly code: "RATE_LIMITED" | "RATE_LIMIT_UNAVAILABLE";
+  readonly status: 429 | 503;
+  readonly retryAfterSeconds: number;
+
+  constructor(code: "RATE_LIMITED" | "RATE_LIMIT_UNAVAILABLE", retryAfterSeconds = 1) {
+    super(code === "RATE_LIMITED"
+      ? "Too many requests. Wait briefly and try again."
+      : "Request protection is temporarily unavailable.");
+    this.name = "RateLimitError";
+    this.code = code;
+    this.status = code === "RATE_LIMITED" ? 429 : 503;
+    this.retryAfterSeconds = Math.max(1, Math.ceil(retryAfterSeconds));
+  }
+}
+
+export async function enforceWorkspaceRateLimit(
+  context: WorkspaceContext,
+  scope: RateLimitScope,
+  options: { env?: NodeJS.ProcessEnv; now?: Date; query?: DatabaseQuery } = {},
+) {
+  const env = options.env ?? process.env;
+  if (!distributedRateLimitsEnabled(env)) return;
+  try {
+    const decision = await consumeRateLimit({
+      policy: workspacePolicy[scope],
+      organizationId: context.organizationId,
+      subjectKind: "user",
+      subjectValue: context.userId,
+      now: options.now,
+      env,
+    }, options.query ?? queryLocal801);
+    if (!decision.allowed) throw new RateLimitError("RATE_LIMITED", decision.retryAfterSeconds);
+  } catch (error) {
+    if (error instanceof RateLimitError) throw error;
+    console.error("[local801-security]", JSON.stringify({
+      event: "rate_limit.failure", outcome: "fail_closed", policy: workspacePolicy[scope],
+      organizationId: context.organizationId, actorId: context.userId,
+    }));
+    throw new RateLimitError("RATE_LIMIT_UNAVAILABLE", 30);
+  }
 }

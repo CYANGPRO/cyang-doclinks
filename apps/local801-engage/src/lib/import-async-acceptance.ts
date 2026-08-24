@@ -12,7 +12,7 @@ import {
 } from "./document-storage.ts";
 import { ControlledImportError } from "./import-errors.ts";
 import { IMPORT_PROCESSING_VERSION } from "./import-processing.ts";
-import { durablePreviewImportsEnabled, isStrictSyntheticPreviewCsv } from "./import-scanner.ts";
+import { durableImportProcessingEnabled, isStrictSyntheticPreviewCsv } from "./import-scanner.ts";
 import { startQueuedImportWorkflow } from "./import-workflow-starter.ts";
 import { importKindSchema } from "./imports.ts";
 import type { ImportActor } from "./import-persistence.ts";
@@ -27,7 +27,7 @@ type AcceptanceDependencies = {
   env?: NodeJS.ProcessEnv;
 };
 
-export async function acceptDurablePreviewCsv(input: {
+export async function acceptDurableImport(input: {
   actor: ImportActor;
   file: File;
   importKind: unknown;
@@ -35,19 +35,25 @@ export async function acceptDurablePreviewCsv(input: {
 }) {
   if (!can(input.actor.role, "manageImports")) throw new Error("Forbidden.");
   const env = input.dependencies?.env ?? process.env;
-  if (!durablePreviewImportsEnabled(env)) {
-    throw new ControlledImportError("SERVICE_UNAVAILABLE", "service_unavailable");
+  if (!durableImportProcessingEnabled(env)) {
+    throw new ControlledImportError("SERVICE_UNAVAILABLE", "service_unavailable", "availability");
   }
   const kind = importKindSchema.safeParse(input.importKind || "current_roster");
   if (!kind.success) throw new ControlledImportError("IMPORT_VALIDATION_FAILED", "validation_failed");
-  if (!input.file.name.toLowerCase().endsWith(".csv")
-    || (input.file.type && input.file.type.toLowerCase() !== "text/csv")) {
+  const lowerName = input.file.name.toLowerCase();
+  const lowerType = input.file.type.toLowerCase();
+  const csv = lowerName.endsWith(".csv") && (!lowerType || lowerType === "text/csv");
+  const xlsx = lowerName.endsWith(".xlsx") && (!lowerType
+    || lowerType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  if (!csv && !xlsx) {
     throw new ControlledImportError("UNSUPPORTED_FILE", "unsupported_file");
   }
   if (!Number.isSafeInteger(input.file.size) || input.file.size <= 0) throw new ControlledImportError("EMPTY_FILE", "empty_file");
   if (input.file.size > getAppConfig(env).LOCAL801_IMPORT_MAX_BYTES) throw new ControlledImportError("FILE_TOO_LARGE", "file_too_large");
   const content = Buffer.from(await input.file.arrayBuffer());
-  if (!isStrictSyntheticPreviewCsv(content, "text/csv", input.file.name)) {
+  // CSV can be validated without opening an archive. XLSX remains opaque until
+  // the malware scan succeeds; the worker enforces synthetic identities after scanning.
+  if (env.VERCEL_ENV === "preview" && csv && !isStrictSyntheticPreviewCsv(content, "text/csv", input.file.name)) {
     throw new ControlledImportError("IMPORT_VALIDATION_FAILED", "validation_failed");
   }
 
@@ -65,18 +71,20 @@ export async function acceptDurablePreviewCsv(input: {
     WHERE actor.id = $4 AND actor.organization_id = $2 AND actor.deactivated_at IS NULL
     RETURNING id
   `, [batchId, input.actor.organizationId, kind.data, input.actor.userId]);
-  if (!batch) throw new ControlledImportError("SERVICE_UNAVAILABLE", "service_unavailable");
+  if (!batch) throw new ControlledImportError("SERVICE_UNAVAILABLE", "service_unavailable", "batch_actor_resolution");
 
   let stored: EncryptedStorageResult | null = null;
+  let failureStage: "encrypted_storage" | "queue_and_audit" = "encrypted_storage";
   try {
     stored = await storeFile({
       actor: input.actor,
       organizationId: input.actor.organizationId,
       importBatchId: batchId,
       originalFilename: input.file.name,
-      mediaType: "text/csv",
+      mediaType: csv ? "text/csv" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       content,
     });
+    failureStage = "queue_and_audit";
     const queueStatement: DatabaseStatement = {
       sql: `WITH queued_batch AS (
           UPDATE local801.import_batches batch SET processing_stage = 'queued', processing_error_code = NULL
@@ -99,7 +107,12 @@ export async function acceptDurablePreviewCsv(input: {
       organizationId: input.actor.organizationId,
       subjectType: "import_batch",
       subjectId: batchId,
-      payload: { sourceFilename: input.file.name, byteSize: stored.byteSize, importKind: kind.data, processing: "durable_csv" },
+      payload: {
+        sourceFilename: input.file.name,
+        byteSize: stored.byteSize,
+        importKind: kind.data,
+        processing: csv ? "durable_csv" : "durable_xlsx",
+      },
     }, query);
     await transaction([queueStatement, audit]);
   } catch (error) {
@@ -119,7 +132,7 @@ export async function acceptDurablePreviewCsv(input: {
           WHERE organization_id = $2 AND import_batch_id = $1)`, [batchId, input.actor.organizationId]); } catch { /* safe orphan metadata */ }
     }
     if (error instanceof ControlledImportError) throw error;
-    throw new ControlledImportError("SERVICE_UNAVAILABLE", "service_unavailable");
+    throw new ControlledImportError("SERVICE_UNAVAILABLE", "service_unavailable", failureStage);
   }
 
   let workflowStarted = false;
@@ -137,3 +150,7 @@ export async function acceptDurablePreviewCsv(input: {
     statusLocation: `/imports/${batchId}`,
   };
 }
+
+/** Compatibility name retained for callers deployed before XLSX support. */
+export const acceptDurablePreviewImport = acceptDurableImport;
+export const acceptDurablePreviewCsv = acceptDurableImport;

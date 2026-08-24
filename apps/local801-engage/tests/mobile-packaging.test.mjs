@@ -82,13 +82,13 @@ test("native projects use the same identifier, verified links, and locked device
     readFile(new URL("../capacitor.config.ts", import.meta.url), "utf8"),
     readFile(new URL("../android/app/build.gradle", import.meta.url), "utf8"),
     readFile(new URL("../android/app/src/main/AndroidManifest.xml", import.meta.url), "utf8"),
-    readFile(new URL("../android/app/src/main/java/io/cyang/local801engage/MainActivity.java", import.meta.url), "utf8"),
+    readFile(new URL("../android/app/src/main/java/io/cyang/local801/engage/MainActivity.java", import.meta.url), "utf8"),
     readFile(new URL("../ios/App/App.xcodeproj/project.pbxproj", import.meta.url), "utf8"),
     readFile(new URL("../ios/App/App/App.entitlements", import.meta.url), "utf8"),
     readFile(new URL("../ios/App/App/SceneDelegate.swift", import.meta.url), "utf8"),
   ]);
 
-  for (const source of [capacitor, androidBuild, xcodeProject]) assert.match(source, /io\.cyang\.local801engage/);
+  for (const source of [capacitor, androidBuild, xcodeProject]) assert.match(source, /io\.cyang\.local801\.engage/);
   assert.match(androidManifest, /android:allowBackup="false"/);
   assert.match(androidManifest, /android:usesCleartextTraffic="false"/);
   assert.match(androidManifest, /android:autoVerify="true"/);

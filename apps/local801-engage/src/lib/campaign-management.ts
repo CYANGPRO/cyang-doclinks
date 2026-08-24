@@ -55,6 +55,7 @@ type CampaignResolution = {
   starts_on: string | Date | null;
   ends_on: string | Date | null;
   launched_at: string | Date | null;
+  population_count: number | string;
 };
 
 type ParticipantResolution = {
@@ -180,7 +181,9 @@ async function resolveCampaign(context: WorkspaceContext, campaignHandleInput: u
   const handle = requireHandle(campaignHandleInput, "Campaign");
   const [row] = await query<CampaignResolution>(`
     /* campaign-management:resolve-campaign */
-    SELECT campaign.id, campaign.name, campaign.status, campaign.starts_on, campaign.ends_on, campaign.launched_at
+    SELECT campaign.id, campaign.name, campaign.status, campaign.starts_on, campaign.ends_on, campaign.launched_at,
+      (SELECT count(*) FROM local801.outreach_campaign_population population
+       WHERE population.organization_id = campaign.organization_id AND population.campaign_id = campaign.id) AS population_count
     FROM local801.outreach_campaigns campaign
     WHERE campaign.organization_id = $1::uuid
       AND campaign.archived_at IS NULL
@@ -302,7 +305,10 @@ export async function createCampaign(
   const prepareAudit = dependencies.prepareAudit ?? prepareAtomicAuditStatement;
   const id = (dependencies.uuid ?? randomUUID)();
   const name = normalizeText(input.name, "Campaign name", MAX_CAMPAIGN_NAME);
-  const status = input.status === undefined ? "draft" : normalizeStatus(input.status, false);
+  if (input.status !== undefined && input.status !== "draft") {
+    throw new CampaignMutationError("CAMPAIGN_MUST_START_DRAFT", "New campaigns must start as drafts so a participant list can be reviewed before activation.", 400);
+  }
+  const status = "draft";
   const startsOn = normalizeDate(input.startsOn, "Campaign start date") ?? null;
   const endsOn = normalizeDate(input.endsOn, "Campaign end date") ?? null;
   validateDateRange(startsOn, endsOn);
@@ -367,6 +373,9 @@ export async function updateCampaign(
   const name = hasName ? normalizeText(input.name, "Campaign name", MAX_CAMPAIGN_NAME) : campaign.name;
   const status = hasStatus ? normalizeStatus(input.status) : campaign.status;
   validateTransition(campaign.status, status);
+  if (campaign.status === "draft" && status === "active" && Number(campaign.population_count) < 1) {
+    throw new CampaignMutationError("CAMPAIGN_POPULATION_REQUIRED", "Add at least one person before activating this campaign.", 409);
+  }
   const startsOn = hasStartsOn ? normalizeDate(input.startsOn, "Campaign start date") ?? null : dateOnly(campaign.starts_on);
   const endsOn = hasEndsOn ? normalizeDate(input.endsOn, "Campaign end date") ?? null : dateOnly(campaign.ends_on);
   validateDateRange(startsOn, endsOn);
@@ -398,6 +407,15 @@ export async function updateCampaign(
           AND campaign.archived_at IS NULL
           AND campaign.status = $13::text
           AND campaign.status <> 'archived'
+          AND (
+            NOT ($10::boolean AND $6::text = 'active')
+            OR EXISTS (
+              SELECT 1
+              FROM local801.outreach_campaign_population population
+              WHERE population.organization_id = campaign.organization_id
+                AND population.campaign_id = campaign.id
+            )
+          )
         RETURNING campaign.id
       )
       SELECT CASE WHEN count(*) = 1 THEN true ELSE 1 / count(*)::integer = 1 END AS campaign_updated
@@ -537,16 +555,20 @@ export async function updateCampaignAssignment(
     const id = (dependencies.uuid ?? randomUUID)();
     const insertStatement: DatabaseStatement = {
       sql: `
-        WITH ${actorCte()}, inserted AS (
+        WITH ${actorCte()}, locked_campaign AS (
+          SELECT campaign.id
+          FROM local801.outreach_campaigns campaign
+          WHERE campaign.id = $2::uuid
+            AND campaign.organization_id = $1::uuid
+            AND campaign.archived_at IS NULL
+            AND campaign.status IN ('draft','active')
+          FOR UPDATE OF campaign
+        ), inserted AS (
           INSERT INTO local801.engagement_assignments
             (id, organization_id, campaign_id, person_id, primary_user_id, assignment_type, status, due_at, created_by)
           SELECT $5::uuid, $1::uuid, campaign.id, person.id, $6::uuid, 'direct', 'open', $7::timestamptz, actor.id
           FROM actor
-          JOIN local801.outreach_campaigns campaign
-            ON campaign.id = $2::uuid
-           AND campaign.organization_id = $1::uuid
-           AND campaign.archived_at IS NULL
-           AND campaign.status IN ('draft','active')
+          JOIN locked_campaign campaign ON true
           JOIN local801.outreach_campaign_population population
             ON population.organization_id = $1::uuid
            AND population.campaign_id = campaign.id
@@ -570,6 +592,13 @@ export async function updateCampaignAssignment(
                 WHERE user_role.user_id = candidate.id
                   AND role.code IN ('system_owner','local_admin','cat_admin','cat_lead','cat_member')
               )
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM local801.engagement_assignments existing
+            WHERE existing.organization_id = $1::uuid
+              AND existing.campaign_id = campaign.id
+              AND existing.person_id = person.id
+              AND existing.archived_at IS NULL
           )
           RETURNING id
         )

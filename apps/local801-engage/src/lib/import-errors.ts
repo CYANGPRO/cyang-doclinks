@@ -23,6 +23,12 @@ export type ImportRejectedReason =
   | "persistence_failed"
   | "service_unavailable";
 
+export type ImportFailureStage =
+  | "availability"
+  | "batch_actor_resolution"
+  | "encrypted_storage"
+  | "queue_and_audit";
+
 const publicMessages: Record<ImportPublicErrorCode, string> = {
   MISSING_FILE: "Select an .xlsx or .csv file to import.",
   UNSUPPORTED_FILE: "Only .xlsx and .csv files are accepted.",
@@ -51,13 +57,15 @@ export class ControlledImportError extends Error {
   readonly code: ImportPublicErrorCode;
   readonly reason: ImportRejectedReason;
   readonly status: number;
+  readonly safeStage: ImportFailureStage | null;
 
-  constructor(code: ImportPublicErrorCode, reason: ImportRejectedReason) {
+  constructor(code: ImportPublicErrorCode, reason: ImportRejectedReason, safeStage: ImportFailureStage | null = null) {
     super(publicMessages[code]);
     this.name = "ControlledImportError";
     this.code = code;
     this.reason = reason;
     this.status = publicStatuses[code];
+    this.safeStage = safeStage;
   }
 }
 

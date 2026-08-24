@@ -4,6 +4,8 @@ import { publicImportApprovalError } from "@/lib/import-approval-errors";
 import { acknowledgeDuplicateImportSource } from "@/lib/import-approval";
 import { hasExactSameOrigin } from "@/lib/request-security";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
+import { enforceWorkspaceRateLimit, RateLimitError } from "@/lib/rate-limit";
+import { rateLimitResponse } from "@/lib/rate-limit-response";
 
 export const dynamic = "force-dynamic";
 
@@ -21,12 +23,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ bat
 
   try {
     const [{ batchId }, context] = await Promise.all([params, resolveWorkspaceContext(auth.user)]);
+    await enforceWorkspaceRateLimit(context, "import");
     const result = await acknowledgeDuplicateImportSource(
       { organizationId: context.organizationId, userId: context.userId, role: context.role },
       batchId,
     );
     return NextResponse.json(result, { headers: noStore });
   } catch (error) {
+    if (error instanceof RateLimitError) return rateLimitResponse(error);
     const failure = publicImportApprovalError(error);
     return NextResponse.json(
       { error: failure.code, message: failure.message },

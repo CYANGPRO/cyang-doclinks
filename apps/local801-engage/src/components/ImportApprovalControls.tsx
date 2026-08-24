@@ -66,19 +66,19 @@ export function ImportResolutionControl({
 
   if (savedResolution) {
     return (
-      <div className="section">
+      <div className="section review-control">
         <strong>Resolution saved</strong>
         <div className="muted">
           {savedResolution.resolutionType === "confirm_existing"
             ? "Confirm the persisted exact existing-person match."
             : "Create a new person only when a later approval is executed."}
         </div>
-        <div className="toolbar">
+        <div className="form-actions compact-actions">
           <button className="button secondary" disabled={busy} onClick={() => mutate("DELETE")} type="button">
             {busy ? "Clearing..." : "Clear resolution"}
           </button>
         </div>
-        {message ? <p className="muted">{message}</p> : null}
+        {message ? <div className="form-message compact-message" role="alert">{message}</div> : null}
       </div>
     );
   }
@@ -86,20 +86,20 @@ export function ImportResolutionControl({
   const rejected = status === "rejected" || rowState === "rejected";
   const canCreate = status === "no_exact_match" && hasAuthoritativeIdentifier && hasRequiredNames && !rejected;
   return (
-    <div className="section">
+    <div className="section review-control">
       <strong>Resolution</strong>
       {status === "conflicting_match" ? (
         <p className="muted">Blocked. Authoritative identifiers conflict; correct and re-upload the source.</p>
       ) : rejected ? (
         <p className="muted">Blocked. A validation issue must be corrected and re-uploaded.</p>
       ) : status === "exact_match" ? (
-        <div className="toolbar">
+        <div className="form-actions compact-actions">
           <button className="button secondary" disabled={busy} onClick={() => mutate("PUT", "confirm_existing")} type="button">
             {busy ? "Saving..." : "Confirm existing match"}
           </button>
         </div>
       ) : canCreate ? (
-        <div className="toolbar">
+        <div className="form-actions compact-actions">
           <button className="button secondary" disabled={busy} onClick={() => mutate("PUT", "create_new")} type="button">
             {busy ? "Saving..." : "Create new person on approval"}
           </button>
@@ -107,7 +107,7 @@ export function ImportResolutionControl({
       ) : (
         <p className="muted">Blocked. First name, last name, and an employee identifier, member identifier, or work email are required.</p>
       )}
-      {message ? <p className="muted">{message}</p> : null}
+      {message ? <div className="form-message compact-message" role="alert">{message}</div> : null}
     </div>
   );
 }
@@ -163,7 +163,7 @@ export function ImportApprovalPanel({ batchId, review }: { batchId: string; revi
 
   const dateControl = batch.importKind === "current_roster"
     ? { name: "snapshotDate", label: "Snapshot date", value: batch.snapshotDate, help: "Required; never inferred from the filename or upload time." }
-    : batch.importKind === "new_hires"
+    : batch.importKind === "new_hires" || batch.importKind === "recent_hires"
       ? { name: "effectiveDate", label: "Fallback effective date", value: batch.effectiveDate, help: "Used only when a row does not provide a hire date." }
       : batch.importKind === "membership_additions" || batch.importKind === "membership_drops"
         ? { name: "effectiveDate", label: "Effective date", value: batch.effectiveDate, help: "Required for membership event planning." }
@@ -176,22 +176,24 @@ export function ImportApprovalPanel({ batchId, review }: { batchId: string; revi
         {batch.importKind === "legacy_cat" ? (
           <p className="muted">Approval is not supported for Legacy CAT imports.</p>
         ) : dateControl ? (
-          <form className="grid" onSubmit={savePlan}>
-            <div className="field">
-              <label htmlFor={dateControl.name}>{dateControl.label}</label>
-              <input defaultValue={dateControl.value ?? ""} id={dateControl.name} name={dateControl.name} type="date" />
-              <div className="muted">{dateControl.help}</div>
+          <form className="stack" onSubmit={savePlan}>
+            <div className="form-grid">
+              <div className="field">
+                <label htmlFor={dateControl.name}>{dateControl.label}</label>
+                <input defaultValue={dateControl.value ?? ""} id={dateControl.name} name={dateControl.name} type="date" />
+                <div className="field-help">{dateControl.help}</div>
+              </div>
             </div>
-            <button className="button secondary" disabled={busy} type="submit">{busy ? "Saving..." : "Save approval plan"}</button>
+            <div className="form-actions"><button className="button secondary" disabled={busy} type="submit">{busy ? "Saving..." : "Save approval plan"}</button></div>
           </form>
         ) : null}
         {batch.duplicateSourceExists ? (
-          <div className="section">
+          <div className="section review-control">
             <strong>An identical source file was previously approved.</strong>
             {batch.duplicateSourceAcknowledged ? (
               <p className="muted">Duplicate source acknowledged for this batch.</p>
             ) : (
-              <div className="toolbar">
+              <div className="form-actions compact-actions">
                 <button
                   className="button secondary"
                   disabled={busy}
@@ -204,13 +206,13 @@ export function ImportApprovalPanel({ batchId, review }: { batchId: string; revi
             )}
           </div>
         ) : null}
-        {message ? <p className="muted">{message}</p> : null}
+        {message ? <div className="form-message" role="alert">{message}</div> : null}
       </section>
 
       <section className="section card">
         <div className="section-heading">
           <h2>Approval readiness</h2>
-          <span className="badge">{readiness.ready ? "READY FOR APPROVAL EXECUTION" : "BLOCKED"}</span>
+          <span className={`status-badge ${readiness.ready ? "status-ready" : "status-danger"}`}><span aria-hidden="true">●</span>{readiness.ready ? "READY FOR APPROVAL EXECUTION" : "BLOCKED"}</span>
         </div>
         {readiness.ready ? (
           <p><strong>Ready for approval execution.</strong> Phase 2B-2 is not enabled yet.</p>

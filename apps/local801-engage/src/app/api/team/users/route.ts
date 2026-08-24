@@ -1,4 +1,5 @@
 import { provisionTeamMember } from "@/lib/team-access";
+import { EntraOnboardingError, getEntraProvisioningConfig, onboardTeamMemberWithEntra } from "@/lib/entra-user-onboarding";
 import { authorizeTeamMutation, readTeamJson, teamJson, teamMutationFailure } from "@/lib/team-mutation-http";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
 import { writeSecuritySignal } from "@/lib/security-signal";
@@ -14,7 +15,11 @@ export async function POST(request: Request) {
       readTeamJson(request),
       resolveWorkspaceContext(authorized.auth.user),
     ]);
-    const result = await provisionTeamMember(context, {
+    const provisioning = getEntraProvisioningConfig();
+    if (!provisioning.enabled) {
+      throw new EntraOnboardingError("ENTRA_PROVISIONING_DISABLED", "Automated Microsoft Entra onboarding is not enabled.");
+    }
+    const created = await provisionTeamMember(context, {
       email: body.email,
       displayName: body.displayName,
       role: body.role,
@@ -23,7 +28,21 @@ export async function POST(request: Request) {
       outcome: "success", operation: "team.provision", actorId: context.userId,
       organizationId: context.organizationId,
     });
-    return teamJson({ teamAccess: "ok", ...result }, 201);
+    try {
+      const onboarding = await onboardTeamMemberWithEntra({
+        organizationId: context.organizationId,
+        userId: created.userId,
+        email: created.email,
+        displayName: created.displayName,
+        role: created.role,
+      });
+      return teamJson({ teamAccess: "ok", created: true, ...onboarding }, 201);
+    } catch (error) {
+      if (error instanceof EntraOnboardingError) {
+        return teamJson({ teamAccess: "partial", created: true, onboarding: "failed", message: error.message }, 202);
+      }
+      throw error;
+    }
   } catch (error) {
     return teamMutationFailure(error);
   }

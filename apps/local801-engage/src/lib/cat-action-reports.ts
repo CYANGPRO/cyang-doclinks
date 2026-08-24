@@ -157,7 +157,7 @@ export async function getCatActionReport(
         AND summary.status <> 'archived'
         AND action.archived_at IS NULL
       GROUP BY summary.status
-      ORDER BY action_count DESC, summary.status ASC
+      ORDER BY summary.status ASC
       LIMIT 20
     `, [context.organizationId]),
     query<TaskStatusRow>(`
@@ -173,7 +173,7 @@ export async function getCatActionReport(
         AND action.status <> 'archived'
         AND action.archived_at IS NULL
       GROUP BY COALESCE(NULLIF(trim(task.status), ''), 'Unspecified')
-      ORDER BY task_count DESC, status ASC
+      ORDER BY status ASC
       LIMIT 20
     `, [context.organizationId]),
     query<ActionRow>(`
@@ -212,9 +212,7 @@ export async function getCatActionReport(
       WHERE summary.organization_id = $1::uuid
         AND summary.status <> 'archived'
         AND action.archived_at IS NULL
-      ORDER BY
-        CASE summary.status WHEN 'active' THEN 0 WHEN 'draft' THEN 1 WHEN 'closed' THEN 2 ELSE 3 END,
-        summary.name ASC
+      ORDER BY summary.name ASC
       LIMIT 50
     `, [context.organizationId]),
   ]);

@@ -1,10 +1,13 @@
 import { z } from "zod";
-import JSZip from "jszip";
 import { createHash } from "node:crypto";
+import { parseXlsxImportSheets } from "./xlsx-import.ts";
+
+export { XLSX_IMPORT_LIMITS, XlsxImportError, parseXlsxImportSheets } from "./xlsx-import.ts";
 
 export const importKindSchema = z.enum([
   "current_roster",
   "new_hires",
+  "recent_hires",
   "membership_additions",
   "membership_drops",
   "legacy_cat",
@@ -17,14 +20,14 @@ export const canonicalRosterColumns = [
   "employee_identifier",
   "local",
   "work_email",
-  "home_email",
   "work_phone",
-  "cell_phone",
-  "home_phone",
+  "personal_email",
   "first_name",
+  "preferred_name",
   "last_name",
   "membership_status",
   "department",
+  "section",
   "work_location",
   "classification",
   "hire_date",
@@ -46,40 +49,41 @@ export const knownColumnAliases: Record<string, (typeof canonicalRosterColumns)[
   email: "work_email",
   "work email": "work_email",
   "state email": "work_email",
-  "home email": "home_email",
-  "personal email": "home_email",
   "work phone": "work_phone",
-  "cell phone": "cell_phone",
-  "mobile phone": "cell_phone",
-  "home phone": "home_phone",
+  "home email": "personal_email",
+  "personal email": "personal_email",
   firstname: "first_name",
   "first name": "first_name",
-  "preferred first name": "first_name",
-  "preferred/first name": "first_name",
+  "preferred first name": "preferred_name",
+  "preferred/first name": "preferred_name",
   lastname: "last_name",
   "last name": "last_name",
   member: "membership_status",
   type: "membership_status",
   "person type": "membership_status",
+  "member type": "membership_status",
   "membership status": "membership_status",
   agency: "department",
   department: "department",
+  "department name": "department",
+  section: "section",
+  "section name": "section",
   location: "work_location",
   "work location": "work_location",
-  "section name": "work_location",
+  "location name": "work_location",
+  "office name": "work_location",
   class: "classification",
   classification: "classification",
+  "classification name": "classification",
   "hire date": "hire_date",
   "mape hire date": "hire_date",
-  "appointment employment status name": "job_status",
-  "employment status": "job_status",
-  "job status": "job_status",
 };
 
 const authoritativeIdentifierColumns: Array<(typeof canonicalRosterColumns)[number]> = [
   "member_identifier",
   "employee_identifier",
   "work_email",
+  "personal_email",
 ];
 
 export type ImportValidationError = {
@@ -143,8 +147,8 @@ export function mapHeaders(headers: string[]) {
 }
 
 export function shouldIncludeLocal801(localValue: string | null | undefined) {
-  const normalized = String(localValue ?? "").trim().padStart(4, "0");
-  return normalized === "0801";
+  const normalized = String(localValue ?? "").trim();
+  return /(?:^|\D)0?801(?:\D|$)/.test(normalized);
 }
 
 export function neutralizeSpreadsheetFormula(value: unknown) {
@@ -169,47 +173,33 @@ function stringifyCell(value: unknown): string | null {
   return text ? String(neutralizeSpreadsheetFormula(text)) : null;
 }
 
-function excelSerialDate(value: string) {
-  if (!/^\d+(?:\.\d+)?$/.test(value)) return null;
-  const serial = Number(value);
-  if (!Number.isFinite(serial) || serial < 1 || serial > 2_958_465) return null;
-  const date = new Date(Math.round((serial - 25_569) * 86_400_000));
-  return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10);
-}
-
-function normalizedDate(value: string) {
-  const serial = excelSerialDate(value);
-  if (serial) return serial;
-  const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (iso) return value;
-  const us = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (!us) return value;
-  const [, month, day, year] = us;
-  const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
-  if (date.getUTCFullYear() !== Number(year) || date.getUTCMonth() !== Number(month) - 1 || date.getUTCDate() !== Number(day)) return value;
-  return date.toISOString().slice(0, 10);
-}
-
-function normalizedMembershipStatus(value: string) {
-  const status = value.trim().toLowerCase().replace(/[\s_-]+/g, "");
-  if (status === "member") return "member";
-  if (["nonmember", "nonmem", "agencyfee", "fairshare"].includes(status)) return "nonmember";
-  return "unknown";
-}
-
-function normalizedPhone(value: string) {
-  const digits = value.replace(/\D/g, "");
-  if (!digits || /^0+$/.test(digits)) return null;
-  return value;
-}
-
-function normalizeCanonicalValue(column: (typeof canonicalRosterColumns)[number], value: unknown) {
-  const text = stringifyCell(value);
+export function normalizeImportDate(value: string | null | undefined) {
+  const text = value?.trim();
   if (!text) return null;
-  if (column === "hire_date") return normalizedDate(text);
-  if (column === "membership_status") return normalizedMembershipStatus(text);
-  if (column === "work_phone" || column === "cell_phone" || column === "home_phone") return normalizedPhone(text);
-  return text;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    const date = new Date(`${text}T00:00:00.000Z`);
+    return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === text ? text : null;
+  }
+  if (/^\d{1,5}(?:\.\d+)?$/.test(text)) {
+    const serial = Number(text);
+    if (!Number.isFinite(serial) || serial < 1 || serial > 100_000) return null;
+    const date = new Date(Date.UTC(1899, 11, 30) + Math.trunc(serial) * 86_400_000);
+    const iso = date.toISOString().slice(0, 10);
+    return iso >= "1900-01-01" && iso <= "2100-12-31" ? iso : null;
+  }
+  const slash = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!slash) return null;
+  const iso = `${slash[3]}-${slash[1].padStart(2, "0")}-${slash[2].padStart(2, "0")}`;
+  const date = new Date(`${iso}T00:00:00.000Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === iso ? iso : null;
+}
+
+export function normalizeMembershipStatus(value: string | null | undefined) {
+  const normalized = value?.trim().toLowerCase().replace(/[\s_-]+/g, "");
+  if (normalized === "member") return "member";
+  if (normalized === "nonmember") return "nonmember";
+  if (normalized === "unknown") return "unknown";
+  return null;
 }
 
 export function parseCsv(text: string): string[][] {
@@ -244,53 +234,6 @@ export function parseCsv(text: string): string[][] {
   return rows;
 }
 
-const XML_NAMED_ENTITIES: Readonly<Record<string, string>> = Object.freeze({
-  amp: "&",
-  apos: "'",
-  gt: ">",
-  lt: "<",
-  quot: '"',
-});
-
-function isValidXmlCodePoint(codePoint: number) {
-  return codePoint === 0x09
-    || codePoint === 0x0a
-    || codePoint === 0x0d
-    || (codePoint >= 0x20 && codePoint <= 0xd7ff)
-    || (codePoint >= 0xe000 && codePoint <= 0xfffd)
-    || (codePoint >= 0x10000 && codePoint <= 0x10ffff);
-}
-
-function xmlText(value: string) {
-  return value.replace(
-    /&(?:#x[0-9a-f]+|#[0-9]+|amp|apos|gt|lt|quot);/gi,
-    (entity) => {
-      const body = entity.slice(1, -1);
-      if (body.startsWith("#x") || body.startsWith("#X")) {
-        const codePoint = Number.parseInt(body.slice(2), 16);
-        return isValidXmlCodePoint(codePoint) ? String.fromCodePoint(codePoint) : "\uFFFD";
-      }
-      if (body.startsWith("#")) {
-        const codePoint = Number.parseInt(body.slice(1), 10);
-        return isValidXmlCodePoint(codePoint) ? String.fromCodePoint(codePoint) : "\uFFFD";
-      }
-      return XML_NAMED_ENTITIES[body.toLowerCase()] ?? entity;
-    },
-  );
-}
-
-function cellColumn(ref: string) {
-  const letters = ref.replace(/[^A-Z]/gi, "").toUpperCase();
-  return letters.split("").reduce((sum, letter) => sum * 26 + letter.charCodeAt(0) - 64, 0) - 1;
-}
-
-function extractXmlTextElements(xml: string, tag: "t" | "v") {
-  const elementPattern = tag === "t"
-    ? /<t\b[^>]*>([^<]*)<\/t>/g
-    : /<v\b[^>]*>([^<]*)<\/v>/g;
-  return Array.from(xml.matchAll(elementPattern), (match) => xmlText(match[1])).join("");
-}
-
 async function rowsFromXlsx(buffer: ArrayBuffer) {
   const sheets = await sheetsFromXlsx(buffer);
   const selected = sheets.find((sheet) => sheet.state !== "obsolete" && sheet.state !== "ignored");
@@ -304,57 +247,7 @@ export type ParsedImportSheet = {
 };
 
 async function sheetsFromXlsx(buffer: ArrayBuffer): Promise<ParsedImportSheet[]> {
-  const zip = await JSZip.loadAsync(buffer);
-  const sharedStringsXml = await zip.file("xl/sharedStrings.xml")?.async("string");
-  const sharedStrings = sharedStringsXml
-    ? Array.from(sharedStringsXml.matchAll(/<si[^>]*>([\s\S]*?)<\/si>/g)).map((match) => extractXmlTextElements(match[1], "t"))
-    : [];
-
-  const workbookXml = await zip.file("xl/workbook.xml")?.async("string");
-  const relsXml = await zip.file("xl/_rels/workbook.xml.rels")?.async("string");
-  if (!workbookXml || !relsXml) return [];
-
-  const sheets = Array.from(workbookXml.matchAll(/<sheet\b([^>]*)\/>/g)).map((match) => ({
-    name: match[1].match(/\bname="([^"]+)"/)?.[1] ?? "Sheet",
-    relId: match[1].match(/\br:id="([^"]+)"/)?.[1] ?? "",
-  }));
-  const rels = Object.fromEntries(
-    Array.from(relsXml.matchAll(/<Relationship\b([^>]*)\/>/g)).map((match) => [
-      match[1].match(/\bId="([^"]+)"/)?.[1] ?? "",
-      match[1].match(/\bTarget="([^"]+)"/)?.[1] ?? "",
-    ]),
-  );
-  return Promise.all(sheets.map(async (sheet) => {
-    const target = rels[sheet.relId]?.replace(/^\//, "");
-    const sheetPath = target?.startsWith("xl/") ? target : `xl/${target}`;
-    const sheetXml = sheetPath ? await zip.file(sheetPath)?.async("string") : null;
-    const rows = sheetXml
-      ? Array.from(sheetXml.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g))
-          .map((rowMatch) => {
-            const row: string[] = [];
-            for (const cellMatch of rowMatch[1].matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>/g)) {
-              const attrs = cellMatch[1];
-              const ref = attrs.match(/\br="([^"]+)"/)?.[1] ?? "";
-              const index = ref ? cellColumn(ref) : row.length;
-              const type = attrs.match(/\bt="([^"]+)"/)?.[1] ?? "";
-              const raw = extractXmlTextElements(cellMatch[2], type === "inlineStr" ? "t" : "v");
-              row[index] = type === "s" ? sharedStrings[Number(raw)] ?? "" : raw;
-            }
-            return row.map((value) => stringifyCell(value) ?? "");
-          })
-          .filter((row) => row.some((value) => value.trim()))
-      : [];
-    const classification = classifyLegacyWorksheet(sheet.name);
-    return {
-      name: sheet.name,
-      state: classification === "ignore_by_default"
-        ? "obsolete"
-        : classification === "review_notes" || classification === "review_scores"
-          ? "notes_review"
-          : "included",
-      rows,
-    } as ParsedImportSheet;
-  }));
+  return parseXlsxImportSheets(buffer);
 }
 
 export async function rowsFromImportFile(file: File) {
@@ -397,8 +290,18 @@ export function stableRowHash(values: Record<string, string | null>) {
 export function normalizeImportRow(headers: string[], cells: string[]) {
   const values: Record<string, string | null> = {};
   mapHeaders(headers).forEach((header, index) => {
-    if (header.mappedTo) values[header.mappedTo] = normalizeCanonicalValue(header.mappedTo, cells[index]);
+    if (!header.mappedTo) return;
+    const value = stringifyCell(cells[index]);
+    values[header.mappedTo] = header.mappedTo === "hire_date"
+      ? normalizeImportDate(value)
+      : header.mappedTo === "membership_status"
+        ? normalizeMembershipStatus(value)
+        : value;
   });
+  if (!values.first_name && values.preferred_name) values.first_name = values.preferred_name;
+  // Local 801 uses Section Name as the operational work-location grouping.
+  // Preserve section as its own field and make it authoritative for work_location.
+  if (values.section) values.work_location = values.section;
   return values;
 }
 
@@ -464,11 +367,7 @@ export function validateImportRows(args: {
 
   bodyRows.slice(0, maxRows).forEach((cells, index) => {
     const rowNumber = index + 2;
-    const values: Record<string, string | null> = {};
-    mappedHeaders.forEach((header, headerIndex) => {
-      if (!header.mappedTo) return;
-      values[header.mappedTo] = normalizeCanonicalValue(header.mappedTo, cells[headerIndex]);
-    });
+    const values = normalizeImportRow(headers ?? [], cells);
 
     if (values.local && !shouldIncludeLocal801(values.local)) return;
 

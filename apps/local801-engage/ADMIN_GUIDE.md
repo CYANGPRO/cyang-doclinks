@@ -11,4 +11,4 @@ Private preview starts with synthetic roles:
 
 Use the sign-in screen to switch synthetic preview roles. Production must use invitation-only authentication with MFA.
 
-Power BI remains disabled. Native reports are usable without Power BI.
+Authenticated web reports in the application are the sole reporting system.

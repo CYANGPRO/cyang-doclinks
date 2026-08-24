@@ -38,7 +38,7 @@ test("protected import staging and authoritative preparation never persist direc
   assert.match(preparation, /identifier_protected_json/);
   assert.match(preparation, /contact_protected_json/);
   assert.match(migration, /operational_json jsonb not null/);
-  assert.doesNotMatch(migration, /\b(first_name|last_name|preferred_name|work_email|employee_identifier|member_identifier)\s+text\b/i);
+  assert.doesNotMatch(migration, /\b(first_name|last_name|preferred_name|work_email|personal_email|employee_identifier|member_identifier)\s+text\b/i);
 });
 
 test("protected reports decrypt organizer display names only in the authorized server adapter", async () => {
@@ -66,8 +66,8 @@ test("new Stage 14B audit payloads remain opaque metadata only", async () => {
 });
 
 test("cutover constraints prohibit plaintext direct PII from returning to import JSON", async () => {
-  const migration = await source("../db/migrations/0016__protected_pii_commit_constraints.sql");
-  for (const key of ["first_name", "last_name", "preferred_name", "work_email", "employee_identifier", "member_identifier"]) {
+  const migration = await source("../db/migrations/0031__protected_import_personal_email.sql");
+  for (const key of ["first_name", "last_name", "preferred_name", "work_email", "personal_email", "employee_identifier", "member_identifier"]) {
     assert.match(migration, new RegExp(key));
   }
   assert.match(migration, /direct PII is forbidden in protected import normalized_json/);

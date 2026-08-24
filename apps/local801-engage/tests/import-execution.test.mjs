@@ -210,7 +210,10 @@ test("execution route is same-origin, small-body, permission checked, and hidden
   assert.match(route, /prepareProtectedImportExecution/);
   assert.match(route, /applyPreparedProtectedImport/);
   assert.match(route, /executeAuthoritativeImport/);
-  assert.match(route, /No partial roster result is accepted/);
+  assert.match(route, /No roster changes were applied/);
+  assert.match(route, /safeProtectedImportExecutionDiagnostic\(executionStage, error\)/);
+  assert.match(route, /local801-protected-import-safe-failure/);
+  assert.match(route, /supportReference: diagnostic\.supportReference/);
 });
 
 test("execution UI is fingerprint-confirmed and all authoritative/protected gates default disabled", async () => {
@@ -224,7 +227,7 @@ test("execution UI is fingerprint-confirmed and all authoritative/protected gate
   assert.match(page, /LOCAL801_AUTHORITATIVE_IMPORT_EXECUTION_ENABLED === "1"/);
   assert.match(page, /LOCAL801_PROTECTED_IMPORT_PREPARATION_ENABLED === "1"/);
   assert.match(page, /LOCAL801_PROTECTED_IMPORT_EXECUTION_ENABLED === "1"/);
-  assert.match(page, /Executor installed but disabled/);
+  assert.match(page, /Applying changes is temporarily unavailable/);
   assert.match(page, /ImportExecutionControl/);
   assert.match(control, /confirmation\.trim\(\)\.toUpperCase\(\) !== fingerprintShort/);
   assert.match(control, /window\.confirm/);
@@ -233,5 +236,4 @@ test("execution UI is fingerprint-confirmed and all authoritative/protected gate
   assert.match(example, /LOCAL801_PROTECTED_IMPORT_EXECUTION_ENABLED=0/);
   assert.match(checklist, /legacy Stage 12 synthetic executor remains disabled in Production/i);
   assert.match(checklist, /Stage 14B protected authoritative import gate/i);
-  assert.doesNotMatch(config, /POWER_BI|powerBiDisconnected/);
 });

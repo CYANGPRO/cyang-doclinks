@@ -3,7 +3,7 @@ import "server-only";
 import { start } from "workflow/api";
 import { queryLocal801, type DatabaseQuery } from "./db.ts";
 import { IMPORT_PROCESSING_VERSION, createImportWorkflowInput, type ImportWorkflowInput } from "./import-processing.ts";
-import { durablePreviewImportsEnabled } from "./import-scanner.ts";
+import { durableImportProcessingEnabled } from "./import-scanner.ts";
 import { processImportWorkflow } from "../workflows/process-import.ts";
 
 type StartWorkflow = (input: ImportWorkflowInput) => Promise<{ runId: string }>;
@@ -19,7 +19,7 @@ export async function startQueuedImportWorkflow(
   dependencies: { query?: DatabaseQuery; startWorkflow?: StartWorkflow; env?: NodeJS.ProcessEnv } = {},
 ) {
   const input = createImportWorkflowInput(organizationId, batchId);
-  if (!durablePreviewImportsEnabled(dependencies.env ?? process.env)) {
+  if (!durableImportProcessingEnabled(dependencies.env ?? process.env)) {
     throw new Error("Durable import processing is not enabled in this environment.");
   }
   const query = dependencies.query ?? queryLocal801;
@@ -30,13 +30,16 @@ export async function startQueuedImportWorkflow(
     workflow_run_id: string | null;
     processing_version: string;
     source_count: number | string;
-    csv_source_count: number | string;
+    supported_source_count: number | string;
   }>(`
     SELECT batch.organization_id, batch.processing_stage, job.state AS job_state,
       job.workflow_run_id, job.processing_version,
       count(file.id)::int AS source_count,
-      count(file.id) FILTER (WHERE file.media_type = 'text/csv'
-        OR lower(file.original_filename) LIKE '%.csv')::int AS csv_source_count
+      count(file.id) FILTER (WHERE file.media_type IN (
+          'text/csv',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        ) OR lower(file.original_filename) LIKE '%.csv'
+          OR lower(file.original_filename) LIKE '%.xlsx')::int AS supported_source_count
     FROM local801.import_batches batch
     JOIN local801.import_processing_jobs job ON job.organization_id = batch.organization_id
       AND job.import_batch_id = batch.id
@@ -49,7 +52,9 @@ export async function startQueuedImportWorkflow(
   if (!state || state.organization_id !== input.organizationId) throw new Error("Import processing job not found.");
   if (Number(state.source_count) === 0) throw Object.assign(new Error("Canonical source missing."), { code: "SOURCE_FILE_MISSING" });
   if (Number(state.source_count) !== 1) throw Object.assign(new Error("Canonical source ambiguous."), { code: "SOURCE_FILE_AMBIGUOUS" });
-  if (Number(state.csv_source_count) !== 1) throw Object.assign(new Error("Durable import supports CSV only."), { code: "UNSUPPORTED_FILE" });
+  if (Number(state.supported_source_count) !== 1) {
+    throw Object.assign(new Error("Durable import supports CSV and XLSX sources only."), { code: "UNSUPPORTED_FILE" });
+  }
   if (state.processing_version !== IMPORT_PROCESSING_VERSION) throw new Error("Unsupported import processing version.");
   if (state.job_state !== "queued" || state.workflow_run_id !== null || state.processing_stage !== "queued") {
     throw new Error("Import processing job is not queued and runless.");

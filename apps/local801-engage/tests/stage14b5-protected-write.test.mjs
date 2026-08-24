@@ -51,7 +51,7 @@ test("protected import-row transaction removes all direct PII from normalized_js
   assert.ok(transformed);
   const payload = JSON.parse(transformed.parameters[2]);
   const normalized = payload[0].normalized_json;
-  for (const field of ["first_name", "last_name", "preferred_name", "work_email", "employee_identifier", "member_identifier"]) {
+  for (const field of ["first_name", "last_name", "preferred_name", "work_email", "personal_email", "employee_identifier", "member_identifier"]) {
     assert.equal(Object.hasOwn(normalized, field), false, field);
   }
   assert.equal(normalized.department, "Health Licensing");

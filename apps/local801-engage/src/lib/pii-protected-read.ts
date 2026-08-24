@@ -59,6 +59,7 @@ type ProtectedPersonRow = {
 
 type ProtectedContactRow = {
   person_id: string;
+  contact_type?: "work_email" | "phone";
   contact_method_id: string;
   contact_value_encrypted_payload: string;
   encryption_key_version: string;
@@ -214,6 +215,11 @@ export async function hydrateDirectoryPageFromProtectedPii(
   const keyConfig = dependencies.keyConfig ?? getPiiKeyConfiguration(env);
   await assertPiiProtectedReadState(organizationId, query, mode);
 
+  const requestedHandles = page.people.map((person) => person.handle);
+  if (requestedHandles.length > PREVIEW_ROW_LIMIT) {
+    blocked("PREVIEW_BOUND_EXCEEDED", "Protected directory hydration exceeded its bounded row limit.");
+  }
+
   const people = await query<ProtectedPersonRow>(`
     /* pii-protected-read:directory-people */
     SELECT person_id::text,
@@ -222,32 +228,34 @@ export async function hydrateDirectoryPageFromProtectedPii(
       preferred_name_encrypted_payload, preferred_name_encryption_key_version, preferred_name_encryption_format_version
     FROM local801.person_pii
     WHERE organization_id = $1::uuid
+      AND encode(public.digest(concat($1::uuid::text, ':', person_id::text), 'sha256'), 'hex') = ANY($2::text[])
     ORDER BY person_id
     LIMIT ${PREVIEW_ROW_LIMIT + 1}
-  `, [organizationId]);
+  `, [organizationId, requestedHandles]);
   if (people.length > PREVIEW_ROW_LIMIT) blocked("PREVIEW_BOUND_EXCEEDED", "Protected person read exceeded its bounded row limit.");
 
   const contacts = await query<ProtectedContactRow>(`
     /* pii-protected-read:directory-work-email */
-    SELECT DISTINCT ON (contact.person_id)
-      contact.person_id::text, contact.id::text AS contact_method_id,
+    SELECT DISTINCT ON (contact.person_id, contact.contact_type)
+      contact.person_id::text, contact.contact_type, contact.id::text AS contact_method_id,
       protected.contact_value_encrypted_payload, protected.encryption_key_version, protected.encryption_format_version
     FROM local801.person_contact_methods contact
     JOIN local801.person_contact_method_pii protected
       ON protected.organization_id = contact.organization_id AND protected.contact_method_id = contact.id
     WHERE contact.organization_id = $1::uuid
-      AND contact.contact_type = 'work_email'
+      AND contact.contact_type IN ('work_email','phone')
       AND contact.is_primary = true
       AND contact.archived_at IS NULL
       AND (($2::boolean AND contact.visibility IN ('authorized_directory','assigned_only'))
         OR (NOT $2::boolean AND contact.visibility = 'authorized_directory'))
-    ORDER BY contact.person_id, contact.created_at, contact.id
+      AND contact.person_id = ANY($3::uuid[])
+    ORDER BY contact.person_id, contact.contact_type, contact.created_at, contact.id
     LIMIT ${PREVIEW_ROW_LIMIT + 1}
-  `, [organizationId, page.effectiveScope === "assigned"]);
+  `, [organizationId, page.effectiveScope === "assigned", people.map((row) => row.person_id)]);
   if (contacts.length > PREVIEW_ROW_LIMIT) blocked("PREVIEW_BOUND_EXCEEDED", "Protected contact read exceeded its bounded row limit.");
 
   const peopleByHandle = uniqueMap(people, (row) => personHandle(organizationId, row.person_id), "person");
-  const contactByPersonId = uniqueMap(contacts, (row) => row.person_id, "primary work-email");
+  const contactByPersonAndType = uniqueMap(contacts, (row) => `${row.person_id}:${row.contact_type ?? "work_email"}`, "primary directory contact");
 
   return {
     ...page,
@@ -274,8 +282,7 @@ export async function hydrateDirectoryPageFromProtectedPii(
         );
       }
 
-      const contact = contactByPersonId.get(row.person_id);
-      const workEmail = contact ? decryptPiiField(
+      const decryptContact = (contact: ProtectedContactRow | undefined) => contact ? decryptPiiField(
         encrypted(contact as unknown as Record<string, unknown>, "contact_value_encrypted_payload", "encryption_key_version", "encryption_format_version"),
         { organizationId, entity: "person-contact", recordId: contact.contact_method_id, field: "contact-value" },
         keyConfig,
@@ -285,8 +292,9 @@ export async function hydrateDirectoryPageFromProtectedPii(
         ...person,
         firstName,
         lastName,
-        displayName: preferredName?.trim() || `${firstName} ${lastName}`,
-        workEmail,
+        displayName: `${firstName} ${lastName}`,
+        workEmail: decryptContact(contactByPersonAndType.get(`${row.person_id}:work_email`)),
+        workPhone: decryptContact(contactByPersonAndType.get(`${row.person_id}:phone`)),
       };
     }),
   };

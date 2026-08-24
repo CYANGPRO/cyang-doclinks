@@ -84,6 +84,26 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .main-shell { min-width: 0; padding-bottom: 80px; }
 .topbar { align-items: center; background: rgb(255 255 255 / 96%); border-bottom: 1px solid var(--border); display: flex; gap: var(--space-4); justify-content: space-between; min-height: 72px; padding: var(--space-3) var(--space-5); position: sticky; top: 0; z-index: 10; }
 .preview-status { color: var(--brand-burgundy); font-size: .76rem; font-weight: 700; margin-top: var(--space-1); }
+
+.table-sort-button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-weight: inherit;
+  gap: 4px;
+  padding: 0;
+  text-align: left;
+}
+
+.table-sort-button:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid var(--brand-blue);
+  outline-offset: 3px;
+}
 .role-chip { background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 999px; color: var(--text); font-size: .78rem; font-weight: 600; padding: 7px 10px; white-space: nowrap; }
 
 .content { margin: 0 auto; max-width: var(--content-wide); padding: var(--space-6) var(--space-5) var(--space-7); }

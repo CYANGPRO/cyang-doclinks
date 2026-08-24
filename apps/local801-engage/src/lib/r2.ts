@@ -6,6 +6,7 @@ import {
   GetObjectCommand,
   HeadBucketCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
   type GetObjectCommandOutput,
@@ -13,7 +14,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { getAppConfig, getStorageConfig } from "./config.ts";
 
-type R2Command = HeadBucketCommand | PutObjectCommand | GetObjectCommand | HeadObjectCommand | DeleteObjectCommand;
+type R2Command = HeadBucketCommand | PutObjectCommand | GetObjectCommand | HeadObjectCommand | DeleteObjectCommand | ListObjectsV2Command;
 export type R2Client = { send(command: R2Command): Promise<unknown> };
 
 function defaultClientFactory(): R2Client {
@@ -32,6 +33,7 @@ function defaultClientFactory(): R2Client {
       if (command instanceof PutObjectCommand) return client.send(command);
       if (command instanceof GetObjectCommand) return client.send(command);
       if (command instanceof HeadObjectCommand) return client.send(command);
+      if (command instanceof ListObjectsV2Command) return client.send(command);
       return client.send(command);
     },
   };
@@ -206,4 +208,28 @@ export async function deleteObject(storageKey: string) {
   const config = getStorageConfig();
   await createR2Client().send(new DeleteObjectCommand({ Bucket: config.LOCAL801_R2_BUCKET, Key: key }));
   return { deleted: true as const, storageKey: key };
+}
+
+export async function listStorageObjectKeys(options: { maximumObjects?: number } = {}) {
+  const maximumObjects = Math.min(100_000, Math.max(1, Math.trunc(options.maximumObjects ?? 50_000)));
+  const config = getStorageConfig();
+  const client = createR2Client();
+  const keys: string[] = [];
+  let continuationToken: string | undefined;
+  do {
+    const response = await client.send(new ListObjectsV2Command({
+      Bucket: config.LOCAL801_R2_BUCKET,
+      Prefix: "local801/",
+      MaxKeys: Math.min(1_000, maximumObjects - keys.length + 1),
+      ...(continuationToken ? { ContinuationToken: continuationToken } : {}),
+    })) as { Contents?: Array<{ Key?: string }>; IsTruncated?: boolean; NextContinuationToken?: string };
+    for (const object of response.Contents ?? []) {
+      if (!object.Key) throw new Error("R2 returned an object without a key.");
+      keys.push(assertSafeStorageKey(object.Key));
+      if (keys.length > maximumObjects) throw new Error("Storage reconciliation object limit exceeded.");
+    }
+    continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
+    if (response.IsTruncated && !continuationToken) throw new Error("R2 reconciliation pagination is incomplete.");
+  } while (continuationToken);
+  return keys;
 }

@@ -9,6 +9,7 @@ import {
   createImportWorkflowInput,
   decideImportProcessingOwnership,
   importProcessingFailureDisposition,
+  importProcessingSafeFailureMessage,
   importProcessingJobStates,
   importProcessingSafeErrorCodes,
   importProcessingStages,
@@ -26,9 +27,9 @@ import {
 test("durable import stage and job vocabularies are small and explicit", () => {
   assert.deepEqual(importProcessingStages, [
     "uploaded", "queued", "scanning", "parsing", "validating", "matching",
-    "preparing_review", "ready_for_review", "failed",
+    "preparing_review", "ready_for_review", "failed", "cancelled",
   ]);
-  assert.deepEqual(importProcessingJobStates, ["queued", "running", "succeeded", "failed"]);
+  assert.deepEqual(importProcessingJobStates, ["queued", "running", "succeeded", "failed", "cancelled"]);
   assert.equal(IMPORT_PROCESSING_VERSION, "local801-import-v1");
 });
 
@@ -40,9 +41,11 @@ test("durable import transitions advance in order and fail closed", () => {
   assert.equal(canAdvanceImportProcessing("ready_for_review", "queued"), false);
   assert.equal(canAdvanceImportProcessing("parsing", "ready_for_review"), false);
   assert.equal(canAdvanceImportProcessing("failed", "queued"), true);
-  for (const stage of importProcessingStages.filter((item) => item !== "ready_for_review" && item !== "failed")) {
+  for (const stage of importProcessingStages.filter((item) => !["ready_for_review", "failed", "cancelled"].includes(item))) {
     assert.equal(canAdvanceImportProcessing(stage, "failed"), true);
+    assert.equal(canAdvanceImportProcessing(stage, "cancelled"), true);
   }
+  assert.equal(canAdvanceImportProcessing("cancelled", "queued"), true);
 });
 
 test("processing job transitions are centralized and reject arbitrary jumps", () => {
@@ -51,6 +54,8 @@ test("processing job transitions are centralized and reject arbitrary jumps", ()
   assert.equal(canAdvanceImportProcessingJob("running", "succeeded"), true);
   assert.equal(canAdvanceImportProcessingJob("running", "failed"), true);
   assert.equal(canAdvanceImportProcessingJob("failed", "queued"), true);
+  assert.equal(canAdvanceImportProcessingJob("running", "cancelled"), true);
+  assert.equal(canAdvanceImportProcessingJob("cancelled", "queued"), true);
   assert.equal(canAdvanceImportProcessingJob("queued", "succeeded"), false);
   assert.equal(canAdvanceImportProcessingJob("succeeded", "running"), false);
   assert.equal(canAdvanceImportProcessingJob("running", "queued"), false);
@@ -59,6 +64,8 @@ test("processing job transitions are centralized and reject arbitrary jumps", ()
 test("safe processing failures use a typed allowlist and dispositions", () => {
   assert.equal(importProcessingFailureDisposition("DATABASE_TEMPORARY_FAILURE"), "retryable");
   assert.equal(importProcessingFailureDisposition("MALWARE_REJECTED"), "terminal_source");
+  assert.equal(importProcessingFailureDisposition("WORKBOOK_STRUCTURE_TOO_LARGE"), "terminal_source");
+  assert.match(importProcessingSafeFailureMessage("WORKBOOK_STRUCTURE_TOO_LARGE"), /copy the used rows into a new workbook/i);
   assert.equal(importProcessingFailureDisposition("TENANT_INVARIANT_FAILED"), "operator_review");
   assert.equal(Object.hasOwn(importProcessingSafeErrorCodes, "raw postgres error"), false);
 });
@@ -143,9 +150,10 @@ test("processing status uses human labels and useful integer row progress", () =
   });
 });
 
-test("only ready-for-review and failed are terminal processing stages", () => {
+test("ready-for-review, failed, and cancelled are terminal processing stages", () => {
   assert.equal(isTerminalImportProcessingStage("ready_for_review"), true);
   assert.equal(isTerminalImportProcessingStage("failed"), true);
+  assert.equal(isTerminalImportProcessingStage("cancelled"), true);
   assert.equal(isTerminalImportProcessingStage("validating"), false);
 });
 

@@ -66,11 +66,11 @@ The current implementation validates and previews only. Production approval must
 
 ## Reporting And Export Functionality
 
-Native report pages and reporting views exist. Power BI readiness is documented and disabled. Export generation is documented but not yet connected to persistent generated report storage.
+Native authenticated report pages and organization-scoped reporting views are the complete reporting direction. Export generation is documented but not yet connected to persistent generated report storage.
 
 ## Environment Variables
 
-See `.env.example` for the complete preview/production set: app URL, auth callback URL, database URL, R2 account/endpoint/bucket/credentials, encryption keys, auth secret, app metadata, signup/MFA/session policies, import/export/rate limits, PWA controls, preview auth flag, push/VAPID keys, Power BI flags, and monitoring DSN.
+See `.env.example` for the complete preview/production set: app URL, auth callback URL, database URL, R2 account/endpoint/bucket/credentials, encryption keys, auth secret, app metadata, signup/MFA/session policies, import/export/rate limits, PWA controls, preview auth flag, push/VAPID keys, and monitoring DSN.
 
 ## External Services
 
@@ -93,5 +93,5 @@ Required before production:
 - Real malware scanning and encrypted source-file storage must be wired before real uploads.
 - Exports are documented but not yet persisted to private storage.
 - Push subscriptions and delivery are scaffolded but disabled.
-- Power BI connection is intentionally disabled.
+- Reporting is delivered entirely through authenticated web reports in this application.
 - Real sample files were not available in this workspace or attachment directory for direct validation.

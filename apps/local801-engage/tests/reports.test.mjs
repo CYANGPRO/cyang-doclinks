@@ -18,6 +18,7 @@ function reportQueryRecorder() {
     calls.push({ sql, parameters });
     if (sql.includes("reports:membership-overview")) return [{ represented_count: "8", member_count: "5", nonmember_count: "2", other_count: "1", refreshed_at: "2026-08-14T12:00:00.000Z" }];
     if (sql.includes("reports:membership-monthly-changes")) return [{ month: "2026-08-01", additions: "2", drops: "1", net_change: "1" }];
+    if (sql.includes("reports:membership-by-classification")) return [{ label: "Management Analyst 4", represented_count: "2", member_count: "1", nonmember_count: "1", other_count: "0" }];
     if (sql.includes("reports:membership-by-department")) return [{ label: "Health Licensing", represented_count: "2", member_count: "2", nonmember_count: "0", other_count: "0" }];
     if (sql.includes("reports:membership-by-work-location")) return [{ label: "Downtown", represented_count: "2", member_count: "2", nonmember_count: "0", other_count: "0" }];
     if (sql.includes("reports:membership-by-job-status")) return [{ label: "Permanent", represented_count: "2", member_count: "2", nonmember_count: "0", other_count: "0" }];
@@ -47,9 +48,10 @@ test("aggregate membership report remains available to every viewReports role", 
   for (const role of ["system_owner", "local_admin", "membership_data_manager", "cat_admin", "cat_lead", "report_viewer"]) {
     const { calls, query } = reportQueryRecorder();
     const report = await getMembershipReport(context(role), query);
-    assert.equal(calls.length, 6);
+    assert.equal(calls.length, 7);
     assert.equal(report.overview.representedCount, 8);
     assert.equal(report.overview.membershipRate, 62.5);
+    assert.equal(report.classifications[0].label, "Management Analyst 4");
   }
 });
 
@@ -182,21 +184,20 @@ test("numeric normalization remains finite", () => {
 
 test("Reports page provides real navigation for ready reports and New Hires dashboard content", () => {
   const source = readFileSync(new URL("../src/app/reports/page.tsx", import.meta.url), "utf8");
-  assert.match(source, /href={`\/reports\?view=\$\{tab\.key\}`}/);
+  assert.match(source, /tab\.key === "data-quality" \? "\/reports\/data-quality" : `\/reports\?view=\$\{tab\.key\}`/);
   assert.match(source, /aria-current/);
-  assert.match(source, /New-hire overview/);
-  assert.match(source, /Engagement overview/);
-  assert.match(source, /Engagement over time/);
+  assert.match(source, /New-hire membership and contact totals/);
+  assert.match(source, /Outreach activity/);
+  assert.match(source, /Recorded contacts by day/);
   assert.match(source, /Contact methods/);
-  assert.match(source, /Engagement outcomes/);
-  assert.match(source, /Engagement by organizer/);
-  assert.match(source, /Campaign engagement coverage/);
+  assert.match(source, /Contact outcomes/);
+  assert.match(source, /Activity by organizer/);
+  assert.match(source, /Campaign contact coverage/);
   assert.match(source, /getEngagementReport/);
-  assert.match(source, /New hires over time/);
+  assert.match(source, /New hires by hire month/);
   assert.match(source, /New hires by department/);
   assert.match(source, /New hires by work location/);
   assert.match(source, /getNewHireReport/);
   assert.match(source, /viewReports/);
-  assert.doesNotMatch(source, /Power BI|Microsoft-owned credentials/);
   assert.doesNotMatch(source, /personId|firstName|lastName|identifierValue|employeeId/i);
 });

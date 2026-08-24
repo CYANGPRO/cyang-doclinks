@@ -2,6 +2,7 @@ import "server-only";
 
 import { queryLocal801, runLocal801Transaction, type DatabaseQuery, type DatabaseStatement } from "./db.ts";
 import type { Role } from "./access.ts";
+import { CURRENT_ACCESS_POLICY } from "./policy-contract.ts";
 
 const subjectPattern = /^[\x21-\x7e]{1,255}$/;
 const providerPattern = /^[a-z0-9][a-z0-9._-]{0,63}$/;
@@ -16,6 +17,7 @@ export type ProductionAuthConfig = {
   wellKnown: string;
   clientId: string;
   clientSecret: string;
+  tenantId: string;
   bootstrapObjectId: string;
   mfaClaim: "amr" | "acr";
   mfaValue: string;
@@ -24,11 +26,12 @@ export type ProductionAuthConfig = {
 export type ProductionIdentity = {
   providerId: string;
   subject: string;
-  objectId: string;
+  objectId?: string;
   email: string;
   emailVerified: boolean;
-  bootstrapObjectMatched: boolean;
+  bootstrapObjectMatched?: boolean;
   mfaVerified: boolean;
+  directoryObjectVerified?: boolean;
 };
 
 export type ProductionAuthBinding = {
@@ -37,6 +40,7 @@ export type ProductionAuthBinding = {
   email: string;
   role: Role;
   sessionVersion: number;
+  policyAcknowledged: boolean;
 };
 
 type BindingRow = {
@@ -46,6 +50,7 @@ type BindingRow = {
   auth_session_version: number | string;
   role: string;
   linked_subject: string | null;
+  policy_acknowledged: boolean;
 };
 
 export class ProductionAuthError extends Error {
@@ -108,6 +113,7 @@ export function getProductionAuthConfig(env: NodeJS.ProcessEnv = process.env): P
   const wellKnown = nonempty(env.LOCAL801_OIDC_WELL_KNOWN);
   const clientId = nonempty(env.LOCAL801_OIDC_CLIENT_ID);
   const clientSecret = nonempty(env.LOCAL801_OIDC_CLIENT_SECRET);
+  const tenantId = nonempty(env.LOCAL801_OIDC_TENANT_ID).toLowerCase();
   const bootstrapObjectId = nonempty(env.LOCAL801_OIDC_BOOTSTRAP_OBJECT_ID).toLowerCase();
   const mfaClaim = env.LOCAL801_OIDC_MFA_CLAIM === "acr" ? "acr" : "amr";
   const mfaValue = nonempty(env.LOCAL801_OIDC_MFA_VALUE) || "mfa";
@@ -117,11 +123,12 @@ export function getProductionAuthConfig(env: NodeJS.ProcessEnv = process.env): P
     if (!providerPattern.test(providerId)) throw new ProductionAuthError("AUTH_CONFIG_INVALID", "LOCAL801_OIDC_PROVIDER_ID is invalid.");
     if (!wellKnown.startsWith("https://")) throw new ProductionAuthError("AUTH_CONFIG_INVALID", "LOCAL801_OIDC_WELL_KNOWN must be an HTTPS URL.");
     if (!clientId || !clientSecret) throw new ProductionAuthError("AUTH_CONFIG_INVALID", "OIDC client credentials are required when production authentication is enabled.");
+    if (tenantId && !objectIdPattern.test(tenantId)) throw new ProductionAuthError("AUTH_CONFIG_INVALID", "LOCAL801_OIDC_TENANT_ID is invalid.");
     if (bootstrapObjectId && !objectIdPattern.test(bootstrapObjectId)) throw new ProductionAuthError("AUTH_CONFIG_INVALID", "LOCAL801_OIDC_BOOTSTRAP_OBJECT_ID is invalid.");
     if (!mfaValue || mfaValue.length > 120) throw new ProductionAuthError("AUTH_CONFIG_INVALID", "LOCAL801_OIDC_MFA_VALUE is invalid.");
   }
 
-  return { enabled, organizationSlug, providerId, providerName, wellKnown, clientId, clientSecret, bootstrapObjectId, mfaClaim, mfaValue };
+  return { enabled, organizationSlug, providerId, providerName, wellKnown, clientId, clientSecret, tenantId, bootstrapObjectId, mfaClaim, mfaValue };
 }
 
 function claimString(profile: Record<string, unknown>, key: string) {
@@ -135,23 +142,46 @@ export function profileHasRequiredMfa(profile: Record<string, unknown>, config: 
   return typeof value === "string" && (config.mfaClaim === "amr" ? value.split(/\s+/).includes(config.mfaValue) : value === config.mfaValue);
 }
 
+export function profileHasVerifiedEmail(profile: Record<string, unknown>, email: string) {
+  const reportedEmail = claimString(profile, "email").trim().toLowerCase();
+  if (profile.email_verified === true && reportedEmail.length > 0 && reportedEmail === email) return true;
+  const verifiedPrimaryEmail = claimString(profile, "verified_primary_email").trim().toLowerCase();
+  if (verifiedPrimaryEmail.length > 0 && verifiedPrimaryEmail === email) return true;
+  const local801Email = claimString(profile, "local801_email").trim().toLowerCase();
+  return profile.xms_edov === true && local801Email.length > 0 && local801Email === email;
+}
+
 export function productionIdentityFromProfile(profile: Record<string, unknown>, config: ProductionAuthConfig): ProductionIdentity {
-  const subject = claimString(profile, "sub");
+  const opaqueSubject = claimString(profile, "sub");
+  const tenantId = claimString(profile, "tid").trim().toLowerCase();
   const objectId = claimString(profile, "oid").trim().toLowerCase();
-  const standardEmail = claimString(profile, "email").trim().toLowerCase();
-  const authoritativeEmail = claimString(profile, "verified_primary_email").trim().toLowerCase();
-  const email = standardEmail || authoritativeEmail;
-  const emailVerified = profile.email_verified === true
-    || (authoritativeEmail.length > 0 && authoritativeEmail === email);
+  const directoryObjectVerified = Boolean(
+    config.tenantId
+    && tenantId === config.tenantId
+    && objectIdPattern.test(tenantId)
+    && objectIdPattern.test(objectId)
+  );
+  const subject = directoryObjectVerified ? `${tenantId}:${objectId}` : opaqueSubject;
+  const reportedEmail = claimString(profile, "email").trim().toLowerCase();
+  const verifiedPrimaryEmail = claimString(profile, "verified_primary_email").trim().toLowerCase();
+  const local801Email = claimString(profile, "local801_email").trim().toLowerCase();
+  const email = directoryObjectVerified ? "" : reportedEmail || verifiedPrimaryEmail || local801Email;
+  const emailVerified = directoryObjectVerified ? false : profileHasVerifiedEmail(profile, email);
   const bootstrapObjectMatched = objectIdPattern.test(objectId)
-    && config.bootstrapObjectId.length > 0
+    && Boolean(config.bootstrapObjectId?.length)
     && objectId === config.bootstrapObjectId;
   const mfaVerified = profileHasRequiredMfa(profile, config);
   if (!subjectPattern.test(subject)) throw new ProductionAuthError("IDENTITY_INVALID", "The identity provider did not return a valid subject identifier.");
-  if (!emailPattern.test(email) || email.length > 320) throw new ProductionAuthError("EMAIL_REQUIRED", "A valid identity-provider email address is required.");
-  if (!emailVerified && !bootstrapObjectMatched) throw new ProductionAuthError("EMAIL_NOT_VERIFIED", "The identity provider must verify the sign-in email address.");
+  if ((!emailPattern.test(email) || email.length > 320) && !directoryObjectVerified) throw new ProductionAuthError("EMAIL_REQUIRED", "A valid identity-provider email address is required.");
+  if (!emailVerified && !bootstrapObjectMatched && !directoryObjectVerified) throw new ProductionAuthError("EMAIL_NOT_VERIFIED", "The identity provider must verify the sign-in email address.");
   if (!mfaVerified) throw new ProductionAuthError("MFA_REQUIRED", "The identity provider did not provide the required MFA assurance claim.");
-  return { providerId: config.providerId, subject, objectId, email, emailVerified, bootstrapObjectMatched, mfaVerified };
+  if (directoryObjectVerified) {
+    return { providerId: config.providerId, subject, email, emailVerified, mfaVerified, directoryObjectVerified };
+  }
+  if (bootstrapObjectMatched) {
+    return { providerId: config.providerId, subject, objectId, email, emailVerified, bootstrapObjectMatched, mfaVerified };
+  }
+  return { providerId: config.providerId, subject, objectId, email, emailVerified, bootstrapObjectMatched, mfaVerified, directoryObjectVerified };
 }
 
 function asRole(value: string): Role | null {
@@ -173,7 +203,7 @@ export async function authorizeProductionIdentity(
     return authorizeProtectedProductionIdentity(identity, config, dependencies);
   }
   if (!config.enabled) throw new ProductionAuthError("AUTH_DISABLED", "Production authentication is disabled.");
-  if (identity.providerId !== config.providerId || !identity.emailVerified || !identity.mfaVerified) {
+  if (identity.providerId !== config.providerId || !identity.emailVerified || !identity.mfaVerified || identity.directoryObjectVerified) {
     throw new ProductionAuthError("IDENTITY_INVALID", "The production identity did not satisfy the configured assurance requirements.");
   }
   const query = dependencies.query ?? queryLocal801;
@@ -181,7 +211,14 @@ export async function authorizeProductionIdentity(
   const rows = await query<BindingRow>(`
     /* production-auth:resolve-active-user */
     SELECT organization.slug AS organization_slug, app_user.id AS user_id, app_user.email,
-      app_user.auth_session_version, role.code AS role, identity.provider_subject AS linked_subject
+      app_user.auth_session_version, role.code AS role, identity.provider_subject AS linked_subject,
+      EXISTS (
+        SELECT 1 FROM local801.user_policy_acknowledgements acknowledgement
+        WHERE acknowledgement.organization_id = organization.id
+          AND acknowledgement.user_id = app_user.id
+          AND acknowledgement.policy_key = $4::text
+          AND acknowledgement.policy_version = $5::text
+      ) AS policy_acknowledged
     FROM local801.organizations organization
     JOIN local801.users app_user
       ON app_user.organization_id = organization.id
@@ -198,7 +235,13 @@ export async function authorizeProductionIdentity(
       AND organization.archived_at IS NULL
       AND lower(app_user.email) = lower($2::text)
     LIMIT 2
-  `, [config.organizationSlug, identity.email, identity.providerId]);
+  `, [
+    config.organizationSlug,
+    identity.email,
+    identity.providerId,
+    CURRENT_ACCESS_POLICY.key,
+    CURRENT_ACCESS_POLICY.version,
+  ]);
   if (rows.length !== 1) throw new ProductionAuthError("USER_NOT_PROVISIONED", "No unique active Local 801 account is provisioned for this identity.");
   const row = rows[0];
   const role = asRole(row.role);
@@ -255,7 +298,14 @@ export async function authorizeProductionIdentity(
     parameters: [config.organizationSlug, row.user_id, sessionVersion],
   };
   await transaction([bindIdentity, markAuthentication]);
-  return { organizationSlug: row.organization_slug, userId: row.user_id, email: row.email, role, sessionVersion };
+  return {
+    organizationSlug: row.organization_slug,
+    userId: row.user_id,
+    email: row.email,
+    role,
+    sessionVersion,
+    policyAcknowledged: row.policy_acknowledged === true,
+  };
 }
 
 export async function resolveProductionSessionBinding(
@@ -270,7 +320,14 @@ export async function resolveProductionSessionBinding(
   const rows = await query<BindingRow>(`
     /* production-auth:validate-session */
     SELECT organization.slug AS organization_slug, app_user.id AS user_id, app_user.email,
-      app_user.auth_session_version, role.code AS role, NULL::text AS linked_subject
+      app_user.auth_session_version, role.code AS role, NULL::text AS linked_subject,
+      EXISTS (
+        SELECT 1 FROM local801.user_policy_acknowledgements acknowledgement
+        WHERE acknowledgement.organization_id = organization.id
+          AND acknowledgement.user_id = app_user.id
+          AND acknowledgement.policy_key = $4::text
+          AND acknowledgement.policy_version = $5::text
+      ) AS policy_acknowledged
     FROM local801.organizations organization
     JOIN local801.users app_user
       ON app_user.organization_id = organization.id
@@ -284,13 +341,26 @@ export async function resolveProductionSessionBinding(
       AND app_user.id = $2::uuid
       AND app_user.auth_session_version = $3::integer
     LIMIT 2
-  `, [session.organizationSlug, session.userId, session.sessionVersion]);
+  `, [
+    session.organizationSlug,
+    session.userId,
+    session.sessionVersion,
+    CURRENT_ACCESS_POLICY.key,
+    CURRENT_ACCESS_POLICY.version,
+  ]);
   if (rows.length !== 1) return null;
   const row = rows[0];
   const role = asRole(row.role);
   const sessionVersion = Number(row.auth_session_version);
   return role && sessionVersion === session.sessionVersion
-    ? { organizationSlug: row.organization_slug, userId: row.user_id, email: row.email, role, sessionVersion }
+    ? {
+        organizationSlug: row.organization_slug,
+        userId: row.user_id,
+        email: row.email,
+        role,
+        sessionVersion,
+        policyAcknowledged: row.policy_acknowledged === true,
+      }
     : null;
 }
 

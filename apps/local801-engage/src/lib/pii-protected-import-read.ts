@@ -23,6 +23,8 @@ const DIRECT_IMPORT_PII_FIELDS = new Set([
   "last_name",
   "preferred_name",
   "work_email",
+  "work_phone",
+  "personal_email",
   "employee_identifier",
   "member_identifier",
 ]);
@@ -100,15 +102,16 @@ function reviewEnvelope(row: ProtectedImportReviewRow): Pick<EncryptedPiiField, 
     typeof row.direct_pii_encrypted_payload !== "string"
     || typeof row.encryption_key_version !== "string"
     || Number(row.encryption_format_version) !== 1
-    || (fieldSetVersion !== 1 && fieldSetVersion !== 2)
+    || ![1, 2, 3, 4].includes(fieldSetVersion)
   ) {
     blocked("ENVELOPE_INVALID", "An import-row protected PII companion has an invalid or unsupported envelope.");
   }
-  if (fieldSetVersion === 2) {
+  if (fieldSetVersion >= 2) {
     const presence = Number(row.direct_pii_presence_mask);
     const validity = Number(row.direct_pii_validity_mask);
-    if (!Number.isInteger(presence) || presence < 0 || presence > 63
-      || !Number.isInteger(validity) || validity < 0 || validity > 63
+    const maximumMask = fieldSetVersion === 4 ? 255 : fieldSetVersion === 3 ? 127 : 63;
+    if (!Number.isInteger(presence) || presence < 0 || presence > maximumMask
+      || !Number.isInteger(validity) || validity < 0 || validity > maximumMask
       || (validity & presence) !== validity) {
       blocked("ENVELOPE_INVALID", "An import-row protected PII companion has invalid field metadata.");
     }
@@ -341,6 +344,8 @@ export async function hydrateImportReviewDetailFromProtectedPii(
         first_name: bundle.first_name ?? null,
         last_name: bundle.last_name ?? null,
         work_email: bundle.work_email ?? null,
+        work_phone: bundle.work_phone ?? null,
+        personal_email: bundle.personal_email ?? null,
       };
     }),
   };

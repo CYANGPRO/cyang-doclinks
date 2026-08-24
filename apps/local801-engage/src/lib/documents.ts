@@ -1,18 +1,15 @@
 import "server-only";
 
-import { can, type Permission, type Role } from "./access.ts";
+import { can, type Role } from "./access.ts";
 import { queryLocal801, type DatabaseQuery } from "./db.ts";
+import {
+  legacyDocumentVisibilitiesForRole,
+  uploaderRolesBelow,
+  type DocumentVisibility,
+} from "./document-access.ts";
 import type { WorkspaceContext } from "./workspace-context.ts";
 
-export const DOCUMENT_VISIBILITIES = [
-  "local_admin_only",
-  "membership_management",
-  "cat_admin_only",
-  "cat_lead_scope",
-  "cat_member_scope",
-] as const;
-
-export type DocumentVisibility = (typeof DOCUMENT_VISIBILITIES)[number];
+export { DOCUMENT_VISIBILITIES, type DocumentVisibility } from "./document-access.ts";
 
 type DocumentRow = {
   category: string;
@@ -46,14 +43,6 @@ export type DocumentsPage = {
 };
 
 type DocumentCursor = { createdAt: string; token: string };
-
-const visibilityPermission: Record<DocumentVisibility, Permission> = {
-  local_admin_only: "viewLocalAdminDocuments",
-  membership_management: "viewPersonLevelReports",
-  cat_admin_only: "viewRestrictedStrategy",
-  cat_lead_scope: "viewTeamScope",
-  cat_member_scope: "viewCatMemberDocuments",
-};
 
 const documentHandlePattern = /^[a-f0-9]{64}$/i;
 
@@ -95,8 +84,33 @@ function encodeDocumentCursor(row: DocumentRow) {
   })).toString("base64url");
 }
 
-function allowedVisibilities(role: Role): DocumentVisibility[] {
-  return DOCUMENT_VISIBILITIES.filter((visibility) => can(role, visibilityPermission[visibility]));
+export function documentVisibilitiesForRole(role: Role): DocumentVisibility[] {
+  return legacyDocumentVisibilitiesForRole(role);
+}
+
+export function documentAccessSql(
+  alias: string,
+  parameters: { legacyVisibilities: number; userId: number; uploaderRoles: number },
+) {
+  return `(
+    ${alias}.visibility = ANY($${parameters.legacyVisibilities}::text[])
+    OR ${alias}.visibility = 'everyone'
+    OR (
+      ${alias}.visibility = 'uploader_hierarchy'
+      AND (
+        ${alias}.created_by = $${parameters.userId}::uuid
+        OR ${alias}.uploaded_by_role = ANY($${parameters.uploaderRoles}::text[])
+      )
+    )
+  )`;
+}
+
+export function documentAccessParameters(context: WorkspaceContext) {
+  return {
+    legacyVisibilities: legacyDocumentVisibilitiesForRole(context.role),
+    userId: context.userId,
+    uploaderRoles: uploaderRolesBelow(context.role),
+  };
 }
 
 function documentMetadata(row: DocumentRow): DocumentMetadata {
@@ -120,8 +134,7 @@ export async function getDocumentsPage(
 ): Promise<DocumentsPage> {
   if (!can(context.role, "viewDocuments")) throw new Error("Forbidden.");
 
-  const visibilities = allowedVisibilities(context.role);
-  if (visibilities.length === 0) throw new Error("Forbidden.");
+  const access = documentAccessParameters(context);
 
   const requested = Number(input.pageSize);
   const pageSize = Number.isSafeInteger(requested) ? Math.min(Math.max(requested, 1), 100) : 50;
@@ -153,21 +166,23 @@ export async function getDocumentsPage(
        AND creator.organization_id = document.organization_id
       WHERE document.organization_id = $1::uuid
         AND document.archived_at IS NULL
-        AND document.visibility = ANY($2::text[])
+        AND ${documentAccessSql("document", { legacyVisibilities: 2, userId: 3, uploaderRoles: 4 })}
     ), page_rows AS (
       SELECT *
       FROM visible_documents
       WHERE (
-        $3::timestamptz IS NULL
-        OR (created_at, cursor_token) < ($3::timestamptz, $4::text)
+        $5::timestamptz IS NULL
+        OR (created_at, cursor_token) < ($5::timestamptz, $6::text)
       )
       ORDER BY created_at DESC, cursor_token DESC
-      LIMIT $5::integer
+      LIMIT $7::integer
     )
     SELECT * FROM page_rows ORDER BY created_at DESC, cursor_token DESC
   `, [
     context.organizationId,
-    visibilities,
+    access.legacyVisibilities,
+    access.userId,
+    access.uploaderRoles,
     position?.createdAt ?? null,
     position?.token ?? null,
     pageSize + 1,
@@ -191,8 +206,7 @@ export async function resolveDocumentDownloadId(
 ) {
   if (!can(context.role, "viewDocuments")) throw new Error("Forbidden.");
 
-  const visibilities = allowedVisibilities(context.role);
-  if (visibilities.length === 0) throw new Error("Forbidden.");
+  const access = documentAccessParameters(context);
 
   const normalizedHandle = normalizeDocumentHandle(handle);
   if (!normalizedHandle) return null;
@@ -203,15 +217,21 @@ export async function resolveDocumentDownloadId(
     FROM local801.documents document
     WHERE document.organization_id = $1::uuid
       AND document.archived_at IS NULL
-      AND document.visibility = ANY($2::text[])
+      AND ${documentAccessSql("document", { legacyVisibilities: 2, userId: 3, uploaderRoles: 4 })}
       AND encode(
         public.digest(document.organization_id::text || ':' || document.id::text, 'sha256'),
         'hex'
-      ) = $3::text
+      ) = $5::text
     LIMIT 1
-  `, [context.organizationId, visibilities, normalizedHandle]);
+  `, [
+    context.organizationId,
+    access.legacyVisibilities,
+    access.userId,
+    access.uploaderRoles,
+    normalizedHandle,
+  ]);
 
   return row?.id ?? null;
 }
 
-export const __testing = { allowedVisibilities, documentCursor, normalizeDocumentHandle };
+export const __testing = { allowedVisibilities: documentVisibilitiesForRole, documentCursor, normalizeDocumentHandle };

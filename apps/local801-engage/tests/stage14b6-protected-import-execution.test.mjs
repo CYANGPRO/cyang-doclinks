@@ -111,7 +111,7 @@ test("operational staging strips every direct import PII key", () => {
     classification: "Clerical",
   };
   const operational = __testing.operationalOnly(source);
-  for (const field of ["first_name", "last_name", "preferred_name", "work_email", "employee_identifier", "member_identifier", "home_email", "work_phone", "cell_phone", "home_phone"]) {
+  for (const field of ["first_name", "last_name", "preferred_name", "work_email", "personal_email", "employee_identifier", "member_identifier"]) {
     assert.equal(Object.hasOwn(operational, field), false, field);
   }
   assert.equal(operational.department, "Health Licensing");

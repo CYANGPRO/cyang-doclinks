@@ -573,6 +573,16 @@ test("new mutation routes require exact same-origin and server-derived approval 
   }
 });
 
+test("review-decision failures emit only PII-safe operation diagnostics", async () => {
+  const route = await readFile(new URL(
+    "../src/app/api/imports/[batchId]/review-decisions/[decisionType]/route.ts",
+    import.meta.url,
+  ), "utf8");
+  assert.match(route, /\[import-review-decision\] request failed/);
+  assert.match(route, /operation[\s\S]*name[\s\S]*code/);
+  assert.doesNotMatch(route, /console\.error\([^)]*(batchId|expectedHash|stack|message)/s);
+});
+
 test("server page bounds review detail and does not serialize internal person or row IDs", async () => {
   const page = await readFile(new URL("../src/app/imports/[batchId]/page.tsx", import.meta.url), "utf8");
   const service = await readFile(new URL("../src/lib/import-review.ts", import.meta.url), "utf8");

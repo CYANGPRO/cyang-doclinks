@@ -16,6 +16,7 @@ type CampaignRow = {
   assigned_count: number | string;
   contacted_count: number | string;
   completed_count: number | string;
+  overdue_count: number | string;
 };
 
 export type CampaignSummary = {
@@ -29,6 +30,8 @@ export type CampaignSummary = {
   assigned: number;
   contacted: number;
   completed: number;
+  unassigned: number;
+  overdue: number;
   remaining: number;
   completionPercentage: number;
 };
@@ -46,6 +49,23 @@ export type CampaignPopulationPerson = {
   assignment_status: string | null;
   assignee_name: string | null;
   assignment_due_at: string | null;
+  contacted: boolean;
+  completed: boolean;
+  overdue: boolean;
+};
+
+export type CampaignPopulationFilters = {
+  assignment: "all" | "assigned" | "unassigned";
+  workflow: "all" | "not_contacted" | "contacted" | "completed" | "overdue";
+};
+
+export type CampaignOrganizerProgress = {
+  assigneeHandle: string;
+  assigneeName: string;
+  assigned: number;
+  open: number;
+  completed: number;
+  overdue: number;
 };
 
 const handlePattern = /^[0-9a-f]{64}$/;
@@ -133,6 +153,8 @@ function campaignSummary(row: CampaignRow): CampaignSummary {
     assigned: Math.min(number(row.assigned_count), population),
     contacted: Math.min(number(row.contacted_count), population),
     completed,
+    unassigned: Math.max(0, population - Math.min(number(row.assigned_count), population)),
+    overdue: Math.min(number(row.overdue_count), population),
     remaining: Math.max(0, population - completed),
     completionPercentage: population ? Math.round((completed / population) * 100) : 0,
   };
@@ -161,7 +183,8 @@ export async function getCampaignsPage(
     ), assignment_counts AS (
       SELECT organization_id, campaign_id,
         count(DISTINCT person_id)::int AS assigned_count,
-        count(DISTINCT person_id) FILTER (WHERE status = 'completed')::int AS completed_count
+        count(DISTINCT person_id) FILTER (WHERE status = 'completed')::int AS completed_count,
+        count(DISTINCT person_id) FILTER (WHERE status = 'open' AND due_at < now())::int AS overdue_count
       FROM local801.engagement_assignments
       WHERE organization_id = $1::uuid AND archived_at IS NULL
       GROUP BY organization_id, campaign_id
@@ -182,7 +205,8 @@ export async function getCampaignsPage(
         COALESCE(population.population_count, 0) AS population_count,
         COALESCE(assignment.assigned_count, 0) AS assigned_count,
         COALESCE(contact.contacted_count, 0) AS contacted_count,
-        COALESCE(assignment.completed_count, 0) AS completed_count
+        COALESCE(assignment.completed_count, 0) AS completed_count,
+        COALESCE(assignment.overdue_count, 0) AS overdue_count
       FROM local801.outreach_campaigns campaign
       LEFT JOIN population_counts population
         ON population.organization_id = campaign.organization_id AND population.campaign_id = campaign.id
@@ -239,7 +263,8 @@ export async function getCampaignDetail(
       WHERE population.organization_id = $1::uuid AND population.campaign_id = selected.id
     ), assignment_counts AS (
       SELECT count(DISTINCT assignment.person_id)::int AS assigned_count,
-        count(DISTINCT assignment.person_id) FILTER (WHERE assignment.status = 'completed')::int AS completed_count
+        count(DISTINCT assignment.person_id) FILTER (WHERE assignment.status = 'completed')::int AS completed_count,
+        count(DISTINCT assignment.person_id) FILTER (WHERE assignment.status = 'open' AND assignment.due_at < now())::int AS overdue_count
       FROM local801.engagement_assignments assignment, selected
       WHERE assignment.organization_id = $1::uuid
         AND assignment.campaign_id = selected.id
@@ -256,7 +281,8 @@ export async function getCampaignDetail(
       COALESCE(population.value, 0) AS population_count,
       COALESCE(assignment.assigned_count, 0) AS assigned_count,
       COALESCE(contact.value, 0) AS contacted_count,
-      COALESCE(assignment.completed_count, 0) AS completed_count
+      COALESCE(assignment.completed_count, 0) AS completed_count,
+      COALESCE(assignment.overdue_count, 0) AS overdue_count
     FROM selected
     CROSS JOIN population_count population
     CROSS JOIN assignment_counts assignment
@@ -273,19 +299,23 @@ type PopulationRow = {
   assignment_status: string | null;
   assignee_name: string | null;
   assignment_due_at: string | Date | null;
+  contacted: boolean;
+  completed: boolean;
+  overdue: boolean;
   total_count: number | string;
 };
 
 export async function getCampaignPopulationPage(
   context: WorkspaceContext,
   campaignHandle: string,
-  input: { cursor?: unknown; pageSize?: unknown } = {},
+  input: { cursor?: unknown; pageSize?: unknown; assignment?: unknown; workflow?: unknown } = {},
   query: DatabaseQuery = queryLocal801,
 ) {
   requireAccess(context);
   if (!handlePattern.test(campaignHandle)) throw new Error("Campaign not found.");
   const requested = Number(input.pageSize);
-  const pageSize = Number.isSafeInteger(requested) ? Math.min(Math.max(requested, 1), 100) : 50;
+  const pageSize = [25, 50, 100].includes(requested) ? requested : 50;
+  const filters = normalizeCampaignPopulationFilters(input);
   const position = populationCursor(input.cursor);
   const rows = await query<PopulationRow>(`
     /* campaigns:population-keyset-page */
@@ -297,17 +327,6 @@ export async function getCampaignPopulationPage(
         AND campaign.status <> 'archived'
         AND encode(public.digest('campaign:' || campaign.organization_id::text || ':' || campaign.id::text, 'sha256'), 'hex') = $2::text
       LIMIT 1
-    ), latest_assignments AS (
-      SELECT DISTINCT ON (assignment.person_id)
-        assignment.person_id,
-        assignment.status,
-        assignment.primary_user_id,
-        assignment.due_at
-      FROM local801.engagement_assignments assignment, selected_campaign campaign
-      WHERE assignment.organization_id = $1::uuid
-        AND assignment.campaign_id = campaign.id
-        AND assignment.archived_at IS NULL
-      ORDER BY assignment.person_id, assignment.created_at DESC, assignment.id DESC
     ), population AS (
       SELECT
         encode(public.digest($1::text || ':' || person.id::text, 'sha256'), 'hex') AS person_handle,
@@ -317,6 +336,9 @@ export async function getCampaignPopulationPage(
         assignment.status AS assignment_status,
         assignee.display_name AS assignee_name,
         assignment.due_at AS assignment_due_at,
+        COALESCE(contact.contacted, false) AS contacted,
+        COALESCE(assignment.status = 'completed', false) AS completed,
+        COALESCE(assignment.status = 'open' AND assignment.due_at < now(), false) AS overdue,
         count(*) OVER () AS total_count
       FROM local801.outreach_campaign_population member
       JOIN selected_campaign campaign ON campaign.id = member.campaign_id
@@ -324,25 +346,49 @@ export async function getCampaignPopulationPage(
         ON person.id = member.person_id
        AND person.organization_id = member.organization_id
        AND person.archived_at IS NULL
-      LEFT JOIN latest_assignments assignment ON assignment.person_id = member.person_id
+      LEFT JOIN LATERAL (
+        SELECT active_assignment.id, active_assignment.status,
+          active_assignment.primary_user_id, active_assignment.due_at
+        FROM local801.engagement_assignments active_assignment
+        WHERE active_assignment.organization_id = $1::uuid
+          AND active_assignment.campaign_id = campaign.id
+          AND active_assignment.person_id = member.person_id
+          AND active_assignment.archived_at IS NULL
+        ORDER BY active_assignment.created_at DESC, active_assignment.id DESC
+        LIMIT 1
+      ) assignment ON true
+      LEFT JOIN LATERAL (
+        SELECT true AS contacted
+        FROM local801.engagement_events event
+        WHERE event.organization_id = $1::uuid AND event.campaign_id = campaign.id
+          AND event.person_id = member.person_id AND event.voided_at IS NULL
+        LIMIT 1
+      ) contact ON true
       LEFT JOIN local801.users assignee
         ON assignee.id = assignment.primary_user_id
        AND assignee.organization_id = $1::uuid
        AND assignee.deactivated_at IS NULL
       WHERE member.organization_id = $1::uuid
+        AND ($3::text = 'all' OR ($3::text = 'assigned' AND assignment.id IS NOT NULL)
+          OR ($3::text = 'unassigned' AND assignment.id IS NULL))
+        AND ($4::text = 'all' OR ($4::text = 'not_contacted' AND NOT COALESCE(contact.contacted, false))
+          OR ($4::text = 'contacted' AND COALESCE(contact.contacted, false))
+          OR ($4::text = 'completed' AND assignment.status = 'completed')
+          OR ($4::text = 'overdue' AND assignment.status = 'open' AND assignment.due_at < now()))
     ), page_rows AS (
       SELECT *
       FROM population
-      WHERE ($3::text IS NULL
-        OR last_name > $3::text
-        OR (last_name = $3::text AND first_name > $4::text)
-        OR (last_name = $3::text AND first_name = $4::text AND person_handle > $5::text))
+      WHERE ($5::text IS NULL
+        OR last_name > $5::text
+        OR (last_name = $5::text AND first_name > $6::text)
+        OR (last_name = $5::text AND first_name = $6::text AND person_handle > $7::text))
       ORDER BY last_name ASC, first_name ASC, person_handle ASC
-      LIMIT $6::integer
+      LIMIT $8::integer
     )
     SELECT * FROM page_rows
     ORDER BY last_name ASC, first_name ASC, person_handle ASC
-  `, [context.organizationId, campaignHandle, position?.lastName ?? null, position?.firstName ?? null, position?.handle ?? null, pageSize + 1]);
+  `, [context.organizationId, campaignHandle, filters.assignment, filters.workflow,
+    position?.lastName ?? null, position?.firstName ?? null, position?.handle ?? null, pageSize + 1]);
 
   const dataRows = rows.filter((row) => row.person_handle && handlePattern.test(row.person_handle));
   const hasNext = dataRows.length > pageSize;
@@ -356,6 +402,9 @@ export async function getCampaignPopulationPage(
     assignment_status: row.assignment_status,
     assignee_name: row.assignee_name,
     assignment_due_at: timestamp(row.assignment_due_at),
+    contacted: row.contacted,
+    completed: row.completed,
+    overdue: row.overdue,
   }));
   return {
     people,
@@ -363,7 +412,69 @@ export async function getCampaignPopulationPage(
     hasNext,
     nextCursor: last ? encodePopulationCursor(last) : null,
     pageSize,
+    filters,
   };
 }
 
-export const __testing = { campaignCursor, populationCursor };
+export function normalizeCampaignPopulationFilters(input: { assignment?: unknown; workflow?: unknown }): CampaignPopulationFilters {
+  const assignment = input.assignment === "assigned" || input.assignment === "unassigned" ? input.assignment : "all";
+  const workflow = ["not_contacted", "contacted", "completed", "overdue"].includes(String(input.workflow))
+    ? input.workflow as CampaignPopulationFilters["workflow"] : "all";
+  return { assignment, workflow };
+}
+
+export async function getCampaignOrganizerProgress(
+  context: WorkspaceContext,
+  campaignHandle: string,
+  query: DatabaseQuery = queryLocal801,
+): Promise<CampaignOrganizerProgress[]> {
+  requireAccess(context);
+  if (!handlePattern.test(campaignHandle)) return [];
+  const rows = await query<{
+    assignee_handle: string;
+    assignee_name: string;
+    assigned_count: number | string;
+    open_count: number | string;
+    completed_count: number | string;
+    overdue_count: number | string;
+  }>(`
+    /* campaigns:organizer-progress */
+    WITH selected_campaign AS (
+      SELECT campaign.id
+      FROM local801.outreach_campaigns campaign
+      WHERE campaign.organization_id = $1::uuid AND campaign.archived_at IS NULL
+        AND campaign.status <> 'archived'
+        AND encode(public.digest('campaign:' || campaign.organization_id::text || ':' || campaign.id::text, 'sha256'), 'hex') = $2::text
+      LIMIT 1
+    ), latest AS (
+      SELECT DISTINCT ON (assignment.person_id)
+        assignment.person_id, assignment.primary_user_id, assignment.status, assignment.due_at
+      FROM local801.engagement_assignments assignment CROSS JOIN selected_campaign campaign
+      WHERE assignment.organization_id = $1::uuid AND assignment.campaign_id = campaign.id
+        AND assignment.archived_at IS NULL AND assignment.primary_user_id IS NOT NULL
+      ORDER BY assignment.person_id, assignment.created_at DESC, assignment.id DESC
+    )
+    SELECT encode(public.digest('user:' || $1::text || ':' || app_user.id::text, 'sha256'), 'hex') AS assignee_handle,
+      app_user.display_name AS assignee_name,
+      count(*)::int AS assigned_count,
+      count(*) FILTER (WHERE latest.status = 'open')::int AS open_count,
+      count(*) FILTER (WHERE latest.status = 'completed')::int AS completed_count,
+      count(*) FILTER (WHERE latest.status = 'open' AND latest.due_at < now())::int AS overdue_count
+    FROM latest
+    JOIN local801.users app_user ON app_user.organization_id = $1::uuid
+      AND app_user.id = latest.primary_user_id AND app_user.deactivated_at IS NULL
+    GROUP BY app_user.id, app_user.display_name
+    ORDER BY assigned_count DESC, assignee_handle ASC
+    LIMIT 100
+  `, [context.organizationId, campaignHandle]);
+  return rows.filter((row) => handlePattern.test(row.assignee_handle)).map((row) => ({
+    assigneeHandle: row.assignee_handle,
+    assigneeName: row.assignee_name,
+    assigned: number(row.assigned_count),
+    open: number(row.open_count),
+    completed: number(row.completed_count),
+    overdue: number(row.overdue_count),
+  }));
+}
+
+export const __testing = { campaignCursor, populationCursor, normalizeCampaignPopulationFilters };

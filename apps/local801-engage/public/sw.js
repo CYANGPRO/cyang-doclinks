@@ -45,7 +45,7 @@ self.addEventListener("fetch", (event) => {
         caches.match("/offline.html").then(
           (hit) =>
             hit ||
-            new Response("A secure internet connection is required for Local 801 Engage.", {
+            new Response("Engaging Local 801 needs a secure internet connection.", {
               headers: { "Content-Type": "text/plain; charset=utf-8" },
             }),
         ),
@@ -55,9 +55,9 @@ self.addEventListener("fetch", (event) => {
 });
 
 self.addEventListener("push", (event) => {
-  const title = "Local 801 Engage";
+  const title = "Engaging Local 801";
   const options = {
-    body: "You have a Local 801 Engage update.",
+    body: "You have an Engaging Local 801 update.",
     icon: "/icons/local801-192.png",
     badge: "/icons/local801-maskable-512.png",
     data: { url: "/" },

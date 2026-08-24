@@ -1,16 +1,22 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import "./stage16.css";
+import "./stage16-components.css";
+import "./stage17.css";
+import "./stage17-redesign.css";
+import "./stage18.css";
 import { AppShell } from "@/components/AppShell";
+import { GlobalErrorExperience } from "@/components/GlobalErrorExperience";
 import { NativeRuntime } from "@/components/NativeRuntime";
 
 export const metadata: Metadata = {
-  title: "Local 801 Engage",
+  title: "Engaging Local 801",
   description:
-    "Private Local 801 membership, CAT engagement, campaign, document, reporting, and PWA application.",
-  applicationName: "Local 801 Engage",
+    "Private workspace for Local 801 membership, member engagement, campaigns, documents, reporting, and CAT work.",
+  applicationName: "Engaging Local 801",
   appleWebApp: {
     capable: true,
-    title: "801 Engage",
+    title: "Engaging 801",
     statusBarStyle: "default",
   },
   icons: {
@@ -40,6 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <NativeRuntime />
         <AppShell>{children}</AppShell>
+        <GlobalErrorExperience />
       </body>
     </html>
   );

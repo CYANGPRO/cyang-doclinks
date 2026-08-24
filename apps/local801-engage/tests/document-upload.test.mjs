@@ -43,18 +43,17 @@ const baseInput = (role = "local_admin", overrides = {}) => ({
   file: file(),
   title: "Synthetic handbook",
   category: "Training",
-  visibility: "local_admin_only",
+  visibility: "uploader_hierarchy",
   ...overrides,
 });
 
-test("upload sharing scopes are derived from the existing role permission model", () => {
-  assert.deepEqual(documentUploadVisibilities("system_owner"), ["local_admin_only", "membership_management", "cat_admin_only", "cat_lead_scope", "cat_member_scope"]);
-  assert.deepEqual(documentUploadVisibilities("local_admin"), ["local_admin_only", "membership_management", "cat_admin_only", "cat_lead_scope", "cat_member_scope"]);
-  assert.deepEqual(documentUploadVisibilities("membership_data_manager"), ["membership_management"]);
-  assert.deepEqual(documentUploadVisibilities("cat_admin"), ["cat_admin_only", "cat_lead_scope", "cat_member_scope"]);
-  assert.deepEqual(documentUploadVisibilities("cat_lead"), []);
-  assert.deepEqual(documentUploadVisibilities("cat_member"), []);
-  assert.deepEqual(documentUploadVisibilities("report_viewer"), []);
+test("all roles can upload while only administrators and LCATs may share with everyone", () => {
+  for (const role of ["system_owner", "local_admin", "cat_admin", "cat_lead"]) {
+    assert.deepEqual(documentUploadVisibilities(role), ["uploader_hierarchy", "everyone"]);
+  }
+  assert.deepEqual(documentUploadVisibilities("membership_data_manager"), ["uploader_hierarchy"]);
+  assert.deepEqual(documentUploadVisibilities("cat_member"), ["uploader_hierarchy"]);
+  assert.deepEqual(documentUploadVisibilities("report_viewer"), ["uploader_hierarchy"]);
 });
 
 test("unauthorized uploader and tampered visibility fail before scanner or storage", async () => {
@@ -62,7 +61,7 @@ test("unauthorized uploader and tampered visibility fail before scanner or stora
     baseInput("cat_lead", { visibility: "cat_lead_scope" }),
     baseInput("membership_data_manager", { visibility: "local_admin_only" }),
     baseInput("cat_admin", { visibility: "membership_management" }),
-    baseInput("cat_member", { visibility: "cat_member_scope" }),
+    baseInput("cat_member", { visibility: "everyone" }),
   ]) {
     const deps = dependencies();
     await assert.rejects(uploadDocument(input, deps.value), (error) => error instanceof DocumentUploadError && error.code === "VISIBILITY_FORBIDDEN");
@@ -104,8 +103,8 @@ test("clean verdict scans before encrypted storage, then writes a redacted-safe 
   assert.equal(result.uploaded, true);
   assert.deepEqual(deps.calls.map(([name]) => name), ["scan", "store", "audit"]);
   const store = deps.calls.find(([name]) => name === "store")[1];
-  assert.equal(store.status, "active");
-  assert.equal(store.visibility, "local_admin_only");
+  assert.equal(store.status, "under_review");
+  assert.equal(store.visibility, "uploader_hierarchy");
   assert.equal(store.originalFilename, "synthetic.pdf");
   assert.equal(store.mediaType, "application/pdf");
   const audit = deps.calls.find(([name]) => name === "audit")[1];
@@ -125,12 +124,12 @@ test("audit failure compensates by deleting/archiving the encrypted document and
   assert.deepEqual(deps.calls.map(([name]) => name), ["scan", "store", "audit", "remove"]);
 });
 
-test("upload route supports authenticated Preview and Production users while remaining same-origin, permission-gated, scanner-backed, encrypted, and non-cacheable", () => {
+test("upload route is production-capable, same-origin, permission-gated, scanner-backed, encrypted, and non-cacheable", () => {
   const source = readFileSync(new URL("../src/app/api/documents/upload/route.ts", import.meta.url), "utf8");
   assert.doesNotMatch(source, /VERCEL_ENV === "production"/);
-  assert.doesNotMatch(source, /LOCAL801_PREVIEW_AUTH_ENABLED/);
+  assert.doesNotMatch(source, /LOCAL801_PREVIEW_AUTH_ENABLED !== "1"/);
   assert.match(source, /hasExactSameOrigin\(request\)/);
-  assert.match(source, /requirePreviewUser\("manageDocuments"\)/);
+  assert.match(source, /requirePreviewUser\("uploadDocuments"\)/);
   assert.match(source, /resolveWorkspaceContext\(auth\.user\)/);
   assert.match(source, /getImportMalwareScanner as getSharedMalwareScanner/);
   assert.match(source, /storeEncryptedDocument/);
@@ -153,7 +152,7 @@ test("upload form sends only document metadata/file fields and no organization o
   assert.doesNotMatch(source, /name="role/i);
 });
 
-test("documents page shows upload UI only from server-derived manageDocuments visibility options", () => {
+test("documents page shows upload UI from server-derived upload visibility options", () => {
   const source = readFileSync(new URL("../src/app/documents/page.tsx", import.meta.url), "utf8");
   assert.match(source, /can\(user\.role, "manageDocuments"\)/);
   assert.match(source, /documentUploadVisibilities\(user\.role\)/);
@@ -162,17 +161,17 @@ test("documents page shows upload UI only from server-derived manageDocuments vi
   assert.doesNotMatch(source, /role=.*DocumentUploadForm/);
 });
 
-test("CAT member scope is shareable by authorized uploaders but CAT members themselves cannot upload", async () => {
+test("CAT users can upload to their hierarchy but cannot elect workspace-wide sharing", async () => {
   const deps = dependencies("clean");
-  const result = await uploadDocument(baseInput("cat_admin", { visibility: "cat_member_scope" }), deps.value);
-  assert.equal(result.visibility, "cat_member_scope");
+  const result = await uploadDocument(baseInput("cat_member"), deps.value);
+  assert.equal(result.visibility, "uploader_hierarchy");
   assert.deepEqual(deps.calls.map(([name]) => name), ["scan", "store", "audit"]);
-  assert.equal(deps.calls.find(([name]) => name === "store")[1].visibility, "cat_member_scope");
-  assert.equal(documentUploadVisibilities("cat_member").length, 0);
+  assert.equal(deps.calls.find(([name]) => name === "store")[1].visibility, "uploader_hierarchy");
+  assert.deepEqual(documentUploadVisibilities("cat_member"), ["uploader_hierarchy"]);
 });
 
-test("encrypted document storage recognizes CAT member visibility with the dedicated permission", () => {
+test("encrypted document storage persists the upload-time role for hierarchy authorization", () => {
   const source = readFileSync(new URL("../src/lib/document-storage.ts", import.meta.url), "utf8");
-  assert.match(source, /"cat_member_scope"/);
-  assert.match(source, /cat_member_scope: "viewCatMemberDocuments"/);
+  assert.match(source, /uploaded_by_role/);
+  assert.match(source, /input\.actor\.role/);
 });

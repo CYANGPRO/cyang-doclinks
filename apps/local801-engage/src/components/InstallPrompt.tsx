@@ -43,9 +43,10 @@ export function InstallPrompt({ compact = false }: { compact?: boolean }) {
 
   if (compact && !event) return null;
 
-  return (
+  return <div className={compact ? undefined : "stack"}>
     <button className={compact ? "button secondary" : "button"} disabled={!event} onClick={install} type="button">
       Install
     </button>
-  );
+    {!compact && !event ? <p className="muted" role="status">Automatic install is not available in this browser right now. Use the browser-specific steps below instead.</p> : null}
+  </div>;
 }

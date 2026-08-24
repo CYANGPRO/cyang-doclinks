@@ -21,5 +21,5 @@ export function ImportReviewDecisionButton({ batchId, decisionType, expectedHash
     } catch { setMessage("The current review set could not be updated. No roster changes were made."); }
     finally { setBusy(false); }
   }
-  return <div><button className={`button ${accepted ? "secondary" : ""}`.trim()} disabled={busy || disabled} onClick={mutate} type="button">{busy ? "Saving…" : accepted ? "Clear decision" : label}</button>{message ? <p className="muted" role="status">{message}</p> : null}</div>;
+  return <div className="inline-actions vertical-actions"><button className={`button ${accepted ? "secondary" : ""}`.trim()} disabled={busy || disabled} onClick={mutate} type="button">{busy ? "Saving…" : accepted ? "Clear decision" : label}</button>{message ? <div className="form-message compact-message" role="alert">{message}</div> : null}</div>;
 }

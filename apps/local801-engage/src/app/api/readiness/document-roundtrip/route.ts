@@ -31,7 +31,7 @@ export async function POST(request: Request) {
   try {
     const context = await resolveWorkspaceContext(auth.user);
 
-    actor = { organizationId: context.organizationId, role: context.role };
+    actor = { organizationId: context.organizationId, userId: context.userId, role: context.role };
     const plaintext = Buffer.from("Local 801 synthetic encrypted storage round trip", "utf8");
     const stored = await storeEncryptedDocument({
       actor,

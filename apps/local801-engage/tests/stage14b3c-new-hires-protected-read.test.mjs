@@ -71,6 +71,7 @@ function protectedContact(keyConfig) {
   const value = envelope("newhire.protected@example.test", "person-contact", contactId, "contact-value", keyConfig);
   return {
     person_id: personId,
+    contact_type: "work_email",
     contact_method_id: contactId,
     contact_type: "work_email",
     contact_label: "work",
@@ -96,6 +97,7 @@ function legacyPage() {
   return {
     people: [{
       handle: personHandle(),
+      employeeReference: "L801-100001",
       displayName: "WRONG LEGACY NAME",
       hireDate: "2026-08-01",
       daysSinceHire: 15,
@@ -105,10 +107,7 @@ function legacyPage() {
       workLocation: "Downtown",
       jobStatus: "Permanent",
       workEmail: "wrong.legacy@example.test",
-      homeEmail: null,
       workPhone: null,
-      cellPhone: null,
-      homePhone: null,
       assigned: true,
       primaryOrganizers: "WRONG PRIMARY",
       backupOrganizers: "WRONG BACKUP",

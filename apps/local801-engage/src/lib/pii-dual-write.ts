@@ -257,6 +257,10 @@ function isLegacyPiiMutation(sql: string) {
   return false;
 }
 
+function isAlreadyProtectedLegacyMutation(sql: string) {
+  return /\/\*\s*(?:production-auth:protected-bind-identity|pii-protected-execution:legacy-placeholder)/i.test(sql);
+}
+
 function parseImportRows(statement: DatabaseStatement) {
   const organizationId = requireUuid(statement.parameters?.[0], "Import-row organization");
   const raw = statement.parameters?.[2];
@@ -280,7 +284,7 @@ export function augmentPiiDualWriteTransactionStatements(
   env: NodeJS.ProcessEnv = process.env,
 ): readonly DatabaseStatement[] {
   if (!requested(env)) return statements;
-  const piiMutations = statements.filter((statement) => isLegacyPiiMutation(statement.sql));
+  const piiMutations = statements.filter((statement) => isLegacyPiiMutation(statement.sql) && !isAlreadyProtectedLegacyMutation(statement.sql));
   if (piiMutations.length === 0) return statements;
   const config = configuration(env)!;
   const additions: DatabaseStatement[] = [];

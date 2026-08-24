@@ -2,10 +2,11 @@ import { NextResponse } from "next/server";
 import { requirePreviewUser } from "@/lib/authz.server";
 import { mapHeaders, shouldIncludeLocal801 } from "@/lib/imports";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
-import { persistImportReview } from "@/lib/import-persistence";
-import { publicImportError } from "@/lib/import-errors";
+import { ControlledImportError, publicImportError } from "@/lib/import-errors";
 import { hasExactSameOrigin } from "@/lib/request-security";
-import { acceptDurablePreviewCsv } from "@/lib/import-async-acceptance";
+import { acceptDurableImport } from "@/lib/import-async-acceptance";
+import { enforceWorkspaceRateLimit, RateLimitError } from "@/lib/rate-limit";
+import { rateLimitResponse } from "@/lib/rate-limit-response";
 
 export async function GET() {
   const auth = await requirePreviewUser("manageImports");
@@ -45,13 +46,15 @@ export async function POST(request: Request) {
 
   try {
     const context = await resolveWorkspaceContext(auth.user);
+    await enforceWorkspaceRateLimit(context, "import");
     const form = await request.formData();
     const file = form.get("file");
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "MISSING_FILE", message: "Select an .xlsx or .csv file to import." }, { status: 400 });
     }
-    if (form.get("processingMode") === "durable_preview") {
-      const accepted = await acceptDurablePreviewCsv({
+    const processingMode = form.get("processingMode");
+    if (processingMode === "durable" || processingMode === "durable_preview") {
+      const accepted = await acceptDurableImport({
         actor: { organizationId: context.organizationId, role: context.role, userId: context.userId },
         file,
         importKind: form.get("importKind"),
@@ -61,6 +64,16 @@ export async function POST(request: Request) {
         headers: { "Cache-Control": "no-store, max-age=0", Location: accepted.statusLocation },
       });
     }
+    if (process.env.LOCAL801_DATABASE_PII_PROTECTION_ENABLED === "1") {
+      return NextResponse.json(
+        {
+          error: "PROTECTED_DURABLE_IMPORT_REQUIRED",
+          message: "Protected-only imports require the scanner-backed durable worker.",
+        },
+        { status: 409, headers: { "Cache-Control": "no-store, max-age=0" } },
+      );
+    }
+    const { persistImportReview } = await import("@/lib/import-persistence");
     const summary = await persistImportReview({
       actor: { organizationId: context.organizationId, role: context.role, userId: context.userId },
       file,
@@ -68,7 +81,13 @@ export async function POST(request: Request) {
     });
     return NextResponse.json(summary, { headers: { "Cache-Control": "no-store, max-age=0" } });
   } catch (error) {
+    if (error instanceof RateLimitError) return rateLimitResponse(error);
     const failure = publicImportError(error);
+    console.error("[local801-import-safe-failure]", JSON.stringify({
+      code: failure.code,
+      status: failure.status,
+      stage: error instanceof ControlledImportError ? error.safeStage : null,
+    }));
     return NextResponse.json(
       { error: failure.code, message: failure.message },
       { status: failure.status, headers: { "Cache-Control": "no-store, max-age=0" } },

@@ -47,4 +47,3 @@ Services to transfer or share with Chang Yang before production:
 - Web-push VAPID keys.
 - Monitoring/Sentry project.
 - Backup and restore jobs.
-- Any Microsoft account used later for Power BI.

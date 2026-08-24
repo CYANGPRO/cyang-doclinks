@@ -20,5 +20,8 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run db:migrations:verify
+      - run: npm run test:xlsx-scale
+      - run: npm run security:secret-scan
+      - run: npm run security:route-audit
       - run: npm audit --omit=dev
       - run: npm run build

@@ -27,17 +27,16 @@ async function sendJson(url: string, method: "POST" | "PATCH" | "DELETE", body?:
     body: body ? JSON.stringify(body) : undefined,
   });
   const payload = await response.json().catch(() => ({})) as Record<string, unknown> & { message?: string };
-  if (!response.ok) throw new Error(payload.message || "The campaign change could not be completed.");
+  if (!response.ok) throw new Error(payload.message || "We couldn’t save that campaign change.");
   return payload;
 }
 
 function FeedbackMessage({ feedback }: { feedback: Feedback }) {
   if (!feedback) return null;
-  return <p
-    className={feedback.tone === "error" ? "error-text" : undefined}
-    style={feedback.tone === "success" ? { color: "var(--success)", fontWeight: 700 } : undefined}
+  return <div
+    className={`form-message${feedback.tone === "success" ? " success" : ""}`}
     role={feedback.tone === "error" ? "alert" : "status"}
-  >{feedback.message}</p>;
+  >{feedback.message}</div>;
 }
 
 export function CampaignCreateForm() {
@@ -54,7 +53,6 @@ export function CampaignCreateForm() {
     try {
       const result = await sendJson("/api/campaigns", "POST", {
         name: String(data.get("name") ?? ""),
-        status: String(data.get("status") ?? "draft"),
         startsOn: String(data.get("startsOn") ?? "") || null,
         endsOn: String(data.get("endsOn") ?? "") || null,
       });
@@ -63,33 +61,28 @@ export function CampaignCreateForm() {
       if (handle) router.push(`/campaigns/${handle}`);
       else router.refresh();
     } catch (error) {
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "Campaign creation failed." });
+      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "We couldn’t create the campaign." });
     } finally {
       setPending(false);
     }
   }
 
-  return <form className="grid" onSubmit={submit}>
-    <div className="field">
-      <label htmlFor="new-campaign-name">Campaign name</label>
-      <input id="new-campaign-name" name="name" required maxLength={160} />
+  return <form className="stack" onSubmit={submit}>
+    <div className="form-grid">
+      <div className="field">
+        <label htmlFor="new-campaign-name">Campaign name</label>
+        <input id="new-campaign-name" name="name" required maxLength={160} />
+      </div>
+      <div className="field">
+        <label htmlFor="new-campaign-start">Start date</label>
+        <input id="new-campaign-start" name="startsOn" type="date" />
+      </div>
+      <div className="field">
+        <label htmlFor="new-campaign-end">End date</label>
+        <input id="new-campaign-end" name="endsOn" type="date" />
+      </div>
     </div>
-    <div className="field">
-      <label htmlFor="new-campaign-status">Starting status</label>
-      <select id="new-campaign-status" name="status" defaultValue="draft">
-        <option value="draft">Draft</option>
-        <option value="active">Active</option>
-      </select>
-    </div>
-    <div className="field">
-      <label htmlFor="new-campaign-start">Start date</label>
-      <input id="new-campaign-start" name="startsOn" type="date" />
-    </div>
-    <div className="field">
-      <label htmlFor="new-campaign-end">End date</label>
-      <input id="new-campaign-end" name="endsOn" type="date" />
-    </div>
-    <button className="button" type="submit" disabled={pending}>{pending ? "Creating…" : "Create campaign"}</button>
+    <div className="form-actions"><button className="button" type="submit" disabled={pending}>{pending ? "Creating…" : "Create campaign"}</button></div>
     <FeedbackMessage feedback={feedback} />
   </form>;
 }
@@ -123,44 +116,57 @@ export function CampaignEditForm({
     if (startsOn !== (initialStartsOn ?? "")) payload.startsOn = startsOn || null;
     if (endsOn !== (initialEndsOn ?? "")) payload.endsOn = endsOn || null;
     if (Object.keys(payload).length === 0) {
-      setFeedback({ tone: "error", message: "Choose a campaign change before saving." });
+      setFeedback({ tone: "error", message: "Make a change before saving." });
       return;
     }
     setPending(true);
     setFeedback(null);
+    if (status !== initialStatus) {
+      const confirmed = status === "active"
+        ? window.confirm("Activate this campaign? Its participant list will be frozen and it cannot return to draft status.")
+        : status === "closed"
+          ? window.confirm("Close this campaign? Its settings and assignments will become read-only.")
+          : true;
+      if (!confirmed) {
+        setPending(false);
+        return;
+      }
+    }
     try {
       await sendJson(`/api/campaigns/${campaignHandle}`, "PATCH", payload);
       setFeedback({ tone: "success", message: "Campaign updated." });
       router.refresh();
     } catch (error) {
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "Campaign update failed." });
+      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "We couldn’t update the campaign." });
     } finally {
       setPending(false);
     }
   }
 
-  return <form className="grid" onSubmit={submit}>
-    <div className="field">
-      <label htmlFor="edit-campaign-name">Campaign name</label>
-      <input id="edit-campaign-name" value={name} onChange={(event) => setName(event.target.value)} required maxLength={160} />
+  return <form className="stack" onSubmit={submit}>
+    <div className="form-grid">
+      <div className="field">
+        <label htmlFor="edit-campaign-name">Campaign name</label>
+        <input id="edit-campaign-name" value={name} onChange={(event) => setName(event.target.value)} required maxLength={160} />
+      </div>
+      <div className="field">
+        <label htmlFor="edit-campaign-status">Status</label>
+        <select id="edit-campaign-status" value={status} onChange={(event) => setStatus(event.target.value as typeof status)}>
+          {initialStatus === "draft" ? <option value="draft">Draft</option> : null}
+          <option value="active">Active</option>
+          <option value="closed">Closed</option>
+        </select>
+      </div>
+      <div className="field">
+        <label htmlFor="edit-campaign-start">Start date</label>
+        <input id="edit-campaign-start" type="date" value={startsOn} onChange={(event) => setStartsOn(event.target.value)} />
+      </div>
+      <div className="field">
+        <label htmlFor="edit-campaign-end">End date</label>
+        <input id="edit-campaign-end" type="date" value={endsOn} onChange={(event) => setEndsOn(event.target.value)} />
+      </div>
     </div>
-    <div className="field">
-      <label htmlFor="edit-campaign-status">Status</label>
-      <select id="edit-campaign-status" value={status} onChange={(event) => setStatus(event.target.value as typeof status)}>
-        {initialStatus === "draft" ? <option value="draft">Draft</option> : null}
-        <option value="active">Active</option>
-        <option value="closed">Closed</option>
-      </select>
-    </div>
-    <div className="field">
-      <label htmlFor="edit-campaign-start">Start date</label>
-      <input id="edit-campaign-start" type="date" value={startsOn} onChange={(event) => setStartsOn(event.target.value)} />
-    </div>
-    <div className="field">
-      <label htmlFor="edit-campaign-end">End date</label>
-      <input id="edit-campaign-end" type="date" value={endsOn} onChange={(event) => setEndsOn(event.target.value)} />
-    </div>
-    <button className="button" type="submit" disabled={pending}>{pending ? "Saving…" : "Save campaign"}</button>
+    <div className="form-actions"><button className="button" type="submit" disabled={pending}>{pending ? "Saving…" : "Save campaign"}</button></div>
     <FeedbackMessage feedback={feedback} />
   </form>;
 }
@@ -171,7 +177,7 @@ export function CampaignArchiveButton({ campaignHandle, campaignName }: { campai
   const [feedback, setFeedback] = useState<Feedback>(null);
 
   async function archive() {
-    if (!window.confirm(`Archive ${campaignName}? Open campaign assignments will also leave the active outreach queues.`)) return;
+    if (!window.confirm(`Archive ${campaignName}? It will leave the active campaign views, and its open assignments will no longer appear in current work lists.`)) return;
     setPending(true);
     setFeedback(null);
     try {
@@ -179,13 +185,13 @@ export function CampaignArchiveButton({ campaignHandle, campaignName }: { campai
       router.push("/campaigns");
       router.refresh();
     } catch (error) {
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "Campaign archive failed." });
+      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "We couldn’t archive the campaign." });
       setPending(false);
     }
   }
 
-  return <div className="grid">
-    <button className="button secondary" type="button" onClick={archive} disabled={pending}>{pending ? "Archiving…" : "Archive closed campaign"}</button>
+  return <div className="stack">
+    <div className="form-actions compact-actions"><button className="button secondary" type="button" onClick={archive} disabled={pending}>{pending ? "Archiving…" : "Archive campaign"}</button></div>
     <FeedbackMessage feedback={feedback} />
   </div>;
 }
@@ -217,13 +223,13 @@ export function CampaignAssignmentForm({
     if (dueAt !== initialDue) {
       const parsed = isoDateTime(dueAt);
       if (parsed === "invalid") {
-        setFeedback({ tone: "error", message: "The assignment due date is invalid." });
+        setFeedback({ tone: "error", message: "Enter a valid due date and time." });
         return;
       }
       payload.dueAt = parsed;
     }
     if (Object.keys(payload).length === 0) {
-      setFeedback({ tone: "error", message: "Choose an organizer or due-date change before saving." });
+      setFeedback({ tone: "error", message: "Change the organizer or due date before saving." });
       return;
     }
     setPending(true);
@@ -231,31 +237,33 @@ export function CampaignAssignmentForm({
     try {
       await sendJson(`/api/campaigns/${campaignHandle}/participants/${personHandle}/assignment`, "PATCH", payload);
       setAssignee("__keep__");
-      setFeedback({ tone: "success", message: "Campaign assignment updated." });
+      setFeedback({ tone: "success", message: "Assignment updated." });
       router.refresh();
     } catch (error) {
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "Campaign assignment update failed." });
+      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "We couldn’t update the assignment." });
     } finally {
       setPending(false);
     }
   }
 
-  return <details>
+  return <details className="inline-disclosure">
     <summary>Assign or reschedule</summary>
-    <form className="grid" onSubmit={submit} style={{ marginTop: 10, minWidth: 240 }}>
-      <div className="field">
-        <label htmlFor={`campaign-assignee-${personHandle}`}>CAT organizer</label>
-        <select id={`campaign-assignee-${personHandle}`} value={assignee} onChange={(event) => setAssignee(event.target.value)}>
-          <option value="__keep__">Keep current{currentAssigneeName ? ` · ${currentAssigneeName}` : " · unassigned"}</option>
-          <option value="__unassigned__">Unassigned</option>
-          {assignees.map((option) => <option key={option.handle} value={option.handle}>{option.label}{option.detail ? ` · ${option.detail}` : ""}</option>)}
-        </select>
+    <form className="stack inline-disclosure-content" onSubmit={submit}>
+      <div className="form-grid">
+        <div className="field">
+          <label htmlFor={`campaign-assignee-${personHandle}`}>CAT organizer</label>
+          <select id={`campaign-assignee-${personHandle}`} value={assignee} onChange={(event) => setAssignee(event.target.value)}>
+            <option value="__keep__">Keep current{currentAssigneeName ? ` · ${currentAssigneeName}` : " · unassigned"}</option>
+            <option value="__unassigned__">Unassigned</option>
+            {assignees.map((option) => <option key={option.handle} value={option.handle}>{option.label}{option.detail ? ` · ${option.detail}` : ""}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor={`campaign-due-${personHandle}`}>Due</label>
+          <input id={`campaign-due-${personHandle}`} type="datetime-local" value={dueAt} onChange={(event) => setDueAt(event.target.value)} />
+        </div>
       </div>
-      <div className="field">
-        <label htmlFor={`campaign-due-${personHandle}`}>Assignment due</label>
-        <input id={`campaign-due-${personHandle}`} type="datetime-local" value={dueAt} onChange={(event) => setDueAt(event.target.value)} />
-      </div>
-      <button className="button secondary" type="submit" disabled={pending}>{pending ? "Saving…" : "Save assignment"}</button>
+      <div className="form-actions"><button className="button secondary" type="submit" disabled={pending}>{pending ? "Saving…" : "Save assignment"}</button></div>
       <FeedbackMessage feedback={feedback} />
     </form>
   </details>;

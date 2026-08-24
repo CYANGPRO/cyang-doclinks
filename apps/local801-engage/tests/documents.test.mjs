@@ -44,15 +44,13 @@ test("document visibility scopes are derived from the existing permission model"
   assert.deepEqual(documentTesting.allowedVisibilities("report_viewer"), []);
 });
 
-test("roles without viewDocuments fail before database work", async () => {
-  for (const role of ["report_viewer"]) {
-    let calls = 0;
-    await assert.rejects(getDocumentsPage(context(role), {}, async () => {
-      calls += 1;
-      return [];
-    }), /Forbidden/);
-    assert.equal(calls, 0);
-  }
+test("report viewers receive document access without legacy protected scopes", async () => {
+  let parameters = null;
+  await getDocumentsPage(context("report_viewer"), {}, async (_sql, values) => {
+    parameters = values;
+    return [];
+  });
+  assert.deepEqual(parameters.slice(1, 4), [[], userId, []]);
 });
 
 test("document metadata query is tenant scoped, visibility scoped, and returns only a one-way download handle", async () => {
@@ -65,7 +63,15 @@ test("document metadata query is tenant scoped, visibility scoped, and returns o
     return [documentRow(1, { visibility: "membership_management", download_handle: handle, cursor_token: handle })];
   });
 
-  assert.deepEqual(parameters, [organizationId, ["membership_management"], null, null, 51]);
+  assert.deepEqual(parameters, [
+    organizationId,
+    ["membership_management"],
+    userId,
+    ["cat_admin", "cat_lead", "cat_member", "report_viewer"],
+    null,
+    null,
+    51,
+  ]);
   assert.match(sqlText, /document\.organization_id = \$1::uuid/);
   assert.match(sqlText, /document\.visibility = ANY\(\$2::text\[\]\)/);
   assert.match(sqlText, /document\.archived_at IS NULL/);
@@ -90,13 +96,13 @@ test("document download handle resolver rejects malformed handles before SQL", a
   assert.equal(calls, 0);
 });
 
-test("document download handle resolver fails unauthorized roles before SQL", async () => {
-  let calls = 0;
-  await assert.rejects(resolveDocumentDownloadId(context("report_viewer"), "a".repeat(64), async () => {
-    calls += 1;
+test("document download handle resolver allows report viewers only through hierarchy or everyone scopes", async () => {
+  let parameters = null;
+  await resolveDocumentDownloadId(context("report_viewer"), "a".repeat(64), async (_sql, values) => {
+    parameters = values;
     return [];
-  }), /Forbidden/);
-  assert.equal(calls, 0);
+  });
+  assert.deepEqual(parameters, [organizationId, [], userId, [], "a".repeat(64)]);
 });
 
 test("document download handle resolution is tenant and visibility scoped and does not accept a browser-supplied UUID", async () => {
@@ -111,12 +117,18 @@ test("document download handle resolution is tenant and visibility scoped and do
   });
 
   assert.equal(resolved, internalId);
-  assert.deepEqual(parameters, [organizationId, ["cat_admin_only", "cat_lead_scope", "cat_member_scope"], handle.toLowerCase()]);
+  assert.deepEqual(parameters, [
+    organizationId,
+    ["cat_admin_only", "cat_lead_scope", "cat_member_scope"],
+    userId,
+    ["cat_lead", "cat_member", "report_viewer"],
+    handle.toLowerCase(),
+  ]);
   assert.match(sqlText, /document\.organization_id = \$1::uuid/);
   assert.match(sqlText, /document\.visibility = ANY\(\$2::text\[\]\)/);
   assert.match(sqlText, /document\.archived_at IS NULL/);
-  assert.match(sqlText, /public\.digest\(document\.organization_id::text \|\| ':' \|\| document\.id::text, 'sha256'\)/);
-  assert.match(sqlText, /= \$3::text/);
+  assert.match(sqlText, /digest\(document\.organization_id::text \|\| ':' \|\| document\.id::text, 'sha256'\)/);
+  assert.match(sqlText, /= \$5::text/);
 });
 
 test("each authorized role passes only its allowed visibility values to SQL", async () => {
@@ -127,6 +139,7 @@ test("each authorized role passes only its allowed visibility values to SQL", as
     cat_admin: ["cat_admin_only", "cat_lead_scope", "cat_member_scope"],
     cat_lead: ["cat_lead_scope", "cat_member_scope"],
     cat_member: ["cat_member_scope"],
+    report_viewer: [],
   };
 
   for (const [role, visibilities] of Object.entries(expected)) {
@@ -163,15 +176,15 @@ test("valid document cursor is parameterized and invalid cursor input is ignored
   })).toString("base64url");
 
   await getDocumentsPage(context(), { cursor }, async (sql, parameters) => {
-    assert.equal(parameters[2], "2026-08-14T12:00:00.000Z");
-    assert.equal(parameters[3], "a".repeat(64));
-    assert.match(sql, /\(created_at, cursor_token\) < \(\$3::timestamptz, \$4::text\)/);
+    assert.equal(parameters[4], "2026-08-14T12:00:00.000Z");
+    assert.equal(parameters[5], "a".repeat(64));
+    assert.match(sql, /\(created_at, cursor_token\) < \(\$5::timestamptz, \$6::text\)/);
     return [];
   });
 
   await getDocumentsPage(context(), { cursor: "not-a-cursor" }, async (_sql, parameters) => {
-    assert.equal(parameters[2], null);
-    assert.equal(parameters[3], null);
+    assert.equal(parameters[4], null);
+    assert.equal(parameters[5], null);
     return [];
   });
 });
@@ -182,17 +195,15 @@ test("document handle parser rejects overlong or malformed values", () => {
   assert.equal(documentTesting.normalizeDocumentHandle("x".repeat(65)), null);
 });
 
-test("download route supports authenticated Preview and Production users, resolves opaque handles, decrypts through the existing service, and is non-cacheable", () => {
+test("download route is launch-gated, authenticated, rate-limited, audited, handle-resolved, decrypted, and non-cacheable", () => {
   const source = readFileSync(new URL("../src/app/api/documents/[handle]/download/route.ts", import.meta.url), "utf8");
-  assert.doesNotMatch(source, /VERCEL_ENV === "production"/);
-  assert.doesNotMatch(source, /LOCAL801_PREVIEW_AUTH_ENABLED/);
+  assert.match(source, /operationalRuntimeEnabled\(\)/);
   assert.match(source, /requirePreviewUser\("viewDocuments"\)/);
   assert.match(source, /resolveWorkspaceContext\(auth\.user\)/);
   assert.match(source, /resolveDocumentDownloadId\(context, handle\)/);
   assert.match(source, /downloadDocument\(/);
-  assert.match(source, /writeAuditEvent\(/);
-  assert.match(source, /eventType: "record\.access"/);
-  assert.match(source, /outcome: "success"/);
+  assert.match(source, /enforceWorkspaceRateLimit\(context, "download"\)/);
+  assert.match(source, /eventType: "record\.read"/);
   assert.match(source, /Cache-Control.*private, no-store/);
   assert.match(source, /Content-Disposition/);
   assert.match(source, /X-Content-Type-Options.*nosniff/);
@@ -233,5 +244,5 @@ test("CAT members can resolve only CAT-member-scoped document handles", async ()
     return [{ id: "44444444-4444-4444-8444-444444444444" }];
   });
   assert.equal(resolved, "44444444-4444-4444-8444-444444444444");
-  assert.deepEqual(parameters, [organizationId, ["cat_member_scope"], handle]);
+  assert.deepEqual(parameters, [organizationId, ["cat_member_scope"], userId, ["report_viewer"], handle]);
 });

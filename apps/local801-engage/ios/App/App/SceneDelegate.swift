@@ -3,47 +3,68 @@ import Capacitor
 
 class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
-    private var privacyCover: UIView?
+    private let privacyCoverTag = 80120
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
         guard let windowScene = scene as? UIWindowScene else { return }
 
         window = UIWindow(windowScene: windowScene)
-        window?.rootViewController = CAPBridgeViewController()
+        window?.rootViewController = Local801BridgeViewController()
         window?.makeKeyAndVisible()
 
-        SceneDelegateProxy.shared.scene(scene, willConnectTo: session, options: connectionOptions)
+        for context in connectionOptions.urlContexts {
+            open(context.url)
+        }
+        for userActivity in connectionOptions.userActivities {
+            continueActivity(userActivity)
+        }
     }
 
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
-        SceneDelegateProxy.shared.scene(scene, openURLContexts: URLContexts)
+        for context in URLContexts {
+            open(context.url)
+        }
     }
 
-    func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
-        SceneDelegateProxy.shared.scene(scene, continue: userActivity)
+    func sceneWillEnterForeground(_ scene: UIScene) {
+        (window?.rootViewController as? Local801BridgeViewController)?.requireUnlock()
     }
 
     func sceneWillResignActive(_ scene: UIScene) {
-        guard privacyCover == nil, let window else { return }
-
-        let cover = UIView(frame: window.bounds)
-        cover.backgroundColor = UIColor(red: 19.0 / 255.0, green: 77.0 / 255.0, blue: 140.0 / 255.0, alpha: 1)
-        cover.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-
-        let label = UILabel(frame: cover.bounds)
-        label.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        label.text = "Local 801 Engage"
-        label.textAlignment = .center
-        label.textColor = .white
-        label.font = .preferredFont(forTextStyle: .headline)
-        cover.addSubview(label)
-
-        window.addSubview(cover)
-        privacyCover = cover
+        guard let window, window.viewWithTag(privacyCoverTag) == nil else { return }
+        let cover = UIView(frame: window.bounds); cover.tag = privacyCoverTag; cover.backgroundColor = UIColor(red: 20 / 255, green: 45 / 255, blue: 76 / 255, alpha: 1)
+        cover.autoresizingMask = [.flexibleWidth, .flexibleHeight]; window.addSubview(cover)
     }
 
     func sceneDidBecomeActive(_ scene: UIScene) {
-        privacyCover?.removeFromSuperview()
-        privacyCover = nil
+        window?.viewWithTag(privacyCoverTag)?.removeFromSuperview()
+        (window?.rootViewController as? Local801BridgeViewController)?.requireUnlock()
+    }
+
+    func windowScene(_ windowScene: UIWindowScene, performActionFor shortcutItem: UIApplicationShortcutItem, completionHandler: @escaping (Bool) -> Void) {
+        let route = shortcutItem.type == "io.cyang.local801.work" ? "/notifications" : shortcutItem.type == "io.cyang.local801.documents" ? "/documents" : nil
+        guard let route, let controller = window?.rootViewController as? Local801BridgeViewController,
+              let url = URL(string: "https://cat.cyang.io" + route) else { completionHandler(false); return }
+        controller.webView?.load(URLRequest(url: url)); completionHandler(true)
+    }
+
+    func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+        continueActivity(userActivity)
+    }
+
+    private func open(_ url: URL) {
+        if url.pathExtension.lowercased() == "pdf" {
+            Local801BridgeViewController.receivePdf(url: url)
+            return
+        }
+        _ = ApplicationDelegateProxy.shared.application(UIApplication.shared, open: url)
+    }
+
+    private func continueActivity(_ userActivity: NSUserActivity) {
+        _ = ApplicationDelegateProxy.shared.application(
+            UIApplication.shared,
+            continue: userActivity,
+            restorationHandler: { _ in }
+        )
     }
 }

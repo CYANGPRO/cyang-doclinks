@@ -6,6 +6,7 @@ import {
   augmentPiiDualWriteTransactionStatements,
   preparePiiDualWriteDirectQuery,
 } from "./pii-dual-write.ts";
+import { rewriteProtectedImportWorkerStatements } from "./pii-protected-import-worker.ts";
 import { preparePiiProtectedLookupQuery } from "./pii-protected-query.ts";
 import {
   augmentPiiProtectedTransactionStatements,
@@ -69,9 +70,24 @@ export const queryLocal801: DatabaseQuery = <T extends DatabaseRow>(
 ) => (queryOverride ?? defaultQueryLocal801)<T>(query, parameters);
 
 function transactionStage(sql: string) {
+  if (/\/\*\s*pii-protected-write:gate\s*\*\//i.test(sql)) return "PII_PROTECTED_WRITE_GATE";
+  if (/\/\*\s*pii-protected-write:user-companion\s*\*\//i.test(sql)) return "PII_PROTECTED_USER_COMPANION";
+  if (/\/\*\s*pii-protected-write:import-row-companions\s*\*\//i.test(sql)) return "PII_PROTECTED_IMPORT_ROW_COMPANION";
+  if (/\/\*\s*pii-protected-write:exact-indexes\s*\*\//i.test(sql)) return "PII_PROTECTED_EXACT_INDEX";
+  if (/\/\*\s*pii-protected-import-worker:validate-authoritative-identity\s*\*\//i.test(sql)) return "PII_PROTECTED_IMPORT_VALIDATE_IDENTITY";
+  if (/\/\*\s*pii-protected-import-worker:validate-work-email\s*\*\//i.test(sql)) return "PII_PROTECTED_IMPORT_VALIDATE_EMAIL";
+  if (/\/\*\s*pii-protected-import-worker:validate-duplicate-identity\s*\*\//i.test(sql)) return "PII_PROTECTED_IMPORT_VALIDATE_DUPLICATE";
+  if (/\/\*\s*pii-protected-import-worker:match-identities\s*\*\//i.test(sql)) return "PII_PROTECTED_IMPORT_MATCH";
   if (/\/\*\s*pii-dual-write:gate\s*\*\//i.test(sql)) return "PII_DUAL_WRITE_GATE";
   if (/\/\*\s*pii-dual-write:user\s*\*\//i.test(sql)) return "PII_USER_COMPANION";
   if (/\/\*\s*pii-dual-write:exact-indexes\s*\*\//i.test(sql)) return "PII_EXACT_INDEX";
+  if (/insert\s+into\s+local801\.import_sheets/i.test(sql)) return "IMPORT_SHEET_INSERT";
+  if (/insert\s+into\s+local801\.import_mappings/i.test(sql)) return "IMPORT_MAPPING_INSERT";
+  if (/insert\s+into\s+local801\.import_rows/i.test(sql)) return "IMPORT_ROW_INSERT";
+  if (/insert\s+into\s+local801\.import_match_candidates/i.test(sql)) return "IMPORT_MATCH_INSERT";
+  if (/insert\s+into\s+local801\.import_errors/i.test(sql)) return "IMPORT_ERROR_INSERT";
+  if (/update\s+local801\.import_rows/i.test(sql)) return "IMPORT_ROW_UPDATE";
+  if (/update\s+local801\.import_batches/i.test(sql)) return "IMPORT_BATCH_UPDATE";
   if (/insert\s+into\s+local801\.audit_events/i.test(sql)) return "AUDIT_INSERT";
   if (/insert\s+into\s+local801\.users/i.test(sql)) return "USER_PROVISION";
   return "TRANSACTION_STATEMENT";
@@ -93,9 +109,10 @@ function safeTransactionFailure(error: unknown, stage: string) {
 /** Executes a bounded group of Local 801 writes atomically. */
 export async function runLocal801Transaction(statements: readonly DatabaseStatement[]) {
   if (statements.length === 0) return;
-  const protectedStatements = augmentPiiProtectedTransactionStatements(statements);
-  const guardedStatements = protectedStatements === statements
-    ? augmentPiiDualWriteTransactionStatements(statements)
+  const protectedWorkerStatements = rewriteProtectedImportWorkerStatements(statements);
+  const protectedStatements = augmentPiiProtectedTransactionStatements(protectedWorkerStatements);
+  const guardedStatements = protectedStatements === protectedWorkerStatements
+    ? augmentPiiDualWriteTransactionStatements(protectedWorkerStatements)
     : protectedStatements;
   const sql = getSql();
   await sql.begin(async (transaction) => {

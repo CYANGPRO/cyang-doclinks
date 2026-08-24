@@ -11,6 +11,7 @@ const context = (role = "membership_data_manager") => ({ organizationId, organiz
 function row(index, overrides = {}) {
   return {
     person_id: uuid(index),
+    employee_reference: String(100000 + index),
     preferred_name: index === 1 ? "Synthetic Casey" : null,
     first_name: index === 1 ? "Casey" : `Person${index}`,
     last_name: index === 1 ? "Woods" : "Hire",
@@ -19,6 +20,7 @@ function row(index, overrides = {}) {
     classification: "Clerical",
     work_location: "East Office",
     work_email: `person${index}@example.test`,
+    work_phone: `651-555-${String(index).padStart(4, "0")}`,
     hire_date: `2026-08-${String(Math.min(index, 28)).padStart(2, "0")}`,
     days_since_hire: String(index),
     open_assignment_count: index === 1 ? "1" : "0",
@@ -44,7 +46,7 @@ test("new-hire search normalization bounds filters and ignores invalid cursor da
     assignment: "unassigned",
     contact: "follow-up-open",
     membershipStatus: "member",
-    days: "90",
+    days: "14",
     pageSize: "999",
     cursor: "not-a-cursor",
   });
@@ -53,7 +55,7 @@ test("new-hire search normalization bounds filters and ignores invalid cursor da
     assignment: "unassigned",
     contact: "follow-up-open",
     membershipStatus: "member",
-    daysWithin: 90,
+    daysWithin: 14,
     pageSize: 25,
     cursor: null,
   });
@@ -79,7 +81,9 @@ test("new-hire queue is organization scoped, Local 0801 filtered, read-only, and
   assert.equal(result.people.length, 25);
   assert.equal(result.total, 26);
   assert.deepEqual(result.summary, { neverEngaged: 12, unassigned: 8, openFollowups: 5, members: 14 });
-  assert.equal(result.people[0].displayName, "Synthetic Casey");
+  assert.equal(result.people[0].displayName, "Casey Woods");
+  assert.equal(result.people[0].employeeReference, "L801-100001");
+  assert.equal(result.people[0].workPhone, "651-555-0001");
   assert.equal(result.people[0].contactState, "overdue_followup");
   assert.equal(result.people[0].assigned, true);
   assert.equal(typeof result.people[0].handle, "string");
@@ -123,8 +127,14 @@ test("new-hire queue strips internal ids and reports safe contact states", async
   assert.equal("last_name" in result.people[0], false);
 });
 
-test("new-hire queue denies roles outside membership data management before SQL", async () => {
-  for (const role of ["cat_admin", "cat_lead", "cat_member", "report_viewer"]) {
+test("new-hire queue allows assignment roles and denies only CAT Member and Report Viewer", async () => {
+  for (const role of ["system_owner", "local_admin", "membership_data_manager", "cat_admin", "cat_lead"]) {
+    let calls = 0;
+    await getNewHireQueue(context(role), {}, async () => { calls += 1; return []; });
+    assert.equal(calls, 1, `${role} should be allowed to load New Hires`);
+  }
+
+  for (const role of ["cat_member", "report_viewer"]) {
     let calls = 0;
     await assert.rejects(
       getNewHireQueue(context(role), {}, async () => { calls += 1; return []; }),
@@ -134,13 +144,14 @@ test("new-hire queue denies roles outside membership data management before SQL"
   }
 });
 
-test("new-hire page replaces the placeholder with the database-backed queue and existing outreach handoff", async () => {
+test("new-hire page uses the database-backed queue and existing outreach-record handoff", async () => {
   const page = await readFile(new URL("../src/app/new-hires/page.tsx", import.meta.url), "utf8");
   assert.match(page, /getNewHireQueue\(context/);
   assert.match(page, /resolveWorkspaceContext\(user\)/);
-  assert.match(page, /permission="manageImports"/);
+  assert.match(page, /permission="assignNewHires"/);
   assert.match(page, /\/outreach\/\$\{person\.handle\}/);
-  assert.match(page, /No open outreach assignment/);
+  assert.match(page, /No current organizer assignment/);
+  assert.match(page, /Outreach record/);
   assert.doesNotMatch(page, /Backend wiring pending/);
   assert.doesNotMatch(page, /INSERT INTO|UPDATE local801|DELETE FROM/i);
 });

@@ -42,6 +42,8 @@ export type PreviewUser = {
   role: Role;
   organizationId: string;
   authentication: "preview" | "production";
+  policyAcknowledged: boolean;
+  sessionVersion: number | null;
 };
 
 export function normalizeRole(role: string | null | undefined): Role | null {
@@ -58,6 +60,8 @@ async function getSyntheticPreviewUser(): Promise<PreviewUser | null> {
     role,
     organizationId: "local801-preview",
     authentication: "preview",
+    policyAcknowledged: true,
+    sessionVersion: null,
   };
 }
 
@@ -80,6 +84,8 @@ async function getProductionUser(): Promise<PreviewUser | null> {
     role: binding.role,
     organizationId: binding.organizationSlug,
     authentication: "production",
+    policyAcknowledged: binding.policyAcknowledged,
+    sessionVersion: binding.sessionVersion,
   };
 }
 
@@ -90,7 +96,18 @@ async function getProductionUser(): Promise<PreviewUser | null> {
 export async function getPreviewUser(): Promise<PreviewUser | null> {
   if (previewAuthEnabled()) return getSyntheticPreviewUser();
   try {
-    return await getProductionUser();
+    const user = await getProductionUser();
+    return user?.policyAcknowledged ? user : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function getPolicyAcknowledgementUser(): Promise<PreviewUser | null> {
+  if (previewAuthEnabled()) return null;
+  try {
+    const user = await getProductionUser();
+    return user && !user.policyAcknowledged ? user : null;
   } catch {
     return null;
   }
@@ -144,6 +161,7 @@ export async function requirePreviewUser(permission?: Permission, options: { ski
 
 export function protectRequest(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const requestedPath = `${pathname}${request.nextUrl.search}`;
   const isApi = pathname.startsWith("/api/");
 
   if (!previewAuthEnabled()) {
@@ -154,6 +172,8 @@ export function protectRequest(request: NextRequest) {
     if (isApi) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
     const url = request.nextUrl.clone();
     url.pathname = "/sign-in";
+    url.search = "";
+    url.searchParams.set("next", requestedPath);
     return NextResponse.redirect(url);
   }
 
@@ -163,13 +183,23 @@ export function protectRequest(request: NextRequest) {
     if (isApi) return NextResponse.json({ error: "UNAUTHENTICATED" }, { status: 401 });
     const url = request.nextUrl.clone();
     url.pathname = "/sign-in";
-    url.searchParams.set("next", pathname);
+    url.search = "";
+    url.searchParams.set("next", requestedPath);
     return NextResponse.redirect(url);
   }
 
   const pagePermissions: Array<[RegExp, Permission]> = [
     [/^\/directory/, "viewDirectory"],
     [/^\/imports/, "manageImports"],
+    [/^\/membership/, "manageImports"],
+    [/^\/new-hires/, "assignNewHires"],
+    [/^\/outreach/, "recordEngagement"],
+    [/^\/follow-ups/, "recordEngagement"],
+    [/^\/workload/, "recordEngagement"],
+    [/^\/campaigns/, "manageCampaigns"],
+    [/^\/cat-actions/, "manageCatActions"],
+    [/^\/documents/, "viewDocuments"],
+    [/^\/notifications/, "viewPersonalWorkspace"],
     [/^\/team/, "manageUsers"],
     [/^\/settings/, "manageUsers"],
     [/^\/audit/, "manageUsers"],
@@ -181,6 +211,8 @@ export function protectRequest(request: NextRequest) {
     if (isApi) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
     const url = request.nextUrl.clone();
     url.pathname = "/unauthorized";
+    url.search = "";
+    url.searchParams.set("next", requestedPath);
     return NextResponse.redirect(url);
   }
 

@@ -2,7 +2,7 @@ import postgres from "postgres";
 
 const CONFIRMATION = "I_HAVE_VERIFIED_PROTECTED_PII";
 const DIRECT_IMPORT_KEYS = [
-  "first_name", "last_name", "preferred_name", "work_email", "employee_identifier", "member_identifier",
+  "first_name", "last_name", "preferred_name", "work_email", "personal_email", "employee_identifier", "member_identifier",
 ];
 
 function required(name) {
@@ -74,7 +74,7 @@ async function main() {
           (SELECT count(*) FROM local801.import_files item WHERE item.organization_id = ${organizationId}::uuid) AS import_files,
           (SELECT count(*) FROM local801.import_file_pii item WHERE item.organization_id = ${organizationId}::uuid) AS import_file_pii,
           (SELECT count(*) FROM local801.import_rows item WHERE item.organization_id = ${organizationId}::uuid) AS import_rows,
-          (SELECT count(*) FROM local801.import_row_pii item WHERE item.organization_id = ${organizationId}::uuid AND item.direct_pii_field_set_version = 2) AS import_row_pii_v2,
+          (SELECT count(*) FROM local801.import_row_pii item WHERE item.organization_id = ${organizationId}::uuid AND item.direct_pii_field_set_version IN (2, 3)) AS import_row_pii_supported,
           (SELECT count(*) FROM local801.contact_correction_requests item WHERE item.organization_id = ${organizationId}::uuid) AS corrections,
           (SELECT count(*) FROM local801.contact_correction_request_pii item WHERE item.organization_id = ${organizationId}::uuid) AS correction_pii,
           (SELECT count(*) FROM local801.push_subscriptions item WHERE item.organization_id = ${organizationId}::uuid) AS pushes,
@@ -83,7 +83,7 @@ async function main() {
       const requiredCoverage = [
         ["users", "user_pii"], ["people", "person_pii"], ["identifiers", "identifier_pii"],
         ["contacts", "contact_pii"], ["auth_identities", "auth_identity_pii"],
-        ["import_files", "import_file_pii"], ["import_rows", "import_row_pii_v2"],
+        ["import_files", "import_file_pii"], ["import_rows", "import_row_pii_supported"],
         ["corrections", "correction_pii"], ["pushes", "push_pii"],
       ];
       for (const [legacy, protectedName] of requiredCoverage) {
@@ -160,7 +160,7 @@ async function main() {
         WHERE import_rows.organization_id = $1::uuid
           AND protected.organization_id = import_rows.organization_id
           AND protected.import_row_id = import_rows.id
-          AND protected.direct_pii_field_set_version = 2
+          AND protected.direct_pii_field_set_version IN (2, 3)
       `, [organizationId, ...DIRECT_IMPORT_KEYS]);
       await tx`
         UPDATE local801.push_subscriptions

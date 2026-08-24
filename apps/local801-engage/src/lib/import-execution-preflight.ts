@@ -123,7 +123,7 @@ function isMissingPreflightMigration(error: unknown) {
 }
 
 function supportedImportKind(value: string) {
-  return value === "current_roster" || value === "new_hires"
+  return value === "current_roster" || value === "new_hires" || value === "recent_hires"
     || value === "membership_additions" || value === "membership_drops";
 }
 
@@ -215,11 +215,12 @@ export async function getImportExecutionPreflight(
   actor: ImportReviewActor,
   batchId: string,
   query: DatabaseQuery = queryLocal801,
+  resolvedSummary?: Awaited<ReturnType<typeof getImportReviewSummary>>,
 ): Promise<ImportExecutionPreflight> {
   requireApprover(actor);
   requireBatchId(batchId);
   const [summary, meta] = await Promise.all([
-    getImportReviewSummary(actor, batchId, query),
+    resolvedSummary ?? getImportReviewSummary(actor, batchId, query),
     loadMeta(actor, batchId, query),
   ]);
   if (!meta.row) throw new ImportExecutionPreflightError("IMPORT_NOT_FOUND", "Import batch not found.", 404);
@@ -271,7 +272,7 @@ export async function getImportExecutionPreflight(
   if (!summary.decisions.proposedNew) reasons.push(reason("PROPOSED_NEW_DECISION_REQUIRED", "The current proposed-new set must be explicitly allowed."));
   if (!summary.decisions.existingChanges) reasons.push(reason("EXISTING_CHANGES_ACK_REQUIRED", "The current existing-change set must be acknowledged."));
   if (row.import_kind === "current_roster" && !snapshotDate) reasons.push(reason("SNAPSHOT_DATE_REQUIRED", "Set the authoritative roster snapshot date before execution."));
-  if (["new_hires", "membership_additions", "membership_drops"].includes(row.import_kind) && !effectiveDate) {
+  if (["new_hires", "recent_hires", "membership_additions", "membership_drops"].includes(row.import_kind) && !effectiveDate) {
     reasons.push(reason("EFFECTIVE_DATE_REQUIRED", "Set the batch effective date before execution."));
   }
   if (row.duplicate_source_exists && row.duplicate_source_acknowledged !== true) {

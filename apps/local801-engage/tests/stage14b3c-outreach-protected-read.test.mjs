@@ -131,7 +131,9 @@ test("employee workspace replaces person PII and follow-up assignee from protect
   const environment = env();
   const keyConfig = getPiiKeyConfiguration(environment);
   const organizer = protectedUser(keyConfig);
-  const query = async (sql) => {
+  const calls = [];
+  const query = async (sql, parameters) => {
+    calls.push({ sql, parameters });
     if (sql.includes("pii-protected-read:acceptance-state")) return state();
     if (sql.includes("pii-protected-outreach-read:people")) return [protectedPerson(keyConfig)];
     if (sql.includes("pii-protected-outreach-read:work-email")) return [protectedContact(keyConfig)];
@@ -156,6 +158,38 @@ test("employee workspace replaces person PII and follow-up assignee from protect
   assert.equal(result.displayName, "Synthetic Avery");
   assert.equal(result.workEmail, "avery.protected@example.test");
   assert.equal(result.followups[0].assignee, "Synthetic Protected Organizer");
+  const personLookup = calls.find((call) => call.sql.includes("pii-protected-outreach-read:people"));
+  const contactLookup = calls.find((call) => call.sql.includes("pii-protected-outreach-read:work-email"));
+  assert.deepEqual(personLookup.parameters, [organizationId, [personHandle()]]);
+  assert.deepEqual(contactLookup.parameters, [organizationId, viewerUserId, [personId]]);
+  assert.match(personLookup.sql, /ANY\(\$2::text\[\]\)/);
+  assert.match(contactLookup.sql, /contact\.person_id = ANY\(\$3::uuid\[\]\)/);
+});
+
+test("employee workspace remains handle-scoped when the organization exceeds 500 members", async () => {
+  const environment = env();
+  const keyConfig = getPiiKeyConfiguration(environment);
+  const query = async (sql, parameters) => {
+    if (sql.includes("pii-protected-read:acceptance-state")) return state();
+    if (sql.includes("pii-protected-outreach-read:people")) {
+      assert.deepEqual(parameters, [organizationId, [personHandle()]]);
+      return [protectedPerson(keyConfig)];
+    }
+    if (sql.includes("pii-protected-outreach-read:work-email")) {
+      assert.deepEqual(parameters, [organizationId, viewerUserId, [personId]]);
+      return [protectedContact(keyConfig)];
+    }
+    if (sql.includes("pii-protected-outreach-read:followup-assignees")) return [];
+    throw new Error("unexpected query");
+  };
+  const workspace = {
+    handle: personHandle(), displayName: "WRONG", membershipStatus: "member",
+    department: null, section: null, classification: null, workLocation: null,
+    workEmail: "wrong@example.test", assignmentRelationship: "authorized", activeAssignmentCount: 0,
+    campaignNames: [], actionReadiness: { posture: "not_recorded", actions: [] }, followups: [], recentEngagements: [],
+  };
+  const result = await hydrateOutreachWorkspaceFromProtectedPii(organizationId, viewerUserId, workspace, { query, env: environment, keyConfig });
+  assert.equal(result.displayName, "Synthetic Avery");
 });
 
 test("engagement recorder assignee labels come from protected user companions", async () => {

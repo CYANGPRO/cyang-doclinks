@@ -40,6 +40,7 @@ export type NormalizedDirectorySearch = {
 
 export type DirectoryPerson = {
   handle: string;
+  employeeReference: string;
   displayName: string;
   firstName: string;
   lastName: string;
@@ -71,6 +72,7 @@ export type DirectoryPage = {
 
 type DirectoryRow = {
   person_id: string | null;
+  employee_reference: number | string | null;
   preferred_name: string | null;
   first_name: string | null;
   last_name: string | null;
@@ -89,7 +91,7 @@ type DirectoryRow = {
   total_count: number | string;
 };
 
-const organizationWideRoles = new Set<Role>(["system_owner", "local_admin", "membership_data_manager", "cat_admin"]);
+const organizationWideRoles = new Set<Role>(["system_owner", "local_admin", "membership_data_manager", "cat_admin", "cat_lead"]);
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export class DirectoryAccessError extends Error {
@@ -179,11 +181,15 @@ export async function getDirectoryPage(context: WorkspaceContext, input: Directo
   const rows = await query<DirectoryRow>(`
     /* directory:keyset-page */
     WITH filtered_people AS (
-      SELECT person.id AS person_id, person.preferred_name, person.first_name, person.last_name,
+      SELECT person.id AS person_id, person.employee_reference, person.preferred_name, person.first_name, person.last_name,
         person.membership_status, person.department, person.section, person.classification,
-        person.work_location, person.hire_date, person.job_status,
+        COALESCE(NULLIF(trim(person.section), ''), person.work_location) AS work_location,
+        person.hire_date, person.job_status,
         primary_work_email.contact_value AS work_email,
-        contact_details.home_email, contact_details.work_phone, contact_details.cell_phone, contact_details.home_phone
+        primary_home_email.contact_value AS home_email,
+        primary_work_phone.contact_value AS work_phone,
+        primary_cell_phone.contact_value AS cell_phone,
+        primary_home_phone.contact_value AS home_phone
       FROM local801.people person
       LEFT JOIN LATERAL (
         SELECT contact.contact_value FROM local801.person_contact_methods contact
@@ -193,25 +199,47 @@ export async function getDirectoryPage(context: WorkspaceContext, input: Directo
         ORDER BY contact.created_at, contact.id LIMIT 1
       ) primary_work_email ON true
       LEFT JOIN LATERAL (
-        SELECT
-          max(contact.contact_value) FILTER (WHERE contact.contact_type = 'personal_email' AND contact.contact_label = 'home') AS home_email,
-          max(contact.contact_value) FILTER (WHERE contact.contact_type = 'phone' AND contact.contact_label = 'work') AS work_phone,
-          max(contact.contact_value) FILTER (WHERE contact.contact_type = 'phone' AND contact.contact_label = 'cell') AS cell_phone,
-          max(contact.contact_value) FILTER (WHERE contact.contact_type = 'phone' AND contact.contact_label = 'home') AS home_phone
-        FROM local801.person_contact_methods contact
+        SELECT contact.contact_value FROM local801.person_contact_methods contact
         WHERE contact.organization_id = $1 AND contact.person_id = person.id
-          AND contact.archived_at IS NULL ${contactConstraint}
-      ) contact_details ON true
+          AND contact.contact_type = 'personal_email' AND contact.contact_label = 'home'
+          AND contact.is_primary = true AND contact.archived_at IS NULL
+          ${contactConstraint}
+        ORDER BY contact.created_at, contact.id LIMIT 1
+      ) primary_home_email ON true
+      LEFT JOIN LATERAL (
+        SELECT contact.contact_value FROM local801.person_contact_methods contact
+        WHERE contact.organization_id = $1 AND contact.person_id = person.id
+          AND contact.contact_type = 'phone' AND (contact.contact_label = 'work' OR contact.contact_label IS NULL)
+          AND contact.is_primary = true AND contact.archived_at IS NULL
+          ${contactConstraint}
+        ORDER BY contact.created_at, contact.id LIMIT 1
+      ) primary_work_phone ON true
+      LEFT JOIN LATERAL (
+        SELECT contact.contact_value FROM local801.person_contact_methods contact
+        WHERE contact.organization_id = $1 AND contact.person_id = person.id
+          AND contact.contact_type = 'phone' AND contact.contact_label = 'cell'
+          AND contact.is_primary = true AND contact.archived_at IS NULL
+          ${contactConstraint}
+        ORDER BY contact.created_at, contact.id LIMIT 1
+      ) primary_cell_phone ON true
+      LEFT JOIN LATERAL (
+        SELECT contact.contact_value FROM local801.person_contact_methods contact
+        WHERE contact.organization_id = $1 AND contact.person_id = person.id
+          AND contact.contact_type = 'phone' AND contact.contact_label = 'home'
+          AND contact.is_primary = true AND contact.archived_at IS NULL
+          ${contactConstraint}
+        ORDER BY contact.created_at, contact.id LIMIT 1
+      ) primary_home_phone ON true
       WHERE person.organization_id = $1 AND person.archived_at IS NULL
         ${assignmentConstraint}
         AND ($3::text IS NULL OR person.first_name ILIKE $3 ESCAPE '\\' OR person.last_name ILIKE $3 ESCAPE '\\'
           OR person.preferred_name ILIKE $3 ESCAPE '\\' OR person.department ILIKE $3 ESCAPE '\\'
-          OR person.work_location ILIKE $3 ESCAPE '\\' OR person.classification ILIKE $3 ESCAPE '\\'
+          OR person.section ILIKE $3 ESCAPE '\\' OR person.work_location ILIKE $3 ESCAPE '\\' OR person.classification ILIKE $3 ESCAPE '\\'
           OR primary_work_email.contact_value ILIKE $3 ESCAPE '\\')
         AND ($7::text IS NULL OR person.membership_status = $7)
         AND ($8::text IS NULL OR person.department ILIKE $8 ESCAPE '\\')
         AND ($9::text IS NULL OR person.classification ILIKE $9 ESCAPE '\\')
-        AND ($10::text IS NULL OR person.work_location ILIKE $10 ESCAPE '\\')
+        AND ($10::text IS NULL OR COALESCE(NULLIF(trim(person.section), ''), person.work_location) ILIKE $10 ESCAPE '\\')
     ), page_rows AS (
       SELECT * FROM filtered_people person
       WHERE true ${cursorComparison}
@@ -232,15 +260,16 @@ export async function getDirectoryPage(context: WorkspaceContext, input: Directo
   const mayViewMembershipStatus = can(context.role, "viewPersonLevelReports") || can(context.role, "recordEngagement");
   const people = dataRows.map((row) => ({
     handle: outreachHandle(context.organizationId, row.person_id!),
-    displayName: row.preferred_name?.trim() || `${row.first_name} ${row.last_name}`,
+    employeeReference: `L801-${String(row.employee_reference).padStart(6, "0")}`,
+    displayName: `${row.first_name} ${row.last_name}`,
     firstName: row.first_name!, lastName: row.last_name!,
     membershipStatus: mayViewMembershipStatus ? membershipStatus(row.membership_status) : null,
     department: row.department, section: row.section, classification: row.classification,
     workLocation: row.work_location,
     hireDate: row.hire_date instanceof Date ? row.hire_date.toISOString().slice(0, 10) : row.hire_date?.slice(0, 10) ?? null,
     jobStatus: row.job_status,
-    workEmail: row.work_email, homeEmail: row.home_email,
-    workPhone: row.work_phone, cellPhone: row.cell_phone, homePhone: row.home_phone,
+    workEmail: row.work_email, homeEmail: row.home_email, workPhone: row.work_phone,
+    cellPhone: row.cell_phone, homePhone: row.home_phone,
   }));
   return {
     people, term: normalized.term, pageSize: normalized.pageSize, total,

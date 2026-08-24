@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-        <string>Local 801 Engage</string>
+        <string>Engaging Local 801</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -24,6 +24,38 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>PDF document</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array><string>com.adobe.pdf</string></array>
+		</dict>
+	</array>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<false/>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>NSCameraUsageDescription</key>
+	<string>Scan paper documents and trusted Local 801 QR links for secure intake.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Unlock the signed Engaging Local 801 application and confirm sensitive actions.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Add generic Local 801 work reminders without member details.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Add generic Local 801 work reminders without member details.</string>
+	<key>UIBackgroundModes</key>
+	<array><string>remote-notification</string></array>
+	<key>WKAppBoundDomains</key>
+	<array>
+		<string>cat.cyang.io</string>
+		<string>login.microsoftonline.com</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

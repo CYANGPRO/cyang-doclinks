@@ -5,6 +5,8 @@ import { FollowupUpdateError, updateOutreachFollowup } from "@/lib/follow-up-man
 import { operationalRuntimeEnabled } from "@/lib/operational-runtime";
 import { hasExactSameOrigin } from "@/lib/request-security";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
+import { enforceWorkspaceRateLimit, RateLimitError } from "@/lib/rate-limit";
+import { rateLimitResponse } from "@/lib/rate-limit-response";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -71,9 +73,11 @@ export async function PUT(request: Request, { params }: RouteContext) {
       params,
       resolveWorkspaceContext(authorized.auth.user),
     ]);
+    await enforceWorkspaceRateLimit(context, "mutation");
     const result = await completeOutreachFollowup(context, { personHandle: handle, followupHandle });
     return json({ followup: "ok", ...result });
   } catch (error) {
+    if (error instanceof RateLimitError) return rateLimitResponse(error);
     if (error instanceof EngagementWriteError) return json({ error: error.code, message: error.message }, error.status);
     return json({ error: "FOLLOWUP_UNAVAILABLE", message: "The follow-up could not be completed safely." }, 503);
   }
@@ -89,6 +93,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       readJson(request),
       resolveWorkspaceContext(authorized.auth.user),
     ]);
+    await enforceWorkspaceRateLimit(context, "mutation");
     const result = await updateOutreachFollowup(context, {
       personHandle: handle,
       followupHandle,
@@ -97,6 +102,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     });
     return json({ followup: "ok", ...result });
   } catch (error) {
+    if (error instanceof RateLimitError) return rateLimitResponse(error);
     if (error instanceof FollowupUpdateError) return json({ error: error.code, message: error.message }, error.status);
     return json({ error: "FOLLOWUP_UNAVAILABLE", message: "The follow-up could not be updated safely." }, 503);
   }

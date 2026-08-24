@@ -82,9 +82,9 @@ test("system owners can assign all roles while local administrators can assign o
 test("provisioning creates a passwordless application user and one role atomically with audit", async () => {
   const state = deps({ query: async (sql, parameters) => {
     if (sql.includes("SELECT event_hash")) return [];
-    assert.match(sql, /SELECT EXISTS/);
+    assert.match(sql, /SELECT 1/);
     assert.deepEqual(parameters, [organizationId, "new.user@example.test"]);
-    return [{ exists: false }];
+    return [];
   } });
   await provisionTeamMember(context(), { email: " New.User@Example.Test ", displayName: " New  User ", role: "cat_member" }, state.values);
   assert.equal(state.transactions.length, 1);
@@ -97,6 +97,20 @@ test("provisioning creates a passwordless application user and one role atomical
   assert.deepEqual(mutation.parameters, [organizationId, actorId, "system_owner", newUserId, "new.user@example.test", "cat_member", "New User"]);
   assert.doesNotMatch(mutation.sql, /password|totp|secret/i);
   assert.match(state.transactions[0][1].sql, /local801\.audit_events/);
+});
+
+test("provisioning rejects an existing protected email before attempting another user insert", async () => {
+  let transactions = 0;
+  await assert.rejects(
+    provisionTeamMember(context(), { email: "existing@example.test", displayName: "Existing User", role: "cat_lead" }, {
+      query: async () => [{ found: true }],
+      transaction: async () => { transactions += 1; },
+    }),
+    (error) => error instanceof TeamAccessError
+      && error.code === "EMAIL_EXISTS"
+      && /Retry onboarding/.test(error.message),
+  );
+  assert.equal(transactions, 0);
 });
 
 test("local administrator provisioning cannot escalate to admin or owner", async () => {
@@ -188,9 +202,8 @@ test("Team APIs are same-origin, bounded, production-capable, and server-authori
   assert.match(updateRoute, /changeTeamMemberRole/);
   assert.match(updateRoute, /setTeamMemberActive/);
   assert.match(updateRoute, /revokeTeamMemberSessions/);
-  assert.match(page, /Identity and MFA are supplied by the configured production OIDC provider/);
-  assert.match(page, /writeSecuritySignal\("error", "authorization\.denied"/);
-  assert.match(page, /reportTeamReadFailure\("protected_pii", error\)/);
+  assert.match(page, /CAT never creates or emails a password/);
+  assert.match(page, /grants access to the Entra enterprise application/);
   assert.match(page, /System Owner required/);
-  assert.match(controls, /Revoke all sessions/);
+  assert.match(controls, /Sign out everywhere/);
 });

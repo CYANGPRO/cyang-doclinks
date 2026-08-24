@@ -1,0 +1,192 @@
+.campaign-operations-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.campaign-operation {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  overflow: clip;
+}
+
+.campaign-operation > summary {
+  cursor: pointer;
+  font-weight: 750;
+  padding: 1rem;
+}
+
+.campaign-operation-content {
+  border-top: 1px solid var(--border);
+  padding: 1rem;
+}
+
+.campaign-bulk-criteria,
+.campaign-operation-filters {
+  align-items: end;
+}
+
+.confirmation-panel {
+  border: 2px solid var(--brand-blue);
+  border-radius: var(--radius-lg);
+  background: var(--brand-blue-soft);
+  padding: 1rem;
+}
+
+.confirmation-panel h3 {
+  margin-top: 0;
+}
+
+.compact-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: .75rem;
+  margin: 1rem 0;
+}
+
+.compact-facts div {
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  padding: .75rem;
+}
+
+.compact-facts dt {
+  color: var(--text-muted);
+  font-size: .8rem;
+}
+
+.compact-facts dd {
+  margin: .2rem 0 0;
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.imports-page-size {
+  align-items: end;
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+  margin-bottom: var(--space-4);
+}
+
+.imports-page-size .field { min-width: 150px; }
+
+.account-menu { position: relative; }
+
+.account-menu-trigger {
+  align-items: center;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: .74rem;
+  font-weight: 750;
+  gap: 7px;
+  min-height: 40px;
+  padding: 8px 11px;
+}
+
+.account-menu-trigger[aria-expanded="true"],
+.account-menu-trigger:hover { background: var(--brand-blue-soft); border-color: var(--brand-blue); color: var(--brand-blue); }
+.account-menu-glyph { color: var(--brand-burgundy); font-size: .55rem; }
+.account-menu-role { max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.account-menu-panel {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+  display: grid;
+  gap: 14px;
+  min-width: 260px;
+  padding: 16px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 90;
+}
+
+.account-menu-heading { color: var(--brand-navy-deep); font-weight: 800; }
+.account-menu-summary { display: grid; font-size: .78rem; gap: 3px; }
+.account-menu-summary span { color: var(--text-muted); }
+.account-menu-summary strong { color: var(--text); font-size: .9rem; }
+.account-menu-action { min-height: 44px; width: 100%; }
+
+.policy-acknowledgement-page { max-width: 800px; }
+.policy-list { display: grid; gap: 10px; margin: 0 0 var(--space-5); padding-left: 1.35rem; }
+.policy-form { border-top: 1px solid var(--border); display: grid; gap: var(--space-4); padding-top: var(--space-4); }
+.policy-confirmation { align-items: flex-start; cursor: pointer; display: flex; font-weight: 700; gap: 10px; line-height: 1.45; }
+.policy-confirmation input { flex: 0 0 auto; height: 20px; margin-top: 1px; width: 20px; }
+.policy-form .button { justify-self: start; }
+
+@media (min-width: 920px) {
+  .campaign-operations-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .campaign-operation > summary,
+  .campaign-operation-content,
+  .confirmation-panel {
+    padding: .85rem;
+  }
+
+  .compact-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .imports-page-size { align-items: stretch; display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+  .account-menu-role { display: none; }
+  .account-menu-trigger { min-height: 44px; min-width: 44px; }
+  .account-menu-panel { min-width: min(290px, calc(100vw - 24px)); right: -2px; }
+  .topbar-actions .account-menu-panel .button { display: inline-flex; }
+  .policy-form .button { justify-self: stretch; width: 100%; }
+}
+
+@media (pointer: coarse) {
+  .account-menu-trigger,
+  .account-menu-action { min-height: 48px; }
+}
+
+/* Clear recovery guidance for authentication, authorization, and action failures. */
+.sign-in-access-card { border-top: 4px solid var(--brand-blue); }
+.sign-in-checklist { display: grid; gap: 12px; list-style: none; margin: 0; padding: 0; }
+.sign-in-checklist li { align-items: start; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: var(--radius-md); display: grid; gap: 4px; grid-template-columns: minmax(150px, .65fr) minmax(0, 1.35fr); padding: 13px 14px; }
+.sign-in-checklist strong { color: var(--brand-navy-deep); }
+.sign-in-checklist span { color: var(--text-muted); }
+.role-access-list { display: grid; gap: 0; }
+.role-access-list > div { border-top: 1px solid var(--border); display: grid; gap: 8px; grid-template-columns: minmax(180px, .7fr) minmax(0, 1.3fr); padding: 12px 0; }
+.role-access-list > div:first-child { border-top: 0; padding-top: 0; }
+.role-access-list p { color: var(--text-muted); margin: 0; }
+.sign-in-help-list { display: grid; gap: 9px; margin: 0; padding-left: 20px; }
+
+.problem-dialog { background: #fff; border: 0; border-radius: 16px; box-shadow: 0 24px 70px rgb(7 32 58 / 28%); color: var(--text); margin: auto; max-height: min(88vh, 760px); max-width: min(620px, calc(100vw - 28px)); overflow: auto; padding: 0; width: 100%; }
+.problem-dialog::backdrop { background: rgb(7 32 58 / 64%); backdrop-filter: blur(2px); }
+.problem-dialog-accent { background: var(--danger); height: 7px; }
+.problem-dialog-accent.problem-connectivity { background: var(--warning); }
+.problem-dialog-accent.problem-conflict,
+.problem-dialog-accent.problem-validation,
+.problem-dialog-accent.problem-file { background: var(--brand-burgundy); }
+.problem-dialog-body { padding: clamp(22px, 4vw, 34px); }
+.problem-dialog-body h2 { color: var(--brand-navy-deep); font-size: clamp(1.45rem, 4vw, 2rem); line-height: 1.15; margin: 4px 0 10px; }
+.problem-dialog-body h3 { color: var(--brand-navy-deep); font-size: 1rem; margin: 22px 0 8px; }
+.problem-dialog-body > p { line-height: 1.55; }
+.problem-dialog-kicker { color: var(--brand-burgundy); font-size: .75rem; font-weight: 800; letter-spacing: .08em; margin: 0; text-transform: uppercase; }
+.problem-dialog-reference { background: var(--surface-subtle); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; }
+.problem-dialog-safety { color: var(--text-muted); font-size: .8rem; }
+.problem-dialog .page-actions { justify-content: flex-end; margin-top: 22px; }
+
+.global-error-page { align-items: center; background: var(--brand-navy-deep, #082b49); display: flex; justify-content: center; min-height: 100vh; padding: 24px; }
+.global-error-card { background: #fff; border-radius: 16px; box-shadow: 0 24px 70px rgb(0 0 0 / 25%); max-width: 680px; padding: clamp(24px, 5vw, 44px); }
+.global-error-card h1 { color: var(--brand-navy-deep, #082b49); margin: 6px 0 14px; }
+.global-error-card h2 { font-size: 1rem; margin-top: 24px; }
+
+@media (max-width: 600px) {
+  .sign-in-checklist li,
+  .role-access-list > div { grid-template-columns: 1fr; }
+  .problem-dialog .page-actions { display: grid; }
+  .problem-dialog .button { width: 100%; }
+}

@@ -167,6 +167,7 @@ test("existing route keeps PUT completion and adds protected PATCH editing", () 
   assert.match(route, /requirePreviewUser\("recordEngagement"\)/);
   assert.match(route, /MAX_JSON_BYTES = 4_096/);
   assert.match(route, /operationalRuntimeEnabled\(\)/);
+  assert.match(route, /enforceWorkspaceRateLimit\(context, "mutation"\)/);
 });
 
 test("edit client only sends changed fields and uses PATCH", () => {
@@ -178,9 +179,9 @@ test("edit client only sends changed fields and uses PATCH", () => {
 });
 
 test("Follow-ups page renders edit controls only for open items", () => {
-  assert.match(page, /item\.status === "open" \? <FollowupEditForm/);
-  assert.match(page, /Completed follow-ups are read-only in this view/);
-  assert.match(page, /Changes are audited/);
+  assert.match(page, /item\.status === "open" \? <DisclosureCard[\s\S]*<FollowupEditForm/);
+  assert.match(page, /Completed work remains available for 14 days/);
+  assert.match(page, /Changes are recorded in the audit log/);
 });
 
 test("reassignment and due-date change are recorded in a durable audit event", () => {

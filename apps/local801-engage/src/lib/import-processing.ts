@@ -10,11 +10,12 @@ export const importProcessingStages = [
   "preparing_review",
   "ready_for_review",
   "failed",
+  "cancelled",
 ] as const;
 
 export type ImportProcessingStage = typeof importProcessingStages[number];
 
-export const importProcessingJobStates = ["queued", "running", "succeeded", "failed"] as const;
+export const importProcessingJobStates = ["queued", "running", "succeeded", "failed", "cancelled"] as const;
 export type ImportProcessingJobState = typeof importProcessingJobStates[number];
 
 export const importProcessingSafeErrorCodes = {
@@ -25,6 +26,7 @@ export const importProcessingSafeErrorCodes = {
   MALWARE_REJECTED: "terminal_source",
   UNSUPPORTED_FILE: "terminal_source",
   MALFORMED_FILE: "terminal_source",
+  WORKBOOK_STRUCTURE_TOO_LARGE: "terminal_source",
   FILE_TOO_LARGE: "terminal_source",
   ROW_LIMIT_EXCEEDED: "terminal_source",
   SOURCE_FILE_MISSING: "terminal_source",
@@ -69,6 +71,7 @@ const stageLabels: Record<ImportProcessingStage, string> = {
   preparing_review: "Preparing review",
   ready_for_review: "Ready for review",
   failed: "Failed",
+  cancelled: "Cancelled",
 };
 
 const safeFailureMessages: Record<ImportProcessingSafeErrorCode, string> = {
@@ -77,8 +80,9 @@ const safeFailureMessages: Record<ImportProcessingSafeErrorCode, string> = {
   SCANNER_TEMPORARY_FAILURE: "The source scanner was temporarily unavailable. Processing can be retried safely.",
   WORKFLOW_TEMPORARY_FAILURE: "Background processing was temporarily unavailable. Processing can be retried safely.",
   MALWARE_REJECTED: "The source was rejected by malware scanning. Upload a safe replacement file.",
-  UNSUPPORTED_FILE: "This durable worker currently accepts CSV files only.",
-  MALFORMED_FILE: "The source CSV could not be parsed safely.",
+  UNSUPPORTED_FILE: "This durable worker accepts CSV and XLSX files only.",
+  MALFORMED_FILE: "The source file could not be parsed safely.",
+  WORKBOOK_STRUCTURE_TOO_LARGE: "The workbook contains an oversized worksheet or embedded cache. In Excel, copy the used rows into a new workbook without pivot caches or unused formatted rows, save it as .xlsx, and upload the cleaned copy.",
   FILE_TOO_LARGE: "The source exceeds the configured file-size limit.",
   ROW_LIMIT_EXCEEDED: "The source exceeds the configured row limit.",
   SOURCE_FILE_MISSING: "The encrypted source file is missing.",
@@ -92,22 +96,24 @@ const safeFailureMessages: Record<ImportProcessingSafeErrorCode, string> = {
 };
 
 const allowedNextStages: Record<ImportProcessingStage, readonly ImportProcessingStage[]> = {
-  uploaded: ["queued", "failed"],
-  queued: ["scanning", "failed"],
-  scanning: ["parsing", "failed"],
-  parsing: ["validating", "failed"],
-  validating: ["matching", "failed"],
-  matching: ["preparing_review", "failed"],
-  preparing_review: ["ready_for_review", "failed"],
+  uploaded: ["queued", "failed", "cancelled"],
+  queued: ["scanning", "failed", "cancelled"],
+  scanning: ["parsing", "failed", "cancelled"],
+  parsing: ["validating", "failed", "cancelled"],
+  validating: ["matching", "failed", "cancelled"],
+  matching: ["preparing_review", "failed", "cancelled"],
+  preparing_review: ["ready_for_review", "failed", "cancelled"],
   ready_for_review: [],
   failed: ["queued"],
+  cancelled: ["queued"],
 };
 
 const allowedNextJobStates: Record<ImportProcessingJobState, readonly ImportProcessingJobState[]> = {
-  queued: ["running", "failed"],
-  running: ["succeeded", "failed"],
+  queued: ["running", "failed", "cancelled"],
+  running: ["succeeded", "failed", "cancelled"],
   succeeded: [],
   failed: ["queued"],
+  cancelled: ["queued"],
 };
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -222,5 +228,5 @@ export function importProcessingStatus(progress: ImportProcessingProgress) {
 }
 
 export function isTerminalImportProcessingStage(stage: ImportProcessingStage) {
-  return stage === "ready_for_review" || stage === "failed";
+  return stage === "ready_for_review" || stage === "failed" || stage === "cancelled";
 }

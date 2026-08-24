@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertBanner, SectionCard, StatusBadge } from "@/components/DesignSystem";
+import { AlertBanner, SectionCard } from "@/components/DesignSystem";
 
 type ImportReviewSummary = {
   batchId: string;
@@ -26,7 +26,7 @@ type DurableAcceptance = {
   statusLocation: string;
 };
 
-export function ImportPreviewForm({ durablePreviewAvailable = false }: { durablePreviewAvailable?: boolean }) {
+export function ImportPreviewForm({ previewMode }: { previewMode: boolean }) {
   const router = useRouter();
   const [summary, setSummary] = useState<ImportReviewSummary | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -46,7 +46,7 @@ export function ImportPreviewForm({ durablePreviewAvailable = false }: { durable
       });
       const body = await response.json();
       if (!response.ok) {
-        setMessage(body.message ?? "Import validation failed. No roster changes were made.");
+        setMessage(body.message ?? "The file could not be validated. No roster changes were made.");
         return;
       }
       if ((body as DurableAcceptance).accepted) {
@@ -68,7 +68,7 @@ export function ImportPreviewForm({ durablePreviewAvailable = false }: { durable
     try {
       const response = await fetch(`/api/imports/${summary.batchId}/errors.csv`);
       if (!response.ok) {
-        setMessage("The error file is temporarily unavailable. The import review remains unchanged.");
+        setMessage("The error file is temporarily unavailable. Your import review has not changed.");
         return;
       }
       const blob = await response.blob();
@@ -79,42 +79,78 @@ export function ImportPreviewForm({ durablePreviewAvailable = false }: { durable
       anchor.click();
       URL.revokeObjectURL(url);
     } catch {
-      setMessage("The error file is temporarily unavailable. The import review remains unchanged.");
+      setMessage("The error file is temporarily unavailable. Your import review has not changed.");
     }
   }
 
   return (
-    <SectionCard title="Upload for persistent review" description="Upload an authorized roster workbook for encrypted, malware-scanned review before any approved roster changes." badge={<StatusBadge tone="preview">No automatic roster changes</StatusBadge>}>
-      <AlertBanner title="Review before execution">Uploads are scanned, encrypted, and retained for exception review. No authoritative roster change occurs until an authorized approver confirms the reviewed execution set.</AlertBanner>
-      <form className="grid" onSubmit={submit}>
-        <div className="field">
-          <label htmlFor="file">Workbook or CSV</label>
-          <input id="file" name="file" type="file" accept=".xlsx,.csv" required />
+    <SectionCard
+      title="Upload data"
+      description="Choose a CSV or Excel roster file. The app scans and validates it, then requires review before any roster changes can be applied."
+    >
+      {previewMode ? (
+        <AlertBanner title="Preview workspace · generated test files only" tone="preview">
+          Preview accepts generated identities ending in example.test only. Files must pass the malware scan before they are opened and processed.
+        </AlertBanner>
+      ) : (
+        <AlertBanner title="Authorized Local 801 files" tone="info">
+          Production accepts authorized Local 801 CSV and Excel files. Every upload is malware-scanned, validated, and held for approval before data changes are applied.
+        </AlertBanner>
+      )}
+      <form className="stack" onSubmit={submit}>
+        <div className="form-grid">
+          <div className="field">
+            <label htmlFor="file">Workbook or CSV</label>
+            <input id="file" name="file" type="file" accept=".xlsx,.csv" required />
+            <span className="field-help">Upload the source file as received. It will be scanned and validated before review.</span>
+          </div>
+          <div className="field">
+            <label htmlFor="importKind">What kind of file is this?</label>
+            <select id="importKind" name="importKind" defaultValue="current_roster">
+              <option value="current_roster">Current roster</option>
+              <option value="new_hires">New hires</option>
+              <option value="recent_hires">Hired within the last two weeks</option>
+              <option value="membership_additions">Membership additions</option>
+              <option value="membership_drops">Membership drops</option>
+              <option value="legacy_cat">Legacy CAT workbook</option>
+            </select>
+            <span className="field-help">Choose the source purpose so the right validation rules are used.</span>
+          </div>
         </div>
-        <div className="field">
-          <label htmlFor="processingMode">Processing mode</label>
-          <select id="processingMode" name="processingMode" defaultValue="synchronous">
-            <option value="synchronous">Encrypted protected review</option>
-            {durablePreviewAvailable ? <option value="durable_preview">Durable Preview worker · synthetic CSV only</option> : null}
-          </select>
+
+        {previewMode ? <details className="inline-disclosure import-preview-options">
+          <summary>Preview test options</summary>
+          <div className="form-grid">
+            <div className="field">
+              <label htmlFor="processingMode">Processing</label>
+              <select id="processingMode" name="processingMode" defaultValue="durable">
+                <option value="durable">Secure background processing</option>
+                <option value="synchronous">Legacy fallback · pre-cutover only</option>
+              </select>
+              <span className="field-help">Keep standard Preview processing unless you are specifically testing the older pre-cutover path.</span>
+            </div>
+          </div>
+        </details> : <input name="processingMode" type="hidden" value="durable" />}
+
+        <div className="form-actions">
+          <button className="button" disabled={busy} type="submit">
+            {busy ? "Uploading…" : "Upload for review"}
+          </button>
         </div>
-        <div className="field">
-          <label htmlFor="importKind">Source type</label>
-          <select id="importKind" name="importKind" defaultValue="current_roster">
-            <option value="current_roster">Current roster</option>
-            <option value="new_hires">New hires</option>
-            <option value="membership_additions">Membership additions</option>
-            <option value="membership_drops">Membership drops</option>
-            <option value="legacy_cat">Legacy CAT workbook</option>
-          </select>
-        </div>
-        <button className="button" disabled={busy} type="submit">
-          {busy ? "Uploading securely..." : "Upload for review"}
-        </button>
       </form>
+      <div className="section compact-list import-source-guidance">
+        <h3>Supported source datasets</h3>
+        <p className="muted">The importer recognizes the column names used by the current Local 801 reports, including preferred name, MAPE hire date, department, section, classification, office or work location, work email, and personal email.</p>
+        <ul>
+          <li><strong>Membership and personal-email reports:</strong> match people by work email and stage supported profile fields for review.</li>
+          <li><strong>New hires and hired within the last two weeks:</strong> create hire-date review records and use the batch effective date only when a row has no valid hire date.</li>
+          <li><strong>CAT assignment workbooks:</strong> remain review-only; CAT/LCAT assignment decisions are not applied automatically.</li>
+          <li><strong>Phone and address columns:</strong> stay in the encrypted source file and are not applied automatically.</li>
+        </ul>
+      </div>
       {message ? <p className="form-message" role="alert">{message}</p> : null}
       {summary ? (
-        <div className="section">
+        <div className="section import-result">
           <div className="grid metrics-grid">
             <div className="metric import-summary">
               <div className="metric-label">Rows</div>
@@ -122,19 +158,19 @@ export function ImportPreviewForm({ durablePreviewAvailable = false }: { durable
               <div className="metric-foot">{summary.sourceFilename}</div>
             </div>
             <div className="metric import-summary">
-              <div className="metric-label">Included</div>
+              <div className="metric-label">Ready for review</div>
               <div className="metric-value">{summary.includedRows}</div>
-              <div className="metric-foot">Persisted review rows</div>
+              <div className="metric-foot">Rows kept for review</div>
             </div>
             <div className="metric import-summary">
               <div className="metric-label">Rejected</div>
               <div className="metric-value">{summary.rejectedRows}</div>
-              <div className="metric-foot">Persisted validation errors</div>
+              <div className="metric-foot">Rows with validation errors</div>
             </div>
             <div className="metric import-summary">
-              <div className="metric-label">Validation errors</div>
+              <div className="metric-label">Errors</div>
               <div className="metric-value">{summary.errorCount}</div>
-              <div className="metric-foot">Requires review</div>
+              <div className="metric-foot">Needs review</div>
             </div>
           </div>
           <div className="toolbar">
@@ -143,12 +179,12 @@ export function ImportPreviewForm({ durablePreviewAvailable = false }: { durable
               Download errors
             </button>
           </div>
-          <div className="section">
+          <div className="section compact-list">
             {summary.previewRows.slice(0, 8).map((row) => (
               <div className="status-row" key={`${row.sheetName}-${row.rowNumber}`}>
                 <div>
                   <strong>{row.sheetName} · Row {row.rowNumber}</strong>
-                  <div className="muted">Normalized row retained for review</div>
+                  <div className="muted">Kept for review</div>
                 </div>
                 <span className="badge">{row.state}</span>
               </div>

@@ -8,6 +8,8 @@ import {
 import { operationalRuntimeEnabled } from "@/lib/operational-runtime";
 import { hasExactSameOrigin } from "@/lib/request-security";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
+import { enforceWorkspaceRateLimit, RateLimitError } from "@/lib/rate-limit";
+import { rateLimitResponse } from "@/lib/rate-limit-response";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -47,11 +49,13 @@ export async function POST(request: Request, { params }: RouteContext) {
 
   try {
     const [{ handle }, body, context] = await Promise.all([params, readJson(request), resolveWorkspaceContext(auth.user)]);
+    await enforceWorkspaceRateLimit(context, "mutation");
     const result = body.posture === "declines_all"
       ? await recordOutreachActionPosture(context, { personHandle: handle, posture: body.posture, engagementHandle: body.engagementHandle })
       : await recordOutreachActionResponse(context, { personHandle: handle, actionHandle: body.actionHandle, response: body.response, engagementHandle: body.engagementHandle });
     return json({ actionReadiness: "ok", ...result });
   } catch (error) {
+    if (error instanceof RateLimitError) return rateLimitResponse(error);
     if (error instanceof EngagementWriteError) return json({ error: error.code, message: error.message }, error.status);
     return json({ error: "ACTION_READINESS_UNAVAILABLE", message: "Action Readiness could not be recorded safely." }, 503);
   }

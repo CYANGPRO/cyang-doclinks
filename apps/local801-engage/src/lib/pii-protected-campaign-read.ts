@@ -4,6 +4,8 @@ import { createHash } from "node:crypto";
 import type { CampaignManagementOptions } from "./campaign-management.ts";
 import type { CampaignPopulationCandidate } from "./campaign-population-management.ts";
 import type { CampaignPopulationPerson } from "./campaigns.ts";
+import type { CampaignPopulationFilters } from "./campaigns.ts";
+import type { CampaignOrganizerProgress } from "./campaigns.ts";
 import { queryLocal801, type DatabaseQuery } from "./db.ts";
 import {
   decryptPiiField,
@@ -51,6 +53,7 @@ export type CampaignPopulationPageForProtectedRead = {
   hasNext: boolean;
   nextCursor: string | null;
   pageSize: number;
+  filters: CampaignPopulationFilters;
 };
 
 export type CampaignCandidatesForProtectedRead = {
@@ -62,6 +65,7 @@ export type ProtectedCampaignDetailBundle = {
   population: CampaignPopulationPageForProtectedRead;
   options: CampaignManagementOptions;
   candidates: CampaignCandidatesForProtectedRead | null;
+  organizerProgress: CampaignOrganizerProgress[];
 };
 
 function blocked(code: string, message: string): never {
@@ -146,30 +150,32 @@ export async function hydrateCampaignDetailFromProtectedPii(
   const keyConfig = dependencies.keyConfig ?? getPiiKeyConfiguration(env);
   await assertPiiProtectedReadState(organizationId, query, mode);
 
-  const [people, users, assignments] = await Promise.all([
+  const requestedPersonHandles = [...new Set([
+    ...bundle.population.people.map((person) => person.personHandle),
+    ...(bundle.candidates?.candidates.map((candidate) => candidate.personHandle) ?? []),
+  ])];
+  const requestedPopulationHandles = [...new Set(bundle.population.people.map((person) => person.personHandle))];
+  const [people, assignments] = await Promise.all([
     query<ProtectedPersonRow>(`
       /* pii-protected-campaign-read:people */
+      WITH requested AS (
+        SELECT value.handle FROM jsonb_to_recordset($2::text::jsonb) AS value(handle text)
+      )
       SELECT person_id::text,
         first_name_encrypted_payload, first_name_encryption_key_version, first_name_encryption_format_version,
         last_name_encrypted_payload, last_name_encryption_key_version, last_name_encryption_format_version,
         preferred_name_encrypted_payload, preferred_name_encryption_key_version, preferred_name_encryption_format_version
-      FROM local801.person_pii
-      WHERE organization_id = $1::uuid
+      FROM local801.person_pii protected
+      JOIN requested ON requested.handle = encode(public.digest($1::text || ':' || protected.person_id::text, 'sha256'), 'hex')
+      WHERE protected.organization_id = $1::uuid
       ORDER BY person_id
       LIMIT ${PREVIEW_ROW_LIMIT + 1}
-    `, [organizationId]),
-    query<ProtectedUserRow>(`
-      /* pii-protected-campaign-read:users */
-      SELECT user_id::text,
-        display_name_encrypted_payload, display_name_encryption_key_version, display_name_encryption_format_version
-      FROM local801.user_pii
-      WHERE organization_id = $1::uuid
-      ORDER BY user_id
-      LIMIT ${PREVIEW_ROW_LIMIT + 1}
-    `, [organizationId]),
+    `, [organizationId, JSON.stringify(requestedPersonHandles.map((handle) => ({ handle })))]),
     query<CampaignAssignmentRow>(`
       /* pii-protected-campaign-read:latest-assignees */
-      WITH selected_campaign AS (
+      WITH requested AS (
+        SELECT value.handle FROM jsonb_to_recordset($3::text::jsonb) AS value(handle text)
+      ), selected_campaign AS (
         SELECT campaign.id
         FROM local801.outreach_campaigns campaign
         WHERE campaign.organization_id = $1::uuid
@@ -183,6 +189,10 @@ export async function hydrateCampaignDetailFromProtectedPii(
           assignment.primary_user_id
         FROM local801.engagement_assignments assignment
         JOIN selected_campaign campaign ON campaign.id = assignment.campaign_id
+        JOIN local801.people person
+          ON person.organization_id = $1::uuid AND person.id = assignment.person_id
+        JOIN requested
+          ON requested.handle = encode(public.digest($1::text || ':' || person.id::text, 'sha256'), 'hex')
         WHERE assignment.organization_id = $1::uuid
           AND assignment.archived_at IS NULL
         ORDER BY assignment.person_id, assignment.created_at DESC, assignment.id DESC
@@ -196,8 +206,28 @@ export async function hydrateCampaignDetailFromProtectedPii(
        AND active_user.deactivated_at IS NULL
       ORDER BY latest.person_id
       LIMIT ${PREVIEW_ROW_LIMIT + 1}
-    `, [organizationId, campaignHandle]),
+    `, [organizationId, campaignHandle, JSON.stringify(requestedPopulationHandles.map((handle) => ({ handle })))]),
   ]);
+
+  const requestedUserHandles = [...new Set([
+    ...bundle.options.assignees.map((option) => option.handle),
+    ...bundle.organizerProgress.map((item) => item.assigneeHandle),
+    ...assignments.filter((assignment) => assignment.user_id).map((assignment) => userHandle(organizationId, assignment.user_id!)),
+  ])];
+  const users = await query<ProtectedUserRow>(`
+    /* pii-protected-campaign-read:users */
+    WITH requested AS (
+      SELECT value.handle FROM jsonb_to_recordset($2::text::jsonb) AS value(handle text)
+    )
+    SELECT protected.user_id::text,
+      protected.display_name_encrypted_payload, protected.display_name_encryption_key_version, protected.display_name_encryption_format_version
+    FROM local801.user_pii protected
+    JOIN requested
+      ON requested.handle = encode(public.digest('user:' || $1::text || ':' || protected.user_id::text, 'sha256'), 'hex')
+    WHERE protected.organization_id = $1::uuid
+    ORDER BY protected.user_id
+    LIMIT ${PREVIEW_ROW_LIMIT + 1}
+  `, [organizationId, JSON.stringify(requestedUserHandles.map((handle) => ({ handle })))]);
 
   if (people.length > PREVIEW_ROW_LIMIT || users.length > PREVIEW_ROW_LIMIT || assignments.length > PREVIEW_ROW_LIMIT) {
     blocked("PREVIEW_BOUND_EXCEEDED", "Protected Campaign read exceeded its bounded row limit.");
@@ -251,5 +281,11 @@ export async function hydrateCampaignDetailFromProtectedPii(
     }),
   } : null;
 
-  return { population, options, candidates };
+  const organizerProgress = bundle.organizerProgress.map((item) => {
+    const protectedUser = usersByHandle.get(item.assigneeHandle);
+    if (!protectedUser) blocked("COMPANION_MISSING", "A campaign progress organizer is missing its protected PII companion.");
+    return { ...item, assigneeName: decryptUserDisplayName(protectedUser, organizationId, keyConfig) };
+  });
+
+  return { population, options, candidates, organizerProgress };
 }

@@ -53,7 +53,7 @@ export function FollowupEditForm({
       payload.assigneeHandle = assigneeHandle;
     }
     if (Object.keys(payload).length === 0) {
-      setError("Change the due date or CAT organizer before saving.");
+      setError("Change the due date or organizer before saving.");
       return;
     }
 
@@ -69,51 +69,53 @@ export function FollowupEditForm({
       );
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
-        setError(typeof body.message === "string" ? body.message : "The follow-up could not be updated.");
+        setError(typeof body.message === "string" ? body.message : "We couldn’t update the follow-up.");
         return;
       }
       setMessage("Follow-up updated.");
       router.refresh();
     } catch {
-      setError("The follow-up could not be updated. Try again.");
+      setError("We couldn’t update the follow-up. Try again.");
     } finally {
       setBusy(false);
     }
   }
 
-  return <details className="section-card">
-    <summary><strong>Reschedule or reassign</strong></summary>
-    <div className="stack" style={{ marginTop: 12 }}>
-      <div className="field">
-        <label htmlFor={`followup-due-${followupHandle}`}>Due date and time</label>
-        <input
-          id={`followup-due-${followupHandle}`}
-          type="datetime-local"
-          value={dueValue}
-          onChange={(event) => setDueValue(event.target.value)}
-          disabled={busy}
-        />
+  return <details className="section-card disclosure-card">
+    <summary><strong>Reschedule or reassign</strong><span className="disclosure-hint">Change the due time or organizer</span></summary>
+    <div className="stack disclosure-content">
+      <div className="form-grid">
+        <div className="field">
+          <label htmlFor={`followup-due-${followupHandle}`}>Due date and time</label>
+          <input
+            id={`followup-due-${followupHandle}`}
+            type="datetime-local"
+            value={dueValue}
+            onChange={(event) => setDueValue(event.target.value)}
+            disabled={busy}
+          />
+        </div>
+
+        <div className="field">
+          <label htmlFor={`followup-assignee-${followupHandle}`}>Assign to</label>
+          <select
+            id={`followup-assignee-${followupHandle}`}
+            value={assigneeHandle}
+            onChange={(event) => setAssigneeHandle(event.target.value)}
+            disabled={busy || !canReassign}
+          >
+            {assigneeOptions.map((option) => <option key={option.handle} value={option.handle}>{option.label}</option>)}
+          </select>
+          {!canReassign ? <span className="field-help">There isn’t another organizer you can assign this follow-up to.</span> : null}
+        </div>
       </div>
 
-      <div className="field">
-        <label htmlFor={`followup-assignee-${followupHandle}`}>Assigned CAT organizer</label>
-        <select
-          id={`followup-assignee-${followupHandle}`}
-          value={assigneeHandle}
-          onChange={(event) => setAssigneeHandle(event.target.value)}
-          disabled={busy || !canReassign}
-        >
-          {assigneeOptions.map((option) => <option key={option.handle} value={option.handle}>{option.label}</option>)}
-        </select>
-        {!canReassign ? <span className="muted">Your role cannot broaden this follow-up beyond the current authorized organizer.</span> : null}
-      </div>
-
-      <div className="page-actions">
+      <div className="form-actions">
         <button className="button secondary" type="button" disabled={busy} onClick={save}>
-          {busy ? "Saving…" : "Save follow-up changes"}
+          {busy ? "Saving…" : "Save changes"}
         </button>
       </div>
-      {message ? <div className="form-message" role="status" style={{ color: "var(--success)" }}>{message}</div> : null}
+      {message ? <div className="form-message success" role="status">{message}</div> : null}
       {error ? <div className="form-message" role="alert">{error}</div> : null}
     </div>
   </details>;

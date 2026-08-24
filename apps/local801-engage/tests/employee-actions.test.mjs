@@ -205,7 +205,7 @@ test("decline-all is an explicit append-only event and does not delete prior wil
   }, { query }), /established by recording/i);
 });
 
-test("action definitions can be created only by CAT administration roles and are audited atomically", async () => {
+test("approved CAT, LCAT, data, and administrator roles can create audited action definitions", async () => {
   const statements = [];
   const query = async (sql, parameters) => {
     assert.match(sql, /validate-definition-scope/);
@@ -224,10 +224,22 @@ test("action definitions can be created only by CAT administration roles and are
   assert.equal(statements.length, 2);
   assert.match(statements[0].sql, /INSERT INTO local801\.employee_actions/);
   assert.match(statements[0].sql, /scope_type/);
+  assert.match(statements[0].sql, /membership_data_manager','cat_admin','cat_lead','cat_member/);
   assert.equal(statements[1].parameters[0], "config.change");
 
-  await assert.rejects(createEmployeeActionDefinition(context("cat_member"), {
+  const memberStatements = [];
+  await createEmployeeActionDefinition(context("cat_member"), {
     label: "Action",
+    engagementLevel: 1,
+  }, {
+    query,
+    runTransaction: async (items) => memberStatements.push(...items),
+    prepareAudit: async () => ({ sql: "/* audit */ SELECT 1", parameters: [] }),
+  });
+  assert.equal(memberStatements.length, 2);
+
+  await assert.rejects(createEmployeeActionDefinition(context("report_viewer"), {
+    label: "Not allowed",
     engagementLevel: 1,
   }, { query }), /not authorized/i);
 });

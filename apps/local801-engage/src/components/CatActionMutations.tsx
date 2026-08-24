@@ -35,13 +35,13 @@ async function sendJson(url: string, method: "POST" | "PATCH" | "DELETE", body?:
     body: body ? JSON.stringify(body) : undefined,
   });
   const payload = await response.json().catch(() => ({})) as { message?: string };
-  if (!response.ok) throw new Error(payload.message || "The CAT action change could not be completed.");
+  if (!response.ok) throw new Error(payload.message || "We couldn’t save that CAT Action change.");
   return payload;
 }
 
 function FeedbackMessage({ feedback }: { feedback: Feedback }) {
   if (!feedback) return null;
-  return <p className={feedback.tone === "error" ? "error-text" : "muted"} role={feedback.tone === "error" ? "alert" : "status"}>{feedback.message}</p>;
+  return <div className={`form-message${feedback.tone === "success" ? " success" : ""}`} role={feedback.tone === "error" ? "alert" : "status"}>{feedback.message}</div>;
 }
 
 export function CatActionCreateForm({ cycles }: { cycles: Option[] }) {
@@ -62,35 +62,37 @@ export function CatActionCreateForm({ cycles }: { cycles: Option[] }) {
         contractCycleHandle: String(data.get("contractCycleHandle") ?? "") || null,
       });
       form.reset();
-      setFeedback({ tone: "success", message: "CAT action created." });
+      setFeedback({ tone: "success", message: "CAT Action created." });
       router.refresh();
     } catch (error) {
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "CAT action creation failed." });
+      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "We couldn’t create the CAT Action." });
     } finally {
       setPending(false);
     }
   }
 
-  return <form className="grid" onSubmit={submit}>
-    <div className="field">
-      <label htmlFor="new-cat-action-name">Action name</label>
-      <input id="new-cat-action-name" name="name" required maxLength={160} />
+  return <form className="stack" onSubmit={submit}>
+    <div className="form-grid">
+      <div className="field">
+        <label htmlFor="new-cat-action-name">Action name</label>
+        <input id="new-cat-action-name" name="name" required maxLength={160} />
+      </div>
+      <div className="field">
+        <label htmlFor="new-cat-action-status">Start as</label>
+        <select id="new-cat-action-status" name="status" defaultValue="draft">
+          <option value="draft">Draft</option>
+          <option value="active">Active</option>
+        </select>
+      </div>
+      <div className="field">
+        <label htmlFor="new-cat-action-cycle">Contract cycle</label>
+        <select id="new-cat-action-cycle" name="contractCycleHandle" defaultValue="">
+          <option value="">No contract cycle</option>
+          {cycles.map((cycle) => <option key={cycle.handle} value={cycle.handle}>{cycle.label}{cycle.detail ? ` · ${cycle.detail}` : ""}</option>)}
+        </select>
+      </div>
     </div>
-    <div className="field">
-      <label htmlFor="new-cat-action-status">Starting status</label>
-      <select id="new-cat-action-status" name="status" defaultValue="draft">
-        <option value="draft">Draft</option>
-        <option value="active">Active</option>
-      </select>
-    </div>
-    <div className="field">
-      <label htmlFor="new-cat-action-cycle">Contract cycle</label>
-      <select id="new-cat-action-cycle" name="contractCycleHandle" defaultValue="">
-        <option value="">No contract cycle</option>
-        {cycles.map((cycle) => <option key={cycle.handle} value={cycle.handle}>{cycle.label}{cycle.detail ? ` · ${cycle.detail}` : ""}</option>)}
-      </select>
-    </div>
-    <button className="button" type="submit" disabled={pending}>{pending ? "Creating…" : "Create CAT action"}</button>
+    <div className="form-actions"><button className="button" type="submit" disabled={pending}>{pending ? "Creating…" : "Create CAT Action"}</button></div>
     <FeedbackMessage feedback={feedback} />
   </form>;
 }
@@ -120,7 +122,7 @@ export function CatActionEditForm({
     if (status !== initialStatus) payload.status = status;
     if (cycle !== "__keep__") payload.contractCycleHandle = cycle === "__none__" ? null : cycle;
     if (Object.keys(payload).length === 0) {
-      setFeedback({ tone: "error", message: "Choose a CAT action change before saving." });
+      setFeedback({ tone: "error", message: "Make a change before saving." });
       return;
     }
     setPending(true);
@@ -128,37 +130,39 @@ export function CatActionEditForm({
     try {
       await sendJson(`/api/cat-actions/${actionHandle}`, "PATCH", payload);
       setCycle("__keep__");
-      setFeedback({ tone: "success", message: "CAT action updated." });
+      setFeedback({ tone: "success", message: "CAT Action updated." });
       router.refresh();
     } catch (error) {
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "CAT action update failed." });
+      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "We couldn’t update the CAT Action." });
     } finally {
       setPending(false);
     }
   }
 
-  return <form className="grid" onSubmit={submit}>
-    <div className="field">
-      <label htmlFor="edit-cat-action-name">Action name</label>
-      <input id="edit-cat-action-name" value={name} onChange={(event) => setName(event.target.value)} required maxLength={160} />
+  return <form className="stack" onSubmit={submit}>
+    <div className="form-grid">
+      <div className="field">
+        <label htmlFor="edit-cat-action-name">Action name</label>
+        <input id="edit-cat-action-name" value={name} onChange={(event) => setName(event.target.value)} required maxLength={160} />
+      </div>
+      <div className="field">
+        <label htmlFor="edit-cat-action-status">Status</label>
+        <select id="edit-cat-action-status" value={status} onChange={(event) => setStatus(event.target.value as typeof status)}>
+          <option value="draft">Draft</option>
+          <option value="active">Active</option>
+          <option value="closed">Closed</option>
+        </select>
+      </div>
+      <div className="field">
+        <label htmlFor="edit-cat-action-cycle">Contract cycle</label>
+        <select id="edit-cat-action-cycle" value={cycle} onChange={(event) => setCycle(event.target.value)}>
+          <option value="__keep__">Keep current cycle</option>
+          <option value="__none__">Remove contract cycle</option>
+          {cycles.map((option) => <option key={option.handle} value={option.handle}>{option.label}{option.detail ? ` · ${option.detail}` : ""}</option>)}
+        </select>
+      </div>
     </div>
-    <div className="field">
-      <label htmlFor="edit-cat-action-status">Status</label>
-      <select id="edit-cat-action-status" value={status} onChange={(event) => setStatus(event.target.value as typeof status)}>
-        <option value="draft">Draft</option>
-        <option value="active">Active</option>
-        <option value="closed">Closed</option>
-      </select>
-    </div>
-    <div className="field">
-      <label htmlFor="edit-cat-action-cycle">Contract cycle</label>
-      <select id="edit-cat-action-cycle" value={cycle} onChange={(event) => setCycle(event.target.value)}>
-        <option value="__keep__">Keep current cycle</option>
-        <option value="__none__">Remove contract cycle</option>
-        {cycles.map((option) => <option key={option.handle} value={option.handle}>{option.label}{option.detail ? ` · ${option.detail}` : ""}</option>)}
-      </select>
-    </div>
-    <button className="button" type="submit" disabled={pending}>{pending ? "Saving…" : "Save action"}</button>
+    <div className="form-actions"><button className="button" type="submit" disabled={pending}>{pending ? "Saving…" : "Save CAT Action"}</button></div>
     <FeedbackMessage feedback={feedback} />
   </form>;
 }
@@ -169,7 +173,7 @@ export function CatActionArchiveButton({ actionHandle, actionName }: { actionHan
   const [feedback, setFeedback] = useState<Feedback>(null);
 
   async function archive() {
-    if (!window.confirm(`Archive ${actionName}? The action and its tasks will leave the active operational views.`)) return;
+    if (!window.confirm(`Archive ${actionName}? It and its tasks will leave the active CAT Action views.`)) return;
     setPending(true);
     setFeedback(null);
     try {
@@ -177,13 +181,13 @@ export function CatActionArchiveButton({ actionHandle, actionName }: { actionHan
       router.push("/cat-actions");
       router.refresh();
     } catch (error) {
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "CAT action archive failed." });
+      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "We couldn’t archive the CAT Action." });
       setPending(false);
     }
   }
 
-  return <div className="grid">
-    <button className="button secondary" type="button" onClick={archive} disabled={pending}>{pending ? "Archiving…" : "Archive closed action"}</button>
+  return <div className="stack">
+    <div className="form-actions compact-actions"><button className="button secondary" type="button" onClick={archive} disabled={pending}>{pending ? "Archiving…" : "Archive CAT Action"}</button></div>
     <FeedbackMessage feedback={feedback} />
   </div>;
 }
@@ -202,7 +206,7 @@ export function CatActionTaskCreateForm({ actionHandle, assignees }: { actionHan
     const due = String(data.get("dueAt") ?? "");
     const dueAt = isoDateTime(due);
     if (dueAt === "invalid") {
-      setFeedback({ tone: "error", message: "The task due date is invalid." });
+      setFeedback({ tone: "error", message: "Enter a valid task due date and time." });
       setPending(false);
       return;
     }
@@ -213,32 +217,34 @@ export function CatActionTaskCreateForm({ actionHandle, assignees }: { actionHan
         ...(due ? { dueAt } : {}),
       });
       form.reset();
-      setFeedback({ tone: "success", message: "CAT task created." });
+      setFeedback({ tone: "success", message: "Task created." });
       router.refresh();
     } catch (error) {
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "CAT task creation failed." });
+      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "We couldn’t create the task." });
     } finally {
       setPending(false);
     }
   }
 
-  return <form className="grid" onSubmit={submit}>
-    <div className="field">
-      <label htmlFor="new-cat-task-title">Task</label>
-      <input id="new-cat-task-title" name="title" required maxLength={240} />
+  return <form className="stack" onSubmit={submit}>
+    <div className="form-grid">
+      <div className="field">
+        <label htmlFor="new-cat-task-title">Task</label>
+        <input id="new-cat-task-title" name="title" required maxLength={240} />
+      </div>
+      <div className="field">
+        <label htmlFor="new-cat-task-assignee">Assign to</label>
+        <select id="new-cat-task-assignee" name="assigneeHandle" defaultValue="">
+          <option value="">Unassigned</option>
+          {assignees.map((option) => <option key={option.handle} value={option.handle}>{option.label}</option>)}
+        </select>
+      </div>
+      <div className="field">
+        <label htmlFor="new-cat-task-due">Due</label>
+        <input id="new-cat-task-due" name="dueAt" type="datetime-local" />
+      </div>
     </div>
-    <div className="field">
-      <label htmlFor="new-cat-task-assignee">Assignee</label>
-      <select id="new-cat-task-assignee" name="assigneeHandle" defaultValue="">
-        <option value="">Unassigned</option>
-        {assignees.map((option) => <option key={option.handle} value={option.handle}>{option.label}</option>)}
-      </select>
-    </div>
-    <div className="field">
-      <label htmlFor="new-cat-task-due">Due date and time</label>
-      <input id="new-cat-task-due" name="dueAt" type="datetime-local" />
-    </div>
-    <button className="button" type="submit" disabled={pending}>{pending ? "Creating…" : "Create task"}</button>
+    <div className="form-actions"><button className="button" type="submit" disabled={pending}>{pending ? "Creating…" : "Create task"}</button></div>
     <FeedbackMessage feedback={feedback} />
   </form>;
 }
@@ -261,14 +267,14 @@ export function CatActionTaskEditForm({ actionHandle, task, assignees }: { actio
     if (dueAt !== initialDue) {
       const parsed = isoDateTime(dueAt);
       if (parsed === "invalid") {
-        setFeedback({ tone: "error", message: "The task due date is invalid." });
+        setFeedback({ tone: "error", message: "Enter a valid task due date and time." });
         return;
       }
       payload.dueAt = parsed;
     }
     if (assignee !== "__keep__") payload.assigneeHandle = assignee === "__unassigned__" ? null : assignee;
     if (Object.keys(payload).length === 0) {
-      setFeedback({ tone: "error", message: "Choose a CAT task change before saving." });
+      setFeedback({ tone: "error", message: "Make a change before saving." });
       return;
     }
     setPending(true);
@@ -276,42 +282,44 @@ export function CatActionTaskEditForm({ actionHandle, task, assignees }: { actio
     try {
       await sendJson(`/api/cat-actions/${actionHandle}/tasks/${task.handle}`, "PATCH", payload);
       setAssignee("__keep__");
-      setFeedback({ tone: "success", message: "CAT task updated." });
+      setFeedback({ tone: "success", message: "Task updated." });
       router.refresh();
     } catch (error) {
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "CAT task update failed." });
+      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "We couldn’t update the task." });
     } finally {
       setPending(false);
     }
   }
 
-  return <details>
+  return <details className="inline-disclosure">
     <summary>Edit task</summary>
-    <form className="grid" onSubmit={submit} style={{ marginTop: 10 }}>
-      <div className="field">
-        <label htmlFor={`cat-task-title-${task.handle}`}>Task</label>
-        <input id={`cat-task-title-${task.handle}`} value={title} onChange={(event) => setTitle(event.target.value)} required maxLength={240} />
+    <form className="stack inline-disclosure-content" onSubmit={submit}>
+      <div className="form-grid">
+        <div className="field">
+          <label htmlFor={`cat-task-title-${task.handle}`}>Task</label>
+          <input id={`cat-task-title-${task.handle}`} value={title} onChange={(event) => setTitle(event.target.value)} required maxLength={240} />
+        </div>
+        <div className="field">
+          <label htmlFor={`cat-task-status-${task.handle}`}>Status</label>
+          <select id={`cat-task-status-${task.handle}`} value={status} onChange={(event) => setStatus(event.target.value)}>
+            <option value="open">Open</option>
+            <option value="complete">Complete</option>
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor={`cat-task-assignee-${task.handle}`}>Assign to</label>
+          <select id={`cat-task-assignee-${task.handle}`} value={assignee} onChange={(event) => setAssignee(event.target.value)}>
+            <option value="__keep__">Keep current{task.assigneeName ? ` · ${task.assigneeName}` : " · unassigned"}</option>
+            <option value="__unassigned__">Unassigned</option>
+            {assignees.map((option) => <option key={option.handle} value={option.handle}>{option.label}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor={`cat-task-due-${task.handle}`}>Due</label>
+          <input id={`cat-task-due-${task.handle}`} type="datetime-local" value={dueAt} onChange={(event) => setDueAt(event.target.value)} />
+        </div>
       </div>
-      <div className="field">
-        <label htmlFor={`cat-task-status-${task.handle}`}>Status</label>
-        <select id={`cat-task-status-${task.handle}`} value={status} onChange={(event) => setStatus(event.target.value)}>
-          <option value="open">Open</option>
-          <option value="complete">Complete</option>
-        </select>
-      </div>
-      <div className="field">
-        <label htmlFor={`cat-task-assignee-${task.handle}`}>Assignee</label>
-        <select id={`cat-task-assignee-${task.handle}`} value={assignee} onChange={(event) => setAssignee(event.target.value)}>
-          <option value="__keep__">Keep current assignee{task.assigneeName ? ` · ${task.assigneeName}` : ""}</option>
-          <option value="__unassigned__">Unassigned</option>
-          {assignees.map((option) => <option key={option.handle} value={option.handle}>{option.label}</option>)}
-        </select>
-      </div>
-      <div className="field">
-        <label htmlFor={`cat-task-due-${task.handle}`}>Due date and time</label>
-        <input id={`cat-task-due-${task.handle}`} type="datetime-local" value={dueAt} onChange={(event) => setDueAt(event.target.value)} />
-      </div>
-      <button className="button secondary" type="submit" disabled={pending}>{pending ? "Saving…" : "Save task"}</button>
+      <div className="form-actions"><button className="button secondary" type="submit" disabled={pending}>{pending ? "Saving…" : "Save task"}</button></div>
       <FeedbackMessage feedback={feedback} />
     </form>
   </details>;

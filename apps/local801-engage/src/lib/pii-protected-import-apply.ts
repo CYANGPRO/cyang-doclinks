@@ -64,10 +64,22 @@ type ApplyResultRow = {
   executed_set_count: number | string;
   inserted_approval_count: number | string;
   mutation_count: number | string;
+  applied_people_count: number | string;
   person_pii_count: number | string;
   new_people_count: number | string;
+  identifier_candidate_count: number | string;
+  identifier_applied_count: number | string;
+  inserted_identifier_count: number | string;
+  inserted_identifier_pii_count: number | string;
+  inserted_identifier_index_count: number | string;
+  contact_candidate_count: number | string;
+  contact_applied_count: number | string;
+  inserted_contact_count: number | string;
+  inserted_contact_pii_count: number | string;
+  inserted_contact_index_count: number | string;
   snapshot_count: number | string;
   snapshot_row_count: number | string;
+  reconciliation_ok: boolean;
 };
 
 function sha256(value: string) {
@@ -119,6 +131,35 @@ function dateOnly(value: string | Date | null) {
 function integer(value: unknown) {
   const number = Number(value);
   return Number.isFinite(number) ? Math.trunc(number) : 0;
+}
+
+function assertAtomicApplyReconciled(
+  result: ApplyResultRow | undefined,
+  expected: { mutationCount: number; newPeopleCount: number; importKind: string },
+) {
+  const currentRoster = expected.importKind === "current_roster";
+  if (!result || result.reconciliation_ok !== true
+    || integer(result.approved_batch_count) !== 1
+    || integer(result.executed_set_count) !== 1
+    || integer(result.inserted_approval_count) !== 1
+    || integer(result.mutation_count) !== expected.mutationCount
+    || integer(result.applied_people_count) !== expected.mutationCount
+    || integer(result.person_pii_count) !== expected.mutationCount
+    || integer(result.new_people_count) !== expected.newPeopleCount
+    || integer(result.identifier_candidate_count) !== integer(result.identifier_applied_count)
+    || integer(result.inserted_identifier_count) !== integer(result.inserted_identifier_pii_count)
+    || integer(result.inserted_identifier_count) !== integer(result.inserted_identifier_index_count)
+    || integer(result.contact_candidate_count) !== integer(result.contact_applied_count)
+    || integer(result.inserted_contact_count) !== integer(result.inserted_contact_pii_count)
+    || integer(result.inserted_contact_count) !== integer(result.inserted_contact_index_count)
+    || integer(result.snapshot_count) !== (currentRoster ? 1 : 0)
+    || integer(result.snapshot_row_count) !== (currentRoster ? expected.mutationCount : 0)) {
+    throw new ProtectedImportApplyError(
+      "ATOMIC_RECONCILIATION_FAILED",
+      "The protected import was not committed because the applied roster did not exactly match the reviewed set. No roster changes were applied.",
+      503,
+    );
+  }
 }
 
 function requireUuid(value: string, label: string) {
@@ -295,7 +336,7 @@ function assertReady(input: {
     || summary.decisions.migrationPending || !summary.decisions.proposedNew || !summary.decisions.existingChanges) {
     throw new ProtectedImportApplyError("REVIEW_BLOCKED", "The protected review is no longer complete and unblocked.");
   }
-  if (!["current_roster", "new_hires", "membership_additions", "membership_drops"].includes(locked.import_kind)) {
+  if (!["current_roster", "new_hires", "recent_hires", "membership_additions", "membership_drops"].includes(locked.import_kind)) {
     throw new ProtectedImportApplyError("UNSUPPORTED_IMPORT_KIND", "This import kind cannot execute authoritative roster changes.");
   }
   const snapshotDate = dateOnly(locked.snapshot_date);
@@ -345,10 +386,7 @@ export const PROTECTED_IMPORT_APPLY_SQL = `
       AND NOT EXISTS (
         SELECT 1 FROM local801.protected_import_execution_mutations mutation
         WHERE mutation.organization_id = $1::uuid AND mutation.execution_set_id = execution.id
-          AND mutation.operational_json ?| ARRAY[
-            'first_name','last_name','preferred_name','work_email','employee_identifier','member_identifier',
-            'home_email','work_phone','cell_phone','home_phone'
-          ]
+          AND mutation.operational_json ?| ARRAY['first_name','last_name','preferred_name','work_email','personal_email','employee_identifier','member_identifier']
       )
       AND execution.mutation_count = (
         SELECT count(*) FROM local801.protected_import_execution_mutations mutation
@@ -382,7 +420,7 @@ export const PROTECTED_IMPORT_APPLY_SQL = `
       '0801'
     FROM mutations mutation CROSS JOIN selected_batch batch
     WHERE mutation.mutation_kind = 'new'
-    RETURNING id
+    RETURNING id, membership_status, department, work_location, classification
   ), updated_people AS (
     UPDATE local801.people person
     SET department = COALESCE(NULLIF(btrim(mutation.operational_json ->> 'department'), ''), person.department),
@@ -402,9 +440,13 @@ export const PROTECTED_IMPORT_APPLY_SQL = `
     FROM mutations mutation CROSS JOIN selected_batch batch
     WHERE mutation.mutation_kind = 'existing' AND person.organization_id = $1::uuid
       AND person.id = mutation.target_person_id AND person.archived_at IS NULL
-    RETURNING person.id
+    RETURNING person.id, person.membership_status, person.department, person.work_location, person.classification
+  ), applied_people AS MATERIALIZED (
+    SELECT id, membership_status, department, work_location, classification FROM inserted_people
+    UNION ALL
+    SELECT id, membership_status, department, work_location, classification FROM updated_people
   ), person_barrier AS (
-    SELECT (SELECT count(*) FROM inserted_people) + (SELECT count(*) FROM updated_people) AS touched
+    SELECT count(*) AS touched FROM applied_people
   ), upsert_person_pii AS (
     INSERT INTO local801.person_pii (
       organization_id, person_id,
@@ -469,21 +511,21 @@ export const PROTECTED_IMPORT_APPLY_SQL = `
     RETURNING id
   ), identifier_candidates AS MATERIALIZED (
     SELECT mutation.target_person_id, batch.source_file_id,
-      (item ->> 'personIdentifierId')::uuid AS staged_id,
-      item ->> 'identifierType' AS identifier_type,
-      item ->> 'encryptedPayload' AS encrypted_payload,
-      item ->> 'encryptionKeyVersion' AS encryption_key_version,
-      (item ->> 'encryptionFormatVersion')::integer AS encryption_format_version,
+      (identifier_item.item ->> 'personIdentifierId')::uuid AS staged_id,
+      identifier_item.item ->> 'identifierType' AS identifier_type,
+      identifier_item.item ->> 'encryptedPayload' AS encrypted_payload,
+      identifier_item.item ->> 'encryptionKeyVersion' AS encryption_key_version,
+      (identifier_item.item ->> 'encryptionFormatVersion')::integer AS encryption_format_version,
       exact.item ->> 'domain' AS index_domain,
       exact.item ->> 'keyVersion' AS index_key_version,
       exact.item ->> 'hash' AS index_hash
     FROM mutations mutation CROSS JOIN selected_batch batch
-    CROSS JOIN LATERAL jsonb_array_elements(mutation.identifier_protected_json) item
+    CROSS JOIN LATERAL jsonb_array_elements(mutation.identifier_protected_json) AS identifier_item(item)
     JOIN LATERAL (
       SELECT exact_item AS item
       FROM jsonb_array_elements(mutation.exact_indexes_json) exact_item
       WHERE exact_item ->> 'entityType' = 'person_identifier'
-        AND exact_item ->> 'entityId' = item ->> 'personIdentifierId'
+        AND exact_item ->> 'entityId' = identifier_item.item ->> 'personIdentifierId'
       LIMIT 1
     ) exact ON true
   ), resolved_identifiers AS MATERIALIZED (
@@ -498,10 +540,10 @@ export const PROTECTED_IMPORT_APPLY_SQL = `
     LEFT JOIN local801.person_identifiers existing_identifier
       ON existing_identifier.organization_id = $1::uuid AND existing_identifier.id = existing_index.entity_id
   ), identifier_conflict_guard AS MATERIALIZED (
-    SELECT 1 / CASE WHEN NOT EXISTS (
+    SELECT NOT EXISTS (
       SELECT 1 FROM resolved_identifiers
       WHERE existing_id IS NOT NULL AND existing_person_id IS DISTINCT FROM target_person_id
-    ) THEN 1 ELSE 0 END AS ok
+    ) AS ok
   ), inserted_identifiers AS (
     INSERT INTO local801.person_identifiers (
       id, organization_id, person_id, identifier_type, identifier_value, source_import_file_id
@@ -509,7 +551,7 @@ export const PROTECTED_IMPORT_APPLY_SQL = `
     SELECT candidate.staged_id, $1::uuid, candidate.target_person_id, candidate.identifier_type,
       'protected:' || candidate.staged_id::text, candidate.source_file_id
     FROM resolved_identifiers candidate CROSS JOIN identifier_conflict_guard guard
-    WHERE guard.ok = 1 AND candidate.existing_id IS NULL
+    WHERE guard.ok AND candidate.existing_id IS NULL
     RETURNING id
   ), inserted_identifier_pii AS (
     INSERT INTO local801.person_identifier_pii (
@@ -539,32 +581,26 @@ export const PROTECTED_IMPORT_APPLY_SQL = `
     RETURNING id
   ), contact_candidates AS MATERIALIZED (
     SELECT mutation.target_person_id, batch.source_file_id,
-      (item ->> 'contactMethodId')::uuid AS staged_id,
-      item ->> 'contactType' AS contact_type,
-      NULLIF(item ->> 'contactLabel', '') AS contact_label,
-      item ->> 'encryptedPayload' AS encrypted_payload,
-      item ->> 'encryptionKeyVersion' AS encryption_key_version,
-      (item ->> 'encryptionFormatVersion')::integer AS encryption_format_version,
-      COALESCE((item ->> 'isPrimary')::boolean, true) AS is_primary,
-      COALESCE(NULLIF(item ->> 'visibility',''), 'authorized_directory') AS visibility,
+      (contact_item.item ->> 'contactMethodId')::uuid AS staged_id,
+      contact_item.item ->> 'contactType' AS contact_type,
+      contact_item.item ->> 'encryptedPayload' AS encrypted_payload,
+      contact_item.item ->> 'encryptionKeyVersion' AS encryption_key_version,
+      (contact_item.item ->> 'encryptionFormatVersion')::integer AS encryption_format_version,
+      COALESCE((contact_item.item ->> 'isPrimary')::boolean, true) AS is_primary,
+      COALESCE(NULLIF(contact_item.item ->> 'visibility',''), 'authorized_directory') AS visibility,
       exact.item ->> 'domain' AS index_domain,
       exact.item ->> 'keyVersion' AS index_key_version,
       exact.item ->> 'hash' AS index_hash
     FROM mutations mutation CROSS JOIN selected_batch batch
-    CROSS JOIN LATERAL jsonb_array_elements(mutation.contact_protected_json) item
+    CROSS JOIN LATERAL jsonb_array_elements(mutation.contact_protected_json) AS contact_item(item)
     JOIN LATERAL (
       SELECT exact_item AS item
       FROM jsonb_array_elements(mutation.exact_indexes_json) exact_item
       WHERE exact_item ->> 'entityType' = 'person_contact_method'
-        AND exact_item ->> 'entityId' = item ->> 'contactMethodId'
-        AND exact_item ->> 'domain' = CASE item ->> 'contactType'
-          WHEN 'work_email' THEN 'contact:work-email'
-          WHEN 'personal_email' THEN 'contact:personal-email'
-          WHEN 'phone' THEN 'contact:phone'
-        END
+        AND exact_item ->> 'entityId' = contact_item.item ->> 'contactMethodId'
       LIMIT 1
     ) exact ON true
-    WHERE item ->> 'contactType' IN ('work_email','personal_email','phone')
+    WHERE contact_item.item ->> 'contactType' IN ('work_email', 'personal_email', 'phone')
   ), resolved_contacts AS MATERIALIZED (
     SELECT candidate.*, existing.id AS existing_id
     FROM contact_candidates candidate
@@ -592,6 +628,7 @@ export const PROTECTED_IMPORT_APPLY_SQL = `
     WHERE contact.organization_id = $1::uuid AND contact.person_id = candidate.target_person_id
       AND contact.contact_type = candidate.contact_type
       AND contact.contact_label IS NOT DISTINCT FROM candidate.contact_label
+      AND candidate.is_primary = true
       AND contact.is_primary = true AND contact.archived_at IS NULL
       AND contact.id IS DISTINCT FROM candidate.existing_id
     RETURNING contact.id
@@ -599,6 +636,7 @@ export const PROTECTED_IMPORT_APPLY_SQL = `
     UPDATE local801.person_contact_methods contact
     SET is_primary = true, verified_at = COALESCE(contact.verified_at, now())
     FROM resolved_contacts candidate
+    CROSS JOIN (SELECT count(*) FROM archived_primary_contacts) archive_barrier
     WHERE candidate.existing_id IS NOT NULL AND contact.organization_id = $1::uuid AND contact.id = candidate.existing_id
     RETURNING contact.id
   ), inserted_contacts AS (
@@ -609,8 +647,8 @@ export const PROTECTED_IMPORT_APPLY_SQL = `
     SELECT candidate.staged_id, $1::uuid, candidate.target_person_id, candidate.contact_type,
       CASE WHEN candidate.contact_type IN ('work_email','personal_email')
         THEN 'protected-' || candidate.staged_id::text || '@invalid.local'
-        ELSE 'protected:' || candidate.staged_id::text END,
-      true, candidate.visibility, now(), candidate.source_file_id, candidate.contact_label
+        ELSE 'protected:' || candidate.staged_id::text END, candidate.is_primary,
+      candidate.visibility, now(), candidate.source_file_id
     FROM resolved_contacts candidate
     CROSS JOIN (SELECT count(*) FROM archived_primary_contacts) archive_barrier
     CROSS JOIN (SELECT count(*) FROM promoted_existing_contacts) promote_barrier
@@ -663,7 +701,7 @@ export const PROTECTED_IMPORT_APPLY_SQL = `
       mutation.operational_json ->> 'membership_status' AS imported_status,
       mutation.mutation_kind
     FROM mutations mutation CROSS JOIN selected_batch batch
-    JOIN local801.people person ON person.organization_id = $1::uuid AND person.id = mutation.target_person_id
+    JOIN applied_people person ON person.id = mutation.target_person_id
   ), inserted_membership_events AS (
     INSERT INTO local801.membership_events (
       id, organization_id, person_id, event_type, effective_date, source_import_file_id, created_by
@@ -683,14 +721,25 @@ export const PROTECTED_IMPORT_APPLY_SQL = `
       NULLIF(btrim(mutation.operational_json ->> 'department'), ''),
       NULLIF(btrim(mutation.operational_json ->> 'work_location'), ''), batch.source_file_id
     FROM mutations mutation CROSS JOIN selected_batch batch
-    WHERE batch.import_kind = 'new_hires'
+    WHERE batch.import_kind IN ('new_hires','recent_hires')
     RETURNING id
+  ), superseded_same_date_snapshot AS (
+    UPDATE local801.membership_snapshots snapshot
+    SET status = 'superseded'
+    FROM selected_batch batch
+    WHERE batch.import_kind = 'current_roster'
+      AND snapshot.organization_id = $1::uuid
+      AND snapshot.status = 'approved'
+      AND snapshot.snapshot_date = batch.snapshot_date
+      AND snapshot.source_import_batch_id IS DISTINCT FROM batch.id
+    RETURNING snapshot.id
   ), inserted_snapshot AS (
     INSERT INTO local801.membership_snapshots (
       id, organization_id, snapshot_date, status, approved_by, approved_at, source_import_batch_id
     )
     SELECT gen_random_uuid(), $1::uuid, batch.snapshot_date, 'approved', actor.id, now(), batch.id
     FROM selected_batch batch CROSS JOIN actor_gate actor
+    CROSS JOIN (SELECT count(*) FROM superseded_same_date_snapshot) supersession_barrier
     WHERE batch.import_kind = 'current_roster'
     RETURNING id
   ), inserted_snapshot_rows AS (
@@ -702,32 +751,53 @@ export const PROTECTED_IMPORT_APPLY_SQL = `
       person.membership_status, person.department, person.work_location, person.classification,
       import_row.row_hash
     FROM mutations mutation CROSS JOIN inserted_snapshot snapshot
-    JOIN local801.people person ON person.organization_id = $1::uuid AND person.id = mutation.target_person_id
+    JOIN applied_people person ON person.id = mutation.target_person_id
     JOIN local801.import_rows import_row ON import_row.organization_id = $1::uuid AND import_row.id = mutation.import_row_id
     RETURNING id
   ), write_counts AS MATERIALIZED (
     SELECT
       (SELECT count(*)::int FROM mutations) AS mutation_count,
+      (SELECT count(*)::int FROM applied_people) AS applied_people_count,
       (SELECT count(*)::int FROM upsert_person_pii) AS person_pii_count,
       (SELECT count(*)::int FROM inserted_people) AS new_people_count,
+      (SELECT count(*)::int FROM identifier_candidates) AS identifier_candidate_count,
+      ((SELECT count(*)::int FROM resolved_identifiers WHERE existing_id IS NOT NULL)
+        + (SELECT count(*)::int FROM inserted_identifiers)) AS identifier_applied_count,
+      (SELECT count(*)::int FROM inserted_identifiers) AS inserted_identifier_count,
+      (SELECT count(*)::int FROM inserted_identifier_pii) AS inserted_identifier_pii_count,
+      (SELECT count(*)::int FROM inserted_identifier_indexes) AS inserted_identifier_index_count,
+      (SELECT count(*)::int FROM contact_candidates) AS contact_candidate_count,
+      ((SELECT count(*)::int FROM resolved_contacts WHERE existing_id IS NOT NULL)
+        + (SELECT count(*)::int FROM inserted_contacts)) AS contact_applied_count,
+      (SELECT count(*)::int FROM inserted_contacts) AS inserted_contact_count,
+      (SELECT count(*)::int FROM inserted_contact_pii) AS inserted_contact_pii_count,
+      (SELECT count(*)::int FROM inserted_contact_indexes) AS inserted_contact_index_count,
       (SELECT count(*)::int FROM inserted_snapshot) AS snapshot_count,
       (SELECT count(*)::int FROM inserted_snapshot_rows) AS snapshot_row_count
   ), write_guard AS MATERIALIZED (
-    SELECT 1 / CASE WHEN EXISTS (
+    SELECT EXISTS (
       SELECT 1 FROM selected_batch batch CROSS JOIN write_counts counts
       WHERE counts.mutation_count = (SELECT mutation_count FROM local801.protected_import_execution_sets WHERE id = $3::uuid)
+        AND counts.applied_people_count = counts.mutation_count
         AND counts.person_pii_count = counts.mutation_count
         AND counts.new_people_count = $7::integer
+        AND counts.identifier_candidate_count = counts.identifier_applied_count
+        AND counts.inserted_identifier_count = counts.inserted_identifier_pii_count
+        AND counts.inserted_identifier_count = counts.inserted_identifier_index_count
+        AND counts.contact_candidate_count = counts.contact_applied_count
+        AND counts.inserted_contact_count = counts.inserted_contact_pii_count
+        AND counts.inserted_contact_count = counts.inserted_contact_index_count
+        AND (SELECT ok FROM identifier_conflict_guard)
         AND (batch.import_kind <> 'current_roster' OR (counts.snapshot_count = 1 AND counts.snapshot_row_count = counts.mutation_count))
         AND (batch.import_kind = 'current_roster' OR (counts.snapshot_count = 0 AND counts.snapshot_row_count = 0))
-    ) THEN 1 ELSE 0 END AS ok
+    ) AS ok
   ), inserted_approval AS (
     INSERT INTO local801.import_approvals (
       organization_id, import_batch_id, approved_by, approval_hash, approved_at
     )
     SELECT $1::uuid, batch.id, actor.id, $6::text, now()
     FROM selected_batch batch CROSS JOIN actor_gate actor CROSS JOIN write_guard guard
-    WHERE guard.ok = 1
+    WHERE guard.ok
     RETURNING id
   ), approved_batch AS (
     UPDATE local801.import_batches batch
@@ -747,9 +817,15 @@ export const PROTECTED_IMPORT_APPLY_SQL = `
     (SELECT count(*)::int FROM approved_batch) AS approved_batch_count,
     (SELECT count(*)::int FROM executed_set) AS executed_set_count,
     (SELECT count(*)::int FROM inserted_approval) AS inserted_approval_count,
-    counts.mutation_count, counts.person_pii_count, counts.new_people_count,
-    counts.snapshot_count, counts.snapshot_row_count
-  FROM write_counts counts
+    counts.mutation_count, counts.applied_people_count, counts.person_pii_count,
+    counts.new_people_count,
+    counts.identifier_candidate_count, counts.identifier_applied_count,
+    counts.inserted_identifier_count, counts.inserted_identifier_pii_count, counts.inserted_identifier_index_count,
+    counts.contact_candidate_count, counts.contact_applied_count,
+    counts.inserted_contact_count, counts.inserted_contact_pii_count, counts.inserted_contact_index_count,
+    counts.snapshot_count, counts.snapshot_row_count,
+    guard.ok AS reconciliation_ok
+  FROM write_counts counts CROSS JOIN write_guard guard
 `;
 
 export async function applyPreparedProtectedImport(
@@ -812,11 +888,11 @@ export async function applyPreparedProtectedImport(
       expectedMutationFingerprint,
       summary.counts.proposedNew,
     ]);
-    if (!result || integer(result.approved_batch_count) !== 1 || integer(result.executed_set_count) !== 1
-      || integer(result.inserted_approval_count) !== 1 || integer(result.mutation_count) !== mutations.length
-      || integer(result.person_pii_count) !== mutations.length) {
-      throw new ProtectedImportApplyError("ATOMIC_APPLY_FAILED", "The protected authoritative import did not reconcile atomically.", 503);
-    }
+    assertAtomicApplyReconciled(result, {
+      mutationCount: mutations.length,
+      newPeopleCount: summary.counts.proposedNew,
+      importKind: locked.import_kind,
+    });
 
     const audit = await prepareAtomicAuditStatement({
       eventType: "import.execute",
@@ -859,4 +935,5 @@ export const __testing = {
   mutationFingerprint,
   preflightFingerprint,
   enabled,
+  assertAtomicApplyReconciled,
 };

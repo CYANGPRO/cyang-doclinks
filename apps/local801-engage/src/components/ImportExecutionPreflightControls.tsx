@@ -28,11 +28,7 @@ async function jsonRequest(url: string, method: "PUT" | "POST", body?: Record<st
 
 function FeedbackMessage({ feedback }: { feedback: Feedback }) {
   if (!feedback) return null;
-  return <p
-    className={feedback.tone === "error" ? "error-text" : undefined}
-    style={feedback.tone === "success" ? { color: "var(--success)", fontWeight: 700 } : undefined}
-    role={feedback.tone === "error" ? "alert" : "status"}
-  >{feedback.message}</p>;
+  return <div className={`form-message${feedback.tone === "success" ? " success" : ""}`} role={feedback.tone === "error" ? "alert" : "status"}>{feedback.message}</div>;
 }
 
 export function ImportExecutionPreflightControls(props: Props) {
@@ -89,36 +85,44 @@ export function ImportExecutionPreflightControls(props: Props) {
     }
   }
 
-  return <div className="grid">
+  return <div className="stack">
     {props.importKind === "current_roster" ? (
-      <form className="grid" onSubmit={savePlan}>
-        <div className="field">
-          <label htmlFor="execution-snapshot-date">Authoritative snapshot date</label>
-          <input id="execution-snapshot-date" name="snapshotDate" type="date" defaultValue={props.snapshotDate ?? ""} required />
+      <form className="stack" onSubmit={savePlan}>
+        <div className="form-grid">
+          <div className="field">
+            <label htmlFor="execution-snapshot-date">Authoritative snapshot date</label>
+            <input id="execution-snapshot-date" name="snapshotDate" type="date" defaultValue={props.snapshotDate ?? ""} required />
+            <span className="field-help">Use the date represented by the roster, not the upload date.</span>
+          </div>
         </div>
-        <button className="button secondary" type="submit" disabled={pending !== null}>{pending === "plan" ? "Saving…" : "Save snapshot date"}</button>
+        <div className="form-actions"><button className="button secondary" type="submit" disabled={pending !== null}>{pending === "plan" ? "Saving…" : "Save snapshot date"}</button></div>
       </form>
     ) : props.importKind && props.importKind !== "legacy_cat" ? (
-      <form className="grid" onSubmit={savePlan}>
-        <div className="field">
-          <label htmlFor="execution-effective-date">Batch effective date</label>
-          <input id="execution-effective-date" name="effectiveDate" type="date" defaultValue={props.effectiveDate ?? ""} required />
+      <form className="stack" onSubmit={savePlan}>
+        <div className="form-grid">
+          <div className="field">
+            <label htmlFor="execution-effective-date">Batch effective date</label>
+            <input id="execution-effective-date" name="effectiveDate" type="date" defaultValue={props.effectiveDate ?? ""} required />
+            <span className="field-help">This date anchors the approved lifecycle event when the source does not provide a row-specific date.</span>
+          </div>
         </div>
-        <button className="button secondary" type="submit" disabled={pending !== null}>{pending === "plan" ? "Saving…" : "Save effective date"}</button>
+        <div className="form-actions"><button className="button secondary" type="submit" disabled={pending !== null}>{pending === "plan" ? "Saving…" : "Save effective date"}</button></div>
       </form>
     ) : null}
 
-    {props.duplicateSourceNeedsAck ? (
-      <button className="button secondary" type="button" onClick={acknowledgeDuplicate} disabled={pending !== null}>
-        {pending === "duplicate" ? "Acknowledging…" : "Acknowledge duplicate approved source"}
-      </button>
-    ) : null}
+    {(props.duplicateSourceNeedsAck || props.largeShrinkNeedsAck) ? <div className="form-actions compact-actions">
+      {props.duplicateSourceNeedsAck ? (
+        <button className="button secondary" type="button" onClick={acknowledgeDuplicate} disabled={pending !== null}>
+          {pending === "duplicate" ? "Acknowledging…" : "Acknowledge duplicate approved source"}
+        </button>
+      ) : null}
 
-    {props.largeShrinkNeedsAck ? (
-      <button className="button secondary" type="button" onClick={acknowledgeShrink} disabled={pending !== null || props.migrationPending || !props.fingerprint}>
-        {pending === "shrink" ? "Acknowledging…" : "Acknowledge ≥20% roster decrease"}
-      </button>
-    ) : null}
+      {props.largeShrinkNeedsAck ? (
+        <button className="button secondary" type="button" onClick={acknowledgeShrink} disabled={pending !== null || props.migrationPending || !props.fingerprint}>
+          {pending === "shrink" ? "Acknowledging…" : "Acknowledge ≥20% roster decrease"}
+        </button>
+      ) : null}
+    </div> : null}
 
     <FeedbackMessage feedback={feedback} />
   </div>;

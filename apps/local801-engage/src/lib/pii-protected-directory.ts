@@ -25,6 +25,7 @@ const CURSOR_PURPOSE = "directory-v1";
 
 type CandidateRow = {
   person_id: string;
+  employee_reference: number | string;
   membership_status: string | null;
   department: string | null;
   section: string | null;
@@ -168,7 +169,7 @@ export async function getProtectedDirectoryPage(
       SELECT token.key_version, token.hash
       FROM jsonb_to_recordset($11::text::jsonb) AS token(key_version text, hash text)
     )
-    SELECT person.id::text AS person_id, person.membership_status, person.department, person.section,
+    SELECT person.id::text AS person_id, person.employee_reference, person.membership_status, person.department, person.section,
       person.classification, person.work_location, person.hire_date, person.job_status,
       protected.first_name_encrypted_payload, protected.first_name_encryption_key_version, protected.first_name_encryption_format_version,
       protected.last_name_encrypted_payload, protected.last_name_encryption_key_version, protected.last_name_encryption_format_version,
@@ -285,6 +286,7 @@ export async function getProtectedDirectoryPage(
     };
     return {
       handle: outreachHandle(context.organizationId, item.row.person_id),
+      employeeReference: `L801-${String(item.row.employee_reference).padStart(6, "0")}`,
       displayName: item.preferredName?.trim() || `${item.firstName} ${item.lastName}`,
       firstName: item.firstName,
       lastName: item.lastName,

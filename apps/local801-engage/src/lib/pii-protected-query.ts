@@ -41,7 +41,6 @@ export function preparePiiProtectedLookupQuery(
         AND email_index.index_domain = 'user:email'
         AND email_index.index_key_version = $2::text
         AND email_index.index_hash = $3::text
-        AND app_user.deactivated_at IS NULL
       LIMIT 1
     `,
     parameters: [organizationId, index.blindIndexKeyVersion, index.blindIndex],

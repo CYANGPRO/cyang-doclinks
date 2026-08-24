@@ -5,6 +5,8 @@ import { neutralizeSpreadsheetFormula } from "@/lib/imports";
 import { writeAuditEvent } from "@/lib/audit";
 import { writeSecuritySignal } from "@/lib/security-signal";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
+import { enforceWorkspaceRateLimit, RateLimitError } from "@/lib/rate-limit";
+import { rateLimitResponse } from "@/lib/rate-limit-response";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +21,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ bat
   const { batchId } = await params;
   try {
     const context = await resolveWorkspaceContext(auth.user);
+    await enforceWorkspaceRateLimit(context, "export");
     const actor = { organizationId: context.organizationId, role: context.role, userId: context.userId };
     const batch = await getImportBatch(actor, batchId);
     if (!batch) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
@@ -46,7 +49,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ bat
         "Cache-Control": "no-store, max-age=0",
       },
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof RateLimitError) return rateLimitResponse(error);
     return NextResponse.json({ error: "IMPORT_ERRORS_UNAVAILABLE", message: "The complete bounded error export is unavailable. No partial CSV was returned." }, { status: 503, headers: { "Cache-Control": "no-store, max-age=0" } });
   }
 }

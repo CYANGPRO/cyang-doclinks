@@ -19,6 +19,8 @@ export const DIRECT_IMPORT_PII_FIELDS = Object.freeze([
   "last_name",
   "preferred_name",
   "work_email",
+  "work_phone",
+  "personal_email",
   "employee_identifier",
   "member_identifier",
   "home_email",
@@ -34,10 +36,8 @@ export const DIRECT_IMPORT_PII_BITS = Object.freeze({
   work_email: 8,
   employee_identifier: 16,
   member_identifier: 32,
-  home_email: 64,
+  personal_email: 64,
   work_phone: 128,
-  cell_phone: 256,
-  home_phone: 512,
 } as const);
 
 const IMPORT_MATCH_DOMAINS = Object.freeze({
@@ -47,10 +47,8 @@ const IMPORT_MATCH_DOMAINS = Object.freeze({
   work_email: "contact:work-email",
   employee_identifier: "identifier:employee-identifier",
   member_identifier: "identifier:member-identifier",
-  home_email: "contact:personal-email",
-  work_phone: "contact:work-phone",
-  cell_phone: "contact:cell-phone",
-  home_phone: "contact:home-phone",
+  personal_email: "contact:personal-email",
+  work_phone: "contact:phone",
 } as const);
 
 const PROVIDER_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
@@ -192,8 +190,8 @@ function authProviderSubjectDomain(providerId: string) {
 }
 
 function normalizeImportPii(name: keyof typeof DIRECT_IMPORT_PII_BITS, raw: string) {
-  if (name === "work_email" || name === "home_email") return normalizePiiEmail(raw);
-  if (name === "work_phone" || name === "cell_phone" || name === "home_phone") return normalizePiiContactValue("phone", raw);
+  if (name === "work_email" || name === "personal_email") return normalizePiiEmail(raw);
+  if (name === "work_phone") return normalizePiiContactValue("phone", raw);
   if (name === "first_name" || name === "last_name" || name === "preferred_name") return normalizePiiNameForSearch(raw);
   return normalizePiiIdentifier(raw);
 }
@@ -320,7 +318,7 @@ export function buildSyntheticPiiBackfillPlan(dataset: PiiBackfillSourceDataset,
       encryptedPayload: protectedValue.encryptedPayload,
       encryptionKeyVersion: protectedValue.encryptionKeyVersion,
       encryptionFormatVersion: protectedValue.encryptionFormatVersion,
-      fieldSetVersion: 3,
+      fieldSetVersion: 4,
       presenceMask,
       validityMask,
       integrityHash: integrity.blindIndex,

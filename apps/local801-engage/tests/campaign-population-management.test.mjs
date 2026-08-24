@@ -204,7 +204,7 @@ test("population APIs reuse the hardened Preview mutation guard and accept only 
   assert.match(source, /campaign\.status = 'draft'/);
   assert.match(source, /MAX_CANDIDATES = 25/);
   assert.doesNotMatch(source, /person_contact_methods|contact_value|work_email/i);
-  assert.match(page, /Build campaign population/);
+  assert.match(page, /Build the campaign list/);
   assert.match(page, /candidate_q/);
   assert.match(page, /CampaignPopulationAddButton/);
   assert.match(page, /CampaignPopulationRemoveButton/);

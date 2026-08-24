@@ -13,6 +13,7 @@ import {
   type EncryptedPiiField,
 } from "./pii-protection.ts";
 import type { ProductionAuthBinding, ProductionAuthConfig, ProductionIdentity } from "./production-auth.ts";
+import { CURRENT_ACCESS_POLICY } from "./policy-contract.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -35,6 +36,7 @@ type UserRow = {
   email_encrypted_payload: string;
   email_encryption_key_version: string;
   email_encryption_format_version: number;
+  policy_acknowledged: boolean;
 };
 type IdentityRow = {
   auth_identity_id: string;
@@ -44,6 +46,7 @@ type IdentityRow = {
   provider_subject_encryption_format_version: number;
 };
 type SubjectBoundUserRow = UserRow & IdentityRow;
+type BoundUserRow = UserRow & IdentityRow;
 
 type ProtectedSessionInput = {
   organizationSlug: string;
@@ -59,6 +62,31 @@ function asRole(value: string): Role | null {
 
 function authError(code: string, message: string): never {
   throw new ProtectedAuthError(code, message);
+}
+
+function directoryObjectId(identity: ProductionIdentity) {
+  if (!identity.directoryObjectVerified) return null;
+  const parts = identity.subject.split(":");
+  return parts.length === 2 && UUID_RE.test(parts[0]) && UUID_RE.test(parts[1])
+    ? parts[1].toLowerCase()
+    : null;
+}
+
+async function protectedAuthStage<T>(code: string, operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (error instanceof ProtectedAuthError) throw error;
+    if (error && typeof error === "object") {
+      const name = "name" in error && typeof error.name === "string" ? error.name : "";
+      const errorCode = "code" in error && typeof error.code === "string" ? error.code : "";
+      if (name === "PiiProtectionError" || name === "PostgresError" || /^[0-9A-Z]{5}$/.test(errorCode)
+        || name.startsWith("Local801TransactionError:")) {
+        throw error;
+      }
+    }
+    throw new ProtectedAuthError(code, "A protected production authorization stage failed.");
+  }
 }
 
 function encrypted(payload: string, keyVersion: string, formatVersion: number): Pick<EncryptedPiiField, "encryptedPayload" | "encryptionKeyVersion" | "encryptionFormatVersion"> {
@@ -111,7 +139,14 @@ async function resolveUserByProtectedEmail(
     /* production-auth:protected-email-lookup */
     SELECT organization.slug AS organization_slug, organization.id::text AS organization_id,
       app_user.id::text AS user_id, app_user.auth_session_version, role.code AS role,
-      protected.email_encrypted_payload, protected.email_encryption_key_version, protected.email_encryption_format_version
+      protected.email_encrypted_payload, protected.email_encryption_key_version, protected.email_encryption_format_version,
+      EXISTS (
+        SELECT 1 FROM local801.user_policy_acknowledgements acknowledgement
+        WHERE acknowledgement.organization_id = organization.id
+          AND acknowledgement.user_id = app_user.id
+          AND acknowledgement.policy_key = $4::text
+          AND acknowledgement.policy_version = $5::text
+      ) AS policy_acknowledged
     FROM local801.organizations organization
     JOIN local801.pii_exact_indexes email_index
       ON email_index.organization_id = organization.id
@@ -130,7 +165,13 @@ async function resolveUserByProtectedEmail(
       ON role.id = user_role.role_id AND role.organization_id = organization.id
     WHERE organization.id = $1::uuid AND organization.archived_at IS NULL
     LIMIT 2
-  `, [organization.id, lookup.blindIndexKeyVersion, lookup.blindIndex]);
+  `, [
+    organization.id,
+    lookup.blindIndexKeyVersion,
+    lookup.blindIndex,
+    CURRENT_ACCESS_POLICY.key,
+    CURRENT_ACCESS_POLICY.version,
+  ]);
   if (rows.length !== 1) authError("USER_NOT_PROVISIONED", "No unique active Local 801 account is provisioned for this identity.");
   const account = protectedUserAccount(organization, rows[0]);
   if (normalizePiiEmail(account.email) !== normalizedEmail) authError("IDENTITY_MISMATCH", "The protected Local 801 email did not match the verified identity-provider email.");
@@ -259,6 +300,156 @@ async function resolveBootstrapOwner(
   return { ...account, role: "system_owner" as const };
 }
 
+async function resolveUserByOnboardingObjectId(
+  organization: OrganizationRow,
+  identity: ProductionIdentity,
+  query: DatabaseQuery,
+) {
+  const providerUserId = directoryObjectId(identity);
+  if (!providerUserId) authError("IDENTITY_INVALID", "The verified directory object identifier is invalid.");
+  const rows = await query<UserRow>(`
+    /* production-auth:protected-onboarding-object-lookup */
+    SELECT organization.slug AS organization_slug, organization.id::text AS organization_id,
+      app_user.id::text AS user_id, app_user.auth_session_version, role.code AS role,
+      protected.email_encrypted_payload, protected.email_encryption_key_version, protected.email_encryption_format_version,
+      EXISTS (
+        SELECT 1 FROM local801.user_policy_acknowledgements acknowledgement
+        WHERE acknowledgement.organization_id = organization.id
+          AND acknowledgement.user_id = app_user.id
+          AND acknowledgement.policy_key = $3::text
+          AND acknowledgement.policy_version = $4::text
+      ) AS policy_acknowledged
+    FROM local801.user_identity_onboarding onboarding
+    JOIN local801.organizations organization
+      ON organization.id = onboarding.organization_id
+      AND organization.archived_at IS NULL
+    JOIN local801.users app_user
+      ON app_user.organization_id = organization.id
+      AND app_user.id = onboarding.user_id
+      AND app_user.deactivated_at IS NULL
+    JOIN local801.user_pii protected
+      ON protected.organization_id = organization.id AND protected.user_id = app_user.id
+    JOIN local801.workspace_user_roles user_role ON user_role.user_id = app_user.id
+    JOIN local801.workspace_roles role
+      ON role.id = user_role.role_id AND role.organization_id = organization.id
+    WHERE organization.id = $1::uuid
+      AND onboarding.provider_id = 'microsoft-entra-b2b'
+      AND onboarding.provider_user_id = $2::uuid
+      AND onboarding.status = 'ready'
+    LIMIT 2
+  `, [organization.id, providerUserId, CURRENT_ACCESS_POLICY.key, CURRENT_ACCESS_POLICY.version]);
+  if (rows.length !== 1) authError("USER_NOT_PROVISIONED", "No unique active Local 801 account is approved for this directory identity.");
+  const row = rows[0];
+  const role = asRole(row.role);
+  const sessionVersion = Number(row.auth_session_version);
+  if (!role || !Number.isSafeInteger(sessionVersion) || sessionVersion < 1) {
+    authError("USER_NOT_PROVISIONED", "The approved Local 801 account is not provisioned with one valid role.");
+  }
+  const keyConfig = getPiiKeyConfiguration();
+  const email = decryptPiiField(
+    encrypted(row.email_encrypted_payload, row.email_encryption_key_version, row.email_encryption_format_version),
+    { organizationId: organization.id, entity: "user", recordId: row.user_id, field: "email" },
+    keyConfig,
+  );
+  normalizePiiEmail(email);
+  return { row, role, sessionVersion, email, keyConfig };
+}
+
+async function resolveAccountByProtectedSubject(
+  organization: OrganizationRow,
+  identity: ProductionIdentity,
+  query: DatabaseQuery,
+) {
+  const keyConfig = getPiiKeyConfiguration();
+  const domain = subjectDomain(identity.providerId);
+  const subjectIndex = createPiiBlindIndex(
+    normalizePiiIdentifier(identity.subject),
+    { organizationId: organization.id, domain },
+    keyConfig,
+  );
+  const rows = await query<BoundUserRow>(`
+    /* production-auth:protected-bound-subject-account */
+    SELECT organization.slug AS organization_slug, organization.id::text AS organization_id,
+      app_user.id::text AS user_id, app_user.auth_session_version, role.code AS role,
+      user_protected.email_encrypted_payload,
+      user_protected.email_encryption_key_version,
+      user_protected.email_encryption_format_version,
+      auth_identity.id::text AS auth_identity_id,
+      identity_protected.provider_subject_encrypted_payload,
+      identity_protected.provider_subject_encryption_key_version,
+      identity_protected.provider_subject_encryption_format_version,
+      EXISTS (
+        SELECT 1 FROM local801.user_policy_acknowledgements acknowledgement
+        WHERE acknowledgement.organization_id = organization.id
+          AND acknowledgement.user_id = app_user.id
+          AND acknowledgement.policy_key = $6::text
+          AND acknowledgement.policy_version = $7::text
+      ) AS policy_acknowledged
+    FROM local801.pii_exact_indexes subject_index
+    JOIN local801.auth_identities auth_identity
+      ON auth_identity.organization_id = subject_index.organization_id
+      AND auth_identity.id = subject_index.entity_id
+      AND auth_identity.provider_id = $3::text
+    JOIN local801.auth_identity_pii identity_protected
+      ON identity_protected.organization_id = auth_identity.organization_id
+      AND identity_protected.auth_identity_id = auth_identity.id
+    JOIN local801.organizations organization
+      ON organization.id = auth_identity.organization_id
+      AND organization.archived_at IS NULL
+    JOIN local801.users app_user
+      ON app_user.organization_id = organization.id
+      AND app_user.id = auth_identity.user_id
+      AND app_user.deactivated_at IS NULL
+    JOIN local801.user_pii user_protected
+      ON user_protected.organization_id = organization.id
+      AND user_protected.user_id = app_user.id
+    JOIN local801.workspace_user_roles user_role
+      ON user_role.user_id = app_user.id
+    JOIN local801.workspace_roles role
+      ON role.id = user_role.role_id
+      AND role.organization_id = organization.id
+    WHERE subject_index.organization_id = $1::uuid
+      AND subject_index.entity_type = 'auth_identity'
+      AND subject_index.index_domain = $2::text
+      AND subject_index.index_key_version = $4::text
+      AND subject_index.index_hash = $5::text
+    LIMIT 2
+  `, [
+    organization.id,
+    domain,
+    identity.providerId,
+    subjectIndex.blindIndexKeyVersion,
+    subjectIndex.blindIndex,
+    CURRENT_ACCESS_POLICY.key,
+    CURRENT_ACCESS_POLICY.version,
+  ]);
+  if (rows.length > 1) authError("IDENTITY_MISMATCH", "The identity-provider subject is not uniquely linked.");
+  if (rows.length === 0) return null;
+  const row = rows[0];
+  const storedSubject = decryptPiiField(
+    encrypted(
+      row.provider_subject_encrypted_payload,
+      row.provider_subject_encryption_key_version,
+      row.provider_subject_encryption_format_version,
+    ),
+    { organizationId: organization.id, entity: "auth-identity", recordId: row.auth_identity_id, field: "provider-subject" },
+    keyConfig,
+  );
+  if (storedSubject !== identity.subject) authError("IDENTITY_MISMATCH", "The protected identity-provider subject did not match.");
+  const role = asRole(row.role);
+  const sessionVersion = Number(row.auth_session_version);
+  if (!role || !Number.isSafeInteger(sessionVersion) || sessionVersion < 1) {
+    authError("USER_NOT_PROVISIONED", "The linked Local 801 account is not provisioned with one valid role.");
+  }
+  const email = decryptPiiField(
+    encrypted(row.email_encrypted_payload, row.email_encryption_key_version, row.email_encryption_format_version),
+    { organizationId: organization.id, entity: "user", recordId: row.user_id, field: "email" },
+    keyConfig,
+  );
+  normalizePiiEmail(email);
+  return { row, role, sessionVersion, email, authIdentityId: row.auth_identity_id };
+}
+
 async function resolveIdentityBindings(
   organizationId: string,
   userId: string,
@@ -269,7 +460,7 @@ async function resolveIdentityBindings(
   const keyConfig = getPiiKeyConfiguration();
   const domain = subjectDomain(identity.providerId);
   const subjectIndex = createPiiBlindIndex(normalizePiiIdentifier(identity.subject), { organizationId, domain }, keyConfig);
-  const bySubject = await query<IdentityRow>(`
+  const bySubject = await protectedAuthStage("PROTECTED_AUTH_SUBJECT_QUERY_FAILED", () => query<IdentityRow>(`
     /* production-auth:protected-subject-lookup */
     SELECT auth_identity.id::text AS auth_identity_id, auth_identity.user_id::text AS user_id,
       protected.provider_subject_encrypted_payload,
@@ -289,13 +480,13 @@ async function resolveIdentityBindings(
       AND subject_index.index_key_version = $4::text
       AND subject_index.index_hash = $5::text
     LIMIT 2
-  `, [organizationId, domain, identity.providerId, subjectIndex.blindIndexKeyVersion, subjectIndex.blindIndex]);
+  `, [organizationId, domain, identity.providerId, subjectIndex.blindIndexKeyVersion, subjectIndex.blindIndex]));
   if (bySubject.length > 1) authError("IDENTITY_MISMATCH", "The identity-provider subject is not uniquely linked.");
   if (bySubject[0] && bySubject[0].user_id !== userId) {
     authError("IDENTITY_MISMATCH", "This identity-provider subject is already linked to a different Local 801 account.");
   }
 
-  const byUser = await query<IdentityRow>(`
+  const byUser = await protectedAuthStage("PROTECTED_AUTH_USER_QUERY_FAILED", () => query<IdentityRow>(`
     /* production-auth:protected-user-identity */
     SELECT auth_identity.id::text AS auth_identity_id, auth_identity.user_id::text AS user_id,
       protected.provider_subject_encrypted_payload,
@@ -309,7 +500,7 @@ async function resolveIdentityBindings(
       AND auth_identity.user_id = $2::uuid
       AND auth_identity.provider_id = $3::text
     LIMIT 2
-  `, [organizationId, userId, identity.providerId]);
+  `, [organizationId, userId, identity.providerId]));
   if (byUser.length > 1) authError("IDENTITY_MISMATCH", "The Local 801 account has multiple provider bindings.");
   let requiresRebind = false;
   if (byUser[0]) {
@@ -512,19 +703,24 @@ export async function authorizeProtectedProductionIdentity(
 ): Promise<ProductionAuthBinding> {
   if (!config.enabled) authError("AUTH_DISABLED", "Production authentication is disabled.");
   if (identity.providerId !== config.providerId
-    || (!identity.emailVerified && !identity.bootstrapObjectMatched)
+    || (!identity.emailVerified && !identity.bootstrapObjectMatched && !identity.directoryObjectVerified)
     || !identity.mfaVerified) {
     authError("IDENTITY_INVALID", "The production identity did not satisfy the configured assurance requirements.");
   }
   const query = dependencies.query ?? queryLocal801;
   const transaction = dependencies.transaction ?? runLocal801Transaction;
-  const organization = await resolveOrganization(config, query);
+  const organization = await protectedAuthStage(
+    "PROTECTED_AUTH_ORGANIZATION_FAILED",
+    () => resolveOrganization(config, query),
+  );
   // An established, encrypted provider-subject binding is the authoritative account selector.
   // Resolve it before any bootstrap fallback so a provisioned owner does not depend on the
   // one-time production-initialization marker or a mutable email claim on later sign-ins.
   let boundAccount;
   try {
-    boundAccount = await resolveUserByProtectedSubject(organization, identity, query);
+    boundAccount = identity.directoryObjectVerified
+      ? await resolveAccountByProtectedSubject(organization, identity, query)
+      : await resolveUserByProtectedSubject(organization, identity, query);
   } catch (error) {
     if (error instanceof ProtectedAuthError) throw error;
     authError("PROTECTED_PII_INVALID", "The protected subject binding could not be validated.");
@@ -542,6 +738,7 @@ export async function authorizeProtectedProductionIdentity(
       email: boundAccount.email,
       role: boundAccount.role,
       sessionVersion: boundAccount.sessionVersion,
+      policyAcknowledged: boundAccount.row.policy_acknowledged === true,
     };
   }
   // The bootstrap identity is authorized by the immutable Entra object ID and is resolved
@@ -549,9 +746,14 @@ export async function authorizeProtectedProductionIdentity(
   // selects or authorizes a database account.
   let account;
   try {
-    account = identity.bootstrapObjectMatched
-      ? await resolveBootstrapOwner(organization, query)
-      : await resolveUserByProtectedEmail(organization, identity, query);
+    account = identity.directoryObjectVerified
+      ? await protectedAuthStage(
+        "PROTECTED_AUTH_ACCOUNT_FAILED",
+        () => resolveUserByOnboardingObjectId(organization, identity, query),
+      )
+      : identity.bootstrapObjectMatched
+        ? await resolveBootstrapOwner(organization, query)
+        : await resolveUserByProtectedEmail(organization, identity, query);
   } catch (error) {
     if (error instanceof ProtectedAuthError) throw error;
     if (identity.bootstrapObjectMatched) {
@@ -559,12 +761,15 @@ export async function authorizeProtectedProductionIdentity(
     }
     authError("PROTECTED_PII_INVALID", "The protected account record could not be validated.");
   }
+  const bindingIdentity = identity.emailVerified
+    ? identity
+    : { ...identity, email: account.email, emailVerified: true };
   let linked;
   try {
     linked = await resolveIdentityBindings(
       organization.id,
       account.row.user_id,
-      identity,
+      bindingIdentity,
       query,
       identity.bootstrapObjectMatched,
     );
@@ -581,7 +786,7 @@ export async function authorizeProtectedProductionIdentity(
         ...rebindIdentityStatements(
           organization.id,
           account.row.user_id,
-          identity,
+          bindingIdentity,
           linked.existing.auth_identity_id,
           linked.subjectIndex,
         ),
@@ -599,10 +804,13 @@ export async function authorizeProtectedProductionIdentity(
     await transaction(authenticationStatements(organization.id, account.row.user_id, account.sessionVersion, linked.existing.auth_identity_id));
   } else {
     const identityId = randomUUID();
-    await transaction([
-      ...newIdentityStatements(organization.id, account.row.user_id, identity, identityId, linked.subjectIndex),
-      ...authenticationStatements(organization.id, account.row.user_id, account.sessionVersion, null),
-    ]);
+    await protectedAuthStage(
+      "PROTECTED_AUTH_TRANSACTION_FAILED",
+      () => transaction([
+        ...newIdentityStatements(organization.id, account.row.user_id, bindingIdentity, identityId, linked.subjectIndex),
+        ...authenticationStatements(organization.id, account.row.user_id, account.sessionVersion, null),
+      ]),
+    );
   }
   return {
     organizationSlug: account.row.organization_slug,
@@ -610,6 +818,7 @@ export async function authorizeProtectedProductionIdentity(
     email: account.email,
     role: account.role,
     sessionVersion: account.sessionVersion,
+    policyAcknowledged: account.row.policy_acknowledged === true,
   };
 }
 
@@ -628,7 +837,14 @@ export async function resolveProtectedProductionSessionBinding(
     /* production-auth:protected-session */
     SELECT organization.slug AS organization_slug, organization.id::text AS organization_id,
       app_user.id::text AS user_id, app_user.auth_session_version, role.code AS role,
-      protected.email_encrypted_payload, protected.email_encryption_key_version, protected.email_encryption_format_version
+      protected.email_encrypted_payload, protected.email_encryption_key_version, protected.email_encryption_format_version,
+      EXISTS (
+        SELECT 1 FROM local801.user_policy_acknowledgements acknowledgement
+        WHERE acknowledgement.organization_id = organization.id
+          AND acknowledgement.user_id = app_user.id
+          AND acknowledgement.policy_key = $4::text
+          AND acknowledgement.policy_version = $5::text
+      ) AS policy_acknowledged
     FROM local801.organizations organization
     JOIN local801.users app_user
       ON app_user.organization_id = organization.id AND app_user.id = $2::uuid AND app_user.deactivated_at IS NULL
@@ -638,7 +854,13 @@ export async function resolveProtectedProductionSessionBinding(
     JOIN local801.workspace_roles role ON role.id = user_role.role_id AND role.organization_id = organization.id
     WHERE organization.id = $1::uuid AND app_user.auth_session_version = $3::integer
     LIMIT 2
-  `, [organization.id, session.userId, session.sessionVersion]);
+  `, [
+    organization.id,
+    session.userId,
+    session.sessionVersion,
+    CURRENT_ACCESS_POLICY.key,
+    CURRENT_ACCESS_POLICY.version,
+  ]);
   if (rows.length !== 1) return null;
   const row = rows[0];
   const role = asRole(row.role);
@@ -649,5 +871,12 @@ export async function resolveProtectedProductionSessionBinding(
     { organizationId: organization.id, entity: "user", recordId: row.user_id, field: "email" },
     keyConfig,
   );
-  return { organizationSlug: row.organization_slug, userId: row.user_id, email, role, sessionVersion: session.sessionVersion };
+  return {
+    organizationSlug: row.organization_slug,
+    userId: row.user_id,
+    email,
+    role,
+    sessionVersion: session.sessionVersion,
+    policyAcknowledged: row.policy_acknowledged === true,
+  };
 }

@@ -32,6 +32,7 @@ function workspaceContext(role = "local_admin") {
 function directoryRow(overrides = {}) {
   return {
     person_id: "33333333-3333-4333-8333-333333333333",
+    employee_reference: "100001",
     preferred_name: "Synthetic Avery",
     first_name: "Avery",
     last_name: "Morgan",
@@ -180,6 +181,8 @@ test("membership summary uses the latest approved organization snapshot and excl
       represented: "7",
       members: "5",
       nonmembers: "2",
+      additions_this_month: "3",
+      drops_this_month: "2",
       net_change: "1",
     }];
   });
@@ -188,6 +191,8 @@ test("membership summary uses the latest approved organization snapshot and excl
     represented: 7,
     members: 5,
     nonmembers: 2,
+    additionsThisMonth: 3,
+    dropsThisMonth: 2,
     netChange: 1,
     snapshotDate: "2026-08-01",
     sourceLabel: "Approved snapshot · 2026-08-01",
@@ -233,7 +238,7 @@ test("Directory permission includes membership managers and excludes report view
   assert.equal(can("report_viewer", "viewDirectory"), false);
 });
 
-for (const role of ["cat_member", "cat_lead"]) {
+for (const role of ["cat_member"]) {
   test(`${role} is assignment scoped and cannot escalate with authorized scope`, async () => {
     let capturedSql = "";
     let capturedParameters = [];
@@ -259,7 +264,7 @@ for (const role of ["cat_member", "cat_lead"]) {
   });
 }
 
-for (const role of ["system_owner", "local_admin", "membership_data_manager", "cat_admin"]) {
+for (const role of ["system_owner", "local_admin", "membership_data_manager", "cat_admin", "cat_lead"]) {
   test(`${role} can perform an organization-wide Directory search`, async () => {
     let capturedSql = "";
     let capturedParameters = [];
@@ -290,6 +295,8 @@ test("Directory query returns active people and the approved contact columns wit
   });
 
   assert.equal(result.people[0].workEmail, "avery.morgan@example.test");
+  assert.equal(result.people[0].workPhone, "651-555-0100");
+  assert.equal(result.people[0].employeeReference, "L801-100001");
   assert.equal(result.people[0].membershipStatus, "member");
   assert.equal(result.people[0].jobStatus, "Permanent");
   assert.equal(result.people[0].homeEmail, "avery.home@example.test");
@@ -300,6 +307,7 @@ test("Directory query returns active people and the approved contact columns wit
   assert.match(capturedSql, /contact\.archived_at IS NULL/);
   assert.match(capturedSql, /contact\.visibility = 'authorized_directory'/);
   assert.match(capturedSql, /ORDER BY last_name ASC, first_name ASC, person_id ASC/);
+  assert.match(capturedSql, /contact_type = 'phone'/);
   assert.doesNotMatch(capturedSql, /mailing_address|note_hash|identifier_value/);
 });
 

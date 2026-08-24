@@ -1,24 +1,12 @@
 import "server-only";
 
-import { can, type Permission, type Role } from "./access.ts";
+import { can, type Role } from "./access.ts";
+import {
+  documentUploadVisibilitiesForRole,
+  type DocumentUploadVisibility,
+} from "./document-access.ts";
 
-export const DOCUMENT_UPLOAD_VISIBILITIES = [
-  "local_admin_only",
-  "membership_management",
-  "cat_admin_only",
-  "cat_lead_scope",
-  "cat_member_scope",
-] as const;
-
-export type DocumentUploadVisibility = (typeof DOCUMENT_UPLOAD_VISIBILITIES)[number];
-
-const visibilityPermission: Record<DocumentUploadVisibility, Permission> = {
-  local_admin_only: "viewLocalAdminDocuments",
-  membership_management: "viewPersonLevelReports",
-  cat_admin_only: "viewRestrictedStrategy",
-  cat_lead_scope: "viewTeamScope",
-  cat_member_scope: "viewCatMemberDocuments",
-};
+export { DOCUMENT_UPLOAD_VISIBILITIES, type DocumentUploadVisibility } from "./document-access.ts";
 
 const mediaTypeExtensions = new Map<string, readonly string[]>([
   ["application/pdf", [".pdf"]],
@@ -48,13 +36,13 @@ type DocumentUploadDependencies = Readonly<{
   maxBytes: number;
   scanner: MalwareScanner;
   store(input: Readonly<{
-    actor: { organizationId: string; role: Role };
+    actor: { organizationId: string; userId: string; role: Role };
     organizationId: string;
     category: string;
     title: string;
     originalFilename: string;
     visibility: DocumentUploadVisibility;
-    status: "active";
+    status: "under_review";
     createdBy: string;
     content: Buffer;
     mediaType: string;
@@ -145,15 +133,14 @@ function normalizeMediaType(file: UploadFile) {
 }
 
 export function documentUploadVisibilities(role: Role): DocumentUploadVisibility[] {
-  if (!can(role, "manageDocuments")) return [];
-  return DOCUMENT_UPLOAD_VISIBILITIES.filter((visibility) => can(role, visibilityPermission[visibility]));
+  return documentUploadVisibilitiesForRole(role);
 }
 
 export async function uploadDocument(
   input: DocumentUploadInput,
   dependencies: DocumentUploadDependencies,
 ) {
-  if (!can(input.actor.role, "manageDocuments")) {
+  if (!can(input.actor.role, "uploadDocuments")) {
     throw new DocumentUploadError("VISIBILITY_FORBIDDEN", 403);
   }
 
@@ -200,7 +187,7 @@ export async function uploadDocument(
   }
   if (scanResult.outcome !== "clean") throw new DocumentUploadError("SCANNER_UNAVAILABLE", 503, true);
 
-  const actor = { organizationId: input.actor.organizationId, role: input.actor.role };
+  const actor = input.actor;
   let stored: StoredDocument;
   try {
     stored = await dependencies.store({
@@ -210,7 +197,7 @@ export async function uploadDocument(
       title,
       originalFilename,
       visibility,
-      status: "active",
+      status: "under_review",
       createdBy: input.actor.userId,
       content,
       mediaType,

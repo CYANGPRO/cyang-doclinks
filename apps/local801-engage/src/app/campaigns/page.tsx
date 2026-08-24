@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { CampaignCreateForm } from "@/components/CampaignMutations";
-import { DataTable, EmptyState, PageHeader, Pagination, SectionCard, StatusBadge, UnavailableState } from "@/components/DesignSystem";
+import { DataTable, DisclosureCard, EmptyState, PageHeader, Pagination, SectionCard, StatusBadge, UnavailableState } from "@/components/DesignSystem";
 import { ProtectedPage } from "@/components/ProtectedPage";
 import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
@@ -19,6 +19,7 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
   if (!user) redirect("/sign-in");
   if (!can(user.role, "manageCampaigns")) redirect("/unauthorized");
   const input = await searchParams;
+  const hasCursor = typeof input.cursor === "string" && input.cursor.length > 0;
   let page: Awaited<ReturnType<typeof getCampaignsPage>> | null = null;
   try {
     const context = await resolveWorkspaceContext(user);
@@ -27,11 +28,11 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
     // Fail closed. Do not replace unavailable campaign data with synthetic placeholders.
   }
 
-  return <ProtectedPage permission="manageCampaigns"><div className="content">
+  return <ProtectedPage permission="manageCampaigns"><div className="content route-campaigns-page queue-first-page">
     <PageHeader
-      eyebrow="Organizing"
+      eyebrow="Programs"
       title="Campaigns"
-      description="Create and manage outreach campaigns, then assign campaign participants to CAT organizers through audited operational controls."
+      description="Create a defined participant list, assign organizers, track contact and completion, and connect the work to CAT Actions."
     />
     <SectionCard title="Create campaign" description="Start in draft while you prepare the population, or activate immediately when the campaign is ready." badge={<StatusBadge tone="ready">Audited operation</StatusBadge>}>
       <CampaignCreateForm />
@@ -52,9 +53,13 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
         </DataTable>
         <Pagination
           label={`Showing up to ${page.pageSize} campaigns`}
+          historyBackFallbackHref={hasCursor ? `/campaigns?limit=${page.pageSize}` : null}
           nextHref={page.nextCursor ? `/campaigns?limit=${page.pageSize}&cursor=${encodeURIComponent(page.nextCursor)}` : null}
         />
       </>}
     </SectionCard>
+    <DisclosureCard title="Create a draft campaign" description="Name the campaign and set its dates. Build and review the participant list before activation." className="route-secondary-panel create-record-panel">
+      <CampaignCreateForm />
+    </DisclosureCard>
   </div></ProtectedPage>;
 }

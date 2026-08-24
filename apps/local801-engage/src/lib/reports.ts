@@ -37,6 +37,7 @@ export type MembershipDataQuality = {
 export type MembershipReport = {
   overview: MembershipOverview;
   monthlyChanges: MembershipChangePoint[];
+  classifications: MembershipBreakdown[];
   departments: MembershipBreakdown[];
   workLocations: MembershipBreakdown[];
   jobStatuses: MembershipBreakdown[];
@@ -237,7 +238,7 @@ export async function getMembershipReport(
 ): Promise<MembershipReport> {
   if (!can(context.role, "viewReports")) throw new Error("Forbidden.");
 
-  const [overviewRows, changeRows, departmentRows, workLocationRows, jobStatusRows, qualityRows] = await Promise.all([
+  const [overviewRows, changeRows, classificationRows, departmentRows, workLocationRows, jobStatusRows, qualityRows] = await Promise.all([
     query<OverviewRow>(`
       /* reports:membership-overview */
       SELECT
@@ -257,6 +258,20 @@ export async function getMembershipReport(
         AND (additions <> 0 OR drops <> 0)
       ORDER BY month DESC
       LIMIT 12
+    `, [context.organizationId]),
+    query<BreakdownRow>(`
+      /* reports:membership-by-classification */
+      SELECT
+        COALESCE(NULLIF(trim(classification), ''), 'Unspecified') AS label,
+        count(*) AS represented_count,
+        count(*) FILTER (WHERE membership_status = 'member') AS member_count,
+        count(*) FILTER (WHERE membership_status = 'nonmember') AS nonmember_count,
+        count(*) FILTER (WHERE membership_status NOT IN ('member', 'nonmember')) AS other_count
+      FROM reporting.current_membership
+      WHERE organization_id = $1::uuid
+      GROUP BY COALESCE(NULLIF(trim(classification), ''), 'Unspecified')
+      ORDER BY label ASC
+      LIMIT 50
     `, [context.organizationId]),
     query<BreakdownRow>(`
       /* reports:membership-by-department */
@@ -330,6 +345,7 @@ export async function getMembershipReport(
         netChange: signedCount(row.net_change),
       }))
       .reverse(),
+    classifications: classificationRows.map(breakdown),
     departments: departmentRows.map(breakdown),
     workLocations: workLocationRows.map(breakdown),
     jobStatuses: jobStatusRows.map(breakdown),
@@ -490,7 +506,7 @@ export async function getEngagementReport(
       FROM reporting.contact_methods
       WHERE organization_id = $1::uuid
       GROUP BY COALESCE(NULLIF(trim(contact_method), ''), 'Unspecified')
-      ORDER BY event_count DESC, label ASC
+      ORDER BY label ASC
       LIMIT 50
     `, [context.organizationId]),
     query<EngagementBreakdownRow>(`
@@ -502,7 +518,7 @@ export async function getEngagementReport(
       WHERE organization_id = $1::uuid
         AND voided_at IS NULL
       GROUP BY COALESCE(NULLIF(trim(outcome), ''), 'Unspecified')
-      ORDER BY event_count DESC, label ASC
+      ORDER BY label ASC
       LIMIT 50
     `, [context.organizationId]),
     query<EngagementBreakdownRow>(`
@@ -513,7 +529,7 @@ export async function getEngagementReport(
       FROM reporting.engagement_by_department
       WHERE organization_id = $1::uuid
       GROUP BY COALESCE(NULLIF(trim(department), ''), 'Unspecified')
-      ORDER BY event_count DESC, label ASC
+      ORDER BY label ASC
       LIMIT 50
     `, [context.organizationId]),
     query<EngagementBreakdownRow>(`
@@ -524,7 +540,7 @@ export async function getEngagementReport(
       FROM reporting.engagement_by_work_location
       WHERE organization_id = $1::uuid
       GROUP BY COALESCE(NULLIF(trim(work_location), ''), 'Unspecified')
-      ORDER BY event_count DESC, label ASC
+      ORDER BY label ASC
       LIMIT 50
     `, [context.organizationId]),
     query<EngagementBreakdownRow>(`
@@ -538,7 +554,7 @@ export async function getEngagementReport(
        AND u.organization_id = e.organization_id
       WHERE e.organization_id = $1::uuid
       GROUP BY COALESCE(NULLIF(trim(u.display_name), ''), 'Unknown organizer')
-      ORDER BY event_count DESC, label ASC
+      ORDER BY label ASC
       LIMIT 50
     `, [context.organizationId]),
     query<FollowupStatusRow>(`
@@ -549,7 +565,7 @@ export async function getEngagementReport(
       FROM reporting.followups
       WHERE organization_id = $1::uuid
       GROUP BY COALESCE(NULLIF(trim(status), ''), 'Unspecified')
-      ORDER BY followup_count DESC, label ASC
+      ORDER BY label ASC
       LIMIT 20
     `, [context.organizationId]),
     query<CampaignCoverageRow>(`
@@ -563,7 +579,7 @@ export async function getEngagementReport(
         ON c.id = ec.campaign_id
        AND c.organization_id = ec.organization_id
       WHERE ec.organization_id = $1::uuid
-      ORDER BY ec.assigned_count DESC, c.name ASC
+      ORDER BY c.name ASC
       LIMIT 50
     `, [context.organizationId]),
   ]);

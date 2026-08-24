@@ -154,7 +154,7 @@ type SummaryRow = {
 };
 type DecisionRow = { decision_type: ImportReviewDecisionType; set_hash: string; set_count: number | string; decided_at: string | Date };
 type DetailRow = { import_row_id: string; sheet_name: string; source_row_number: number; category: ImportReviewCategory;
-  first_name: string | null; last_name: string | null; work_email: string | null; department: string | null;
+  first_name: string | null; last_name: string | null; work_email: string | null; work_phone: string | null; personal_email: string | null; department: string | null;
   classification: string | null; membership_status: string | null; person_id: string | null };
 
 export type ImportReviewSummary = {
@@ -253,7 +253,9 @@ export async function getImportReviewDetail(actor: ImportReviewActor, batchId: s
   const rows = await query<DetailRow>(`WITH ${IMPORT_REVIEW_CLASSIFICATION_CTE}
     SELECT import_row_id, sheet_name, source_row_number, category,
       normalized_json ->> 'first_name' AS first_name, normalized_json ->> 'last_name' AS last_name,
-      normalized_json ->> 'work_email' AS work_email, normalized_json ->> 'department' AS department,
+      normalized_json ->> 'work_email' AS work_email, normalized_json ->> 'personal_email' AS personal_email,
+      normalized_json ->> 'work_phone' AS work_phone,
+      normalized_json ->> 'department' AS department,
       normalized_json ->> 'classification' AS classification, normalized_json ->> 'membership_status' AS membership_status,
       person_id
     FROM categorized

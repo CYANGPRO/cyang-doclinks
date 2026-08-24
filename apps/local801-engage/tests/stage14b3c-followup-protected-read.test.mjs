@@ -121,7 +121,9 @@ function queue() {
 test("Follow-ups replaces employee and organizer display PII with protected companions", async () => {
   const environment = env();
   const keyConfig = getPiiKeyConfiguration(environment);
-  const query = async (sql) => {
+  const protectedQueries = [];
+  const query = async (sql, parameters) => {
+    protectedQueries.push({ sql, parameters });
     if (sql.includes("pii-protected-read:acceptance-state")) return state();
     if (sql.includes("pii-protected-followup-read:people")) return [protectedPerson(keyConfig)];
     if (sql.includes("pii-protected-followup-read:users")) return [
@@ -135,6 +137,12 @@ test("Follow-ups replaces employee and organizer display PII with protected comp
   assert.equal(result.items[0].displayName, "Synthetic Avery");
   assert.equal(result.items[0].assignedTo, "Synthetic CAT Member");
   assert.deepEqual(result.items[0].assigneeOptions.map((item) => item.label), ["Synthetic CAT Member", "Synthetic CAT Lead"]);
+  const peopleQuery = protectedQueries.find((entry) => entry.sql.includes("pii-protected-followup-read:people"));
+  const usersQuery = protectedQueries.find((entry) => entry.sql.includes("pii-protected-followup-read:users"));
+  assert.deepEqual(peopleQuery.parameters, [organizationId, [personHandle()]]);
+  assert.deepEqual(usersQuery.parameters, [organizationId, [userHandle(assignedUserId), userHandle(optionUserId)]]);
+  assert.match(peopleQuery.sql, /digest\(concat\(\$1::uuid::text, ':', person_id::text\)/);
+  assert.match(usersQuery.sql, /digest\(concat\('user:', \$1::uuid::text, ':', user_id::text\)/);
 });
 
 test("Follow-ups protected reads fail closed when a visible companion is missing", async () => {

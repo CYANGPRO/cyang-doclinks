@@ -1,4 +1,4 @@
-# Local 801 Engage Production-Readiness Checklist
+# Engaging Local 801 production-readiness checklist
 
 ## Current decision
 
@@ -20,7 +20,7 @@ Independent review `R8-CAT-REVIEW-8/23/2025 Security` completed its audit and re
 - [x] Active user, single Local 801 role, and `auth_session_version` are revalidated against PostgreSQL for protected production sessions.
 - [x] Team & Access supports provision, role change, deactivate/reactivate, and session revocation with hierarchy controls and audit events.
 - [x] Preview role cookies are denied in Vercel Production.
-- [x] Native authenticated web reporting is the reporting architecture; no Power BI runtime connection is required.
+- [x] Native authenticated web reporting is the sole reporting architecture.
 - [x] PWA service worker caches static/offline assets only and does not cache authenticated application responses.
 - [x] Stage 14A production launch gate blocks production when Preview-only import execution/durable-worker switches or synthetic seed opt-in are enabled.
 - [x] Stage 14A response headers include CSP, HSTS in production builds, frame/object restrictions, no-store application caching, COOP/CORP, and noindex directives.
@@ -50,6 +50,8 @@ Independent review `R8-CAT-REVIEW-8/23/2025 Security` completed its audit and re
 - [x] Set `LOCAL801_PRODUCTION_LAUNCH_ENABLED=1` **last**, after every other launch blocker was cleared.
 - [x] Verify `npm run security:production-readiness` exits successfully using the final production environment without printing secret values.
 - [x] Verify `cat.cyang.io`, TLS, authenticated access, health/readiness behavior, private R2 access, scanner fail-closed behavior, and production session revocation after the final deployment.
+
+The exact owner-only work is tracked in `docs/MANUAL_PRODUCTION_ACTIONS.md`; the promotion/suspension/rollback sequence is `docs/PRODUCTION_MOVE_RUNBOOK.md`.
 
 ## Production invariants
 

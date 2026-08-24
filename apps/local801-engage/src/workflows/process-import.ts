@@ -9,6 +9,7 @@ import {
 } from "../lib/import-workflow-error-boundary.ts";
 import {
   ImportWorkerError,
+  acknowledgeImportCancellation,
   completeImportProcessing,
   ensureImportProcessingJob,
   failImportProcessing,
@@ -45,6 +46,12 @@ async function ensureJobStep(input: ImportWorkflowInput, trustedWorkflowRunId: s
 async function scanSourceStep(input: ImportWorkflowInput, trustedWorkflowRunId: string) {
   "use step";
   try { return await scanImportSource(input, trustedWorkflowRunId); }
+  catch (error) { throwForStep(error); }
+}
+
+async function cancellationStep(input: ImportWorkflowInput, trustedWorkflowRunId: string) {
+  "use step";
+  try { return await acknowledgeImportCancellation(input, trustedWorkflowRunId); }
   catch (error) { throwForStep(error); }
 }
 
@@ -94,14 +101,27 @@ export async function processImportWorkflow(input: ImportWorkflowInput) {
   try {
     const ownership = await ensureJobStep(input, workflowRunId);
     if (ownership === "not_owner") return { status: "duplicate_owner" as const };
+    if (await cancellationStep(input, workflowRunId)) return { status: "cancelled" as const };
     await scanSourceStep(input, workflowRunId);
+    if (await cancellationStep(input, workflowRunId)) return { status: "cancelled" as const };
     await parseAndStageStep(input, workflowRunId);
+    if (await cancellationStep(input, workflowRunId)) return { status: "cancelled" as const };
     await validateStagedStep(input, workflowRunId);
+    if (await cancellationStep(input, workflowRunId)) return { status: "cancelled" as const };
     await matchIdentitiesStep(input, workflowRunId);
+    if (await cancellationStep(input, workflowRunId)) return { status: "cancelled" as const };
     await prepareReviewStep(input, workflowRunId);
+    if (await cancellationStep(input, workflowRunId)) return { status: "cancelled" as const };
     await completeProcessingStep(input, workflowRunId);
     return { status: "ready_for_review" as const };
   } catch (error) {
+    try {
+      if (await cancellationStep(input, workflowRunId)) return { status: "cancelled" as const };
+    } catch {
+      // A cancellation probe can fail for the same dependency that caused the
+      // workflow error. Failure persistence must still get its own step retry
+      // opportunity so the owned job is not left indefinitely in `running`.
+    }
     const code = safeImportProcessingCodeFromWorkflowError(error);
     await recordFailureStep(input, workflowRunId, code);
     throw error;

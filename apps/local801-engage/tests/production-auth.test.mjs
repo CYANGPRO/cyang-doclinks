@@ -7,6 +7,7 @@ import {
   productionAuthClaimShape,
   productionAuthSafeCode,
   productionIdentityFromProfile,
+  profileHasVerifiedEmail,
   profileHasRequiredMfa,
   resolveProductionSessionBinding,
   ProductionAuthError,
@@ -22,7 +23,7 @@ const config = {
   wellKnown: "https://idp.example.test/.well-known/openid-configuration",
   clientId: "client",
   clientSecret: "secret",
-  bootstrapObjectId: "",
+  tenantId: "",
   mfaClaim: "amr",
   mfaValue: "mfa",
 };
@@ -35,6 +36,7 @@ const identity = {
   emailVerified: true,
   bootstrapObjectMatched: false,
   mfaVerified: true,
+  directoryObjectVerified: false,
 };
 
 function bindingRow(overrides = {}) {
@@ -45,6 +47,7 @@ function bindingRow(overrides = {}) {
     auth_session_version: "3",
     role: "cat_lead",
     linked_subject: null,
+    policy_acknowledged: true,
     ...overrides,
   };
 }
@@ -62,7 +65,55 @@ test("production auth config is disabled by default and requires complete HTTPS 
   assert.equal(parsed.providerId, "local801-oidc");
   assert.equal(parsed.mfaClaim, "amr");
   assert.equal(parsed.mfaValue, "mfa");
-  assert.equal(parsed.bootstrapObjectId, "");
+  assert.equal(parsed.tenantId, "");
+});
+
+test("OIDC directory identities require the exact tenant, a valid object ID, and MFA without trusting mutable usernames", () => {
+  const immutableConfig = {
+    ...config,
+    tenantId: "aaaaaaaa-0000-4000-8000-000000000001",
+  };
+  assert.deepEqual(productionIdentityFromProfile({
+    sub: "provider-pairwise-subject",
+    tid: "aaaaaaaa-0000-4000-8000-000000000001",
+    oid: "bbbbbbbb-0000-4000-8000-000000000002",
+    preferred_username: "mutable@example.test",
+    amr: ["pwd", "mfa"],
+  }, immutableConfig), {
+    providerId: "local801-oidc",
+    subject: "aaaaaaaa-0000-4000-8000-000000000001:bbbbbbbb-0000-4000-8000-000000000002",
+    email: "",
+    emailVerified: false,
+    mfaVerified: true,
+    directoryObjectVerified: true,
+  });
+  assert.deepEqual(productionIdentityFromProfile({
+    sub: "provider-pairwise-subject",
+    tid: "aaaaaaaa-0000-4000-8000-000000000001",
+    oid: "cccccccc-0000-4000-8000-000000000003",
+    preferred_username: "mutable@example.test",
+    amr: ["mfa"],
+  }, immutableConfig), {
+    providerId: "local801-oidc",
+    subject: "aaaaaaaa-0000-4000-8000-000000000001:cccccccc-0000-4000-8000-000000000003",
+    email: "",
+    emailVerified: false,
+    mfaVerified: true,
+    directoryObjectVerified: true,
+  });
+  assert.throws(() => productionIdentityFromProfile({
+    sub: "provider-pairwise-subject",
+    tid: "dddddddd-0000-4000-8000-000000000004",
+    oid: "cccccccc-0000-4000-8000-000000000003",
+    preferred_username: "mutable@example.test",
+    amr: ["mfa"],
+  }, immutableConfig), /email/i);
+  assert.throws(() => productionIdentityFromProfile({
+    sub: "provider-pairwise-subject",
+    tid: "aaaaaaaa-0000-4000-8000-000000000001",
+    oid: "bbbbbbbb-0000-4000-8000-000000000002",
+    amr: ["pwd"],
+  }, immutableConfig), /MFA/i);
 });
 
 test("OIDC profile requires subject, verified email, and configured MFA assurance", () => {
@@ -76,18 +127,34 @@ test("OIDC profile requires subject, verified email, and configured MFA assuranc
     amr: ["pwd", "mfa"],
   }, config);
   assert.deepEqual(parsed, identity);
+  assert.equal(profileHasVerifiedEmail({ verified_primary_email: "Person@Example.Test" }, "person@example.test"), true);
+  assert.deepEqual(productionIdentityFromProfile({
+    sub: "oidc-subject-123",
+    email: "Person@Example.Test",
+    verified_primary_email: "person@example.test",
+    amr: ["mfa"],
+  }, config), identity);
   assert.deepEqual(productionIdentityFromProfile({
     sub: "oidc-subject-123",
     verified_primary_email: "Person@Example.Test",
-    amr: ["pwd", "mfa"],
-  }, config), identity);
-  assert.throws(() => productionIdentityFromProfile({
-    sub: "x",
-    email: "different@example.test",
-    verified_primary_email: "person@example.test",
     amr: ["mfa"],
-  }, config), /verify/i);
+  }, config), identity);
+  assert.equal(profileHasVerifiedEmail({ local801_email: "Person@Example.Test", xms_edov: true }, "person@example.test"), true);
+  assert.deepEqual(productionIdentityFromProfile({
+    sub: "oidc-subject-123",
+    local801_email: "Person@Example.Test",
+    xms_edov: true,
+    amr: ["mfa"],
+  }, config), identity);
+  assert.equal(profileHasVerifiedEmail({ local801_email: "Person@Example.Test", xms_edov: false }, "person@example.test"), false);
+  assert.equal(profileHasVerifiedEmail({ local801_email: "Person@Example.Test", email_verified: true }, "person@example.test"), false);
+  assert.equal(profileHasVerifiedEmail({ local801_email: "other@example.test", xms_edov: true }, "person@example.test"), false);
+  assert.equal(profileHasVerifiedEmail({ verified_primary_email: "other@example.test" }, "person@example.test"), false);
+  assert.equal(profileHasVerifiedEmail({ verified_primary_email: ["person@example.test"] }, "person@example.test"), false);
+  assert.throws(() => productionIdentityFromProfile({ sub: "x", email: "person@example.test", verified_primary_email: "other@example.test", amr: ["mfa"] }, config), /verify/i);
   assert.throws(() => productionIdentityFromProfile({ sub: "x", email: "person@example.test", email_verified: false, amr: ["mfa"] }, config), /verify/i);
+  assert.throws(() => productionIdentityFromProfile({ sub: "x", preferred_username: "person@example.test", amr: ["mfa"] }, config), /email/i);
+  assert.throws(() => productionIdentityFromProfile({ sub: "x", local801_email: "person@example.test", xms_edov: false, amr: ["mfa"] }, config), /verify/i);
   assert.throws(() => productionIdentityFromProfile({ sub: "x", email: "person@example.test", email_verified: true, amr: ["pwd"] }, config), /MFA/i);
   const bootstrapObjectId = "834e272c-3b2b-40ae-92e6-017803ce3525";
   assert.deepEqual(productionIdentityFromProfile({
@@ -135,7 +202,7 @@ test("production identity binding requires one active provisioned user with one 
   const result = await authorizeProductionIdentity(identity, config, {
     query: async (sql, parameters) => {
       sqlText = sql;
-      assert.deepEqual(parameters, ["local801", "person@example.test", "local801-oidc"]);
+      assert.deepEqual(parameters, ["local801", "person@example.test", "local801-oidc", "privacy-acceptable-use", "2026-08-18"]);
       return [bindingRow()];
     },
     transaction: async (statements) => transactions.push(statements),
@@ -146,6 +213,7 @@ test("production identity binding requires one active provisioned user with one 
     email: "person@example.test",
     role: "cat_lead",
     sessionVersion: 3,
+    policyAcknowledged: true,
   });
   assert.match(sqlText, /organization\.slug = \$1::text/);
   assert.match(sqlText, /app_user\.deactivated_at IS NULL/);
@@ -188,7 +256,10 @@ test("production session is revalidated against live active user, role, organiza
   });
   assert.equal(valid?.role, "cat_lead");
   assert.equal(valid?.email, "person@example.test");
-  assert.deepEqual(parameters, ["local801", userId, 3]);
+  assert.equal(valid?.policyAcknowledged, true);
+  assert.deepEqual(parameters, ["local801", userId, 3, "privacy-acceptable-use", "2026-08-18"]);
+  const pending = await resolveProductionSessionBinding({ organizationSlug: "local801", userId, sessionVersion: 3 }, async () => [bindingRow({ policy_acknowledged: false })]);
+  assert.equal(pending?.policyAcknowledged, false);
   const revoked = await resolveProductionSessionBinding({ organizationSlug: "local801", userId, sessionVersion: 3 }, async () => []);
   assert.equal(revoked, null);
 });
@@ -234,15 +305,13 @@ test("production NextAuth route and server authorization keep Preview cookies se
   assert.doesNotMatch(authz, /sessionAuth\.email/);
   assert.match(authz, /productionAuthRuntimeEnabled\(\)/);
   assert.doesNotMatch(authz, /process\.env\.LOCAL801_PRODUCTION_AUTH_ENABLED === "1"/);
-  assert.match(signIn, /Preview role cookies are test state and are never accepted as production authentication/);
-  assert.match(signIn, /production\.enabled && productionRuntime/);
-  assert.match(signIn, /Production access is currently closed/);
-  assert.match(signIn, /authenticationErrors\[code\] \?\? authenticationErrors\.Default/);
+  assert.match(signIn, /does not create an account, change production access, or connect to production member records/);
+  assert.match(signIn, /synthetic example\.test records/);
   assert.match(signIn, /ProductionSignInButton/);
-  assert.match(signInButton, /getProviders\(\)/);
-  assert.match(signInButton, /if \(!providers\?\.\[providerId\]\)/);
-  assert.match(signInButton, /role="alert"/);
+  assert.match(signIn, /production\.enabled && productionAuthRuntimeEnabled\(\)/);
+  assert.match(signIn, /Sign-in is not open yet/);
   assert.match(example, /LOCAL801_PRODUCTION_AUTH_ENABLED=0/);
+  assert.match(example, /verified_primary_email/);
   assert.match(example, /LOCAL801_OIDC_MFA_CLAIM=amr/);
   assert.match(example, /LOCAL801_OIDC_MFA_VALUE=mfa/);
 });

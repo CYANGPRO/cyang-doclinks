@@ -2,6 +2,7 @@ import "server-only";
 
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import { mapHeaders, parseCsv, recognizedMappings } from "./imports.ts";
+import { getProductionLaunchState } from "./production-launch-policy.ts";
 import type { ImportScannerOutcome } from "./import-processing.ts";
 
 const scannerBaseUrl = "https://scan.cyang.io";
@@ -324,19 +325,26 @@ export function isCsvImportSource(mediaType: string, originalFilename: string) {
   return mediaType.toLowerCase() === "text/csv" || originalFilename.toLowerCase().endsWith(".csv");
 }
 
-/**
- * Durable Preview acceptance is limited to CSV rows using the synthetic
- * identity namespace. Malware scanning remains an independent required step.
- */
-export function isStrictSyntheticPreviewCsv(content: Buffer, mediaType: string, originalFilename: string) {
-  if (!isCsvImportSource(mediaType, originalFilename)) return false;
-  let text: string;
-  try {
-    text = new TextDecoder("utf-8", { fatal: true }).decode(content);
-  } catch {
-    return false;
-  }
-  const rows = parseCsv(text);
+export function durableImportProcessingEnabled(env: NodeJS.ProcessEnv = process.env) {
+  if (durablePreviewImportsEnabled(env)) return true;
+  return env.VERCEL_ENV === "production"
+    && env.LOCAL801_PROTECTED_DURABLE_IMPORTS_ENABLED === "1"
+    && env.LOCAL801_DATABASE_PII_PROTECTION_ENABLED === "1"
+    && env.LOCAL801_PII_DUAL_WRITE_ENABLED !== "1"
+    && env.LOCAL801_PII_BACKFILL_ENABLED !== "1"
+    && getProductionLaunchState(env).ready;
+}
+
+export function isXlsxImportSource(mediaType: string, originalFilename: string) {
+  return mediaType.toLowerCase() === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    || originalFilename.toLowerCase().endsWith(".xlsx");
+}
+
+export function isSupportedImportSource(mediaType: string, originalFilename: string) {
+  return isCsvImportSource(mediaType, originalFilename) || isXlsxImportSource(mediaType, originalFilename);
+}
+
+function rowsUseStrictSyntheticIdentities(rows: string[][]) {
   const headers = rows[0] ?? [];
   if (rows.length < 2 || recognizedMappings(headers).length === 0) return false;
   const authoritativeColumns = mapHeaders(headers).map((header, index) => ({
@@ -357,4 +365,26 @@ export function isStrictSyntheticPreviewCsv(content: Buffer, mediaType: string, 
     }
     return hasIdentity;
   });
+}
+
+export function areStrictSyntheticImportSheets(
+  sheets: ReadonlyArray<{ state: string; rows: string[][] }>,
+) {
+  const included = sheets.filter((sheet) => sheet.state === "included");
+  return included.length > 0 && included.every((sheet) => rowsUseStrictSyntheticIdentities(sheet.rows));
+}
+
+/**
+ * Durable Preview acceptance is limited to CSV rows using the synthetic
+ * identity namespace. Malware scanning remains an independent required step.
+ */
+export function isStrictSyntheticPreviewCsv(content: Buffer, mediaType: string, originalFilename: string) {
+  if (!isCsvImportSource(mediaType, originalFilename)) return false;
+  let text: string;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(content);
+  } catch {
+    return false;
+  }
+  return rowsUseStrictSyntheticIdentities(parseCsv(text));
 }

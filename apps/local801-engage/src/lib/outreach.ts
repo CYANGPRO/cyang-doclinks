@@ -150,7 +150,7 @@ type FollowupRow = {
 };
 
 
-const organizationWideRoles = new Set<Role>(["system_owner", "local_admin", "cat_admin"]);
+const organizationWideRoles = new Set<Role>(["system_owner", "local_admin", "cat_admin", "cat_lead"]);
 const HANDLE_RE = /^[0-9a-f]{64}$/i;
 
 export class OutreachAccessError extends Error {

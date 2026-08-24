@@ -246,20 +246,20 @@ test("Reports page makes Overview the default and renders the dynamic engagement
   assert.match(page, /getEngagementCommandCenterReport/);
   assert.match(page, /EngagementCommandCenter/);
   assert.match(page, /: "overview"/);
-  assert.match(component, /Engagement filters/);
-  assert.match(component, /Coverage journey/);
-  assert.match(component, /Needs attention/);
-  assert.match(component, /Engagement depth/);
-  assert.match(component, /Coverage gaps/);
-  assert.match(component, /Follow-up health/);
-  assert.match(component, /New-hire contact timeliness/);
-  assert.match(component, /CAT team coverage/);
-  assert.match(component, /Employee action readiness/);
-  assert.match(component, /Willingness by action/);
-  assert.match(component, /Action willingness depth/);
+  assert.match(component, /Filter outreach coverage/);
+  assert.match(component, /People reached and willing to act/);
+  assert.match(component, /Some work needs attention/);
+  assert.match(component, /Contact frequency/);
+  assert.match(component, /Contact coverage by department or work location/);
+  assert.match(component, /Follow-up workload/);
+  assert.match(component, /New-hire first-contact timing/);
+  assert.match(component, /Organizer assignment and contact coverage/);
+  assert.match(component, /Current action responses/);
+  assert.match(component, /Responses by organizing action/);
+  assert.match(component, /Number of current willing actions per person/);
   assert.match(component, /Declines all actions/);
   assert.match(component, /Completed an action/);
-  assert.match(component, /Completed action selections/);
+  assert.match(component, /Completed selections/);
   assert.match(component, /method="get"/);
   assert.match(component, /name="period"/);
   assert.match(component, /name="department"/);
@@ -269,11 +269,13 @@ test("Reports page makes Overview the default and renders the dynamic engagement
 });
 
 
-test("Reports navigation makes the selected view explicit and keeps mobile tabs to one scrollable row", () => {
+test("Reports navigation makes the selected view explicit and wraps every tab without horizontal scrolling", () => {
   const page = readFileSync(new URL("../src/app/reports/page.tsx", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../src/app/stage16.css", import.meta.url), "utf8");
   assert.match(page, /Viewing <strong/);
-  assert.match(page, /overflowX: "auto"/);
-  assert.match(page, /flex: "0 0 auto"/);
+  assert.match(page, /className="report-view-nav"/);
+  assert.match(css, /\.report-view-nav \{[\s\S]*flex-wrap: wrap;/);
+  assert.doesNotMatch(page, /overflowX/);
   assert.match(page, /className=\{activeView === tab\.key \? "button" : "button secondary"\}/);
   assert.match(page, /aria-current=\{activeView === tab\.key \? "page" : undefined\}/);
 });

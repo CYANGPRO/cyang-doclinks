@@ -4,6 +4,8 @@ import { EngagementWriteError, recordEngagement } from "@/lib/engagement-recordi
 import { operationalRuntimeEnabled } from "@/lib/operational-runtime";
 import { hasExactSameOrigin } from "@/lib/request-security";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
+import { enforceWorkspaceRateLimit, RateLimitError } from "@/lib/rate-limit";
+import { rateLimitResponse } from "@/lib/rate-limit-response";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -43,6 +45,7 @@ export async function POST(request: Request, { params }: RouteContext) {
 
   try {
     const [{ handle }, body, context] = await Promise.all([params, readJson(request), resolveWorkspaceContext(auth.user)]);
+    await enforceWorkspaceRateLimit(context, "mutation");
     const result = await recordEngagement(context, {
       personHandle: handle,
       assignmentHandle: body.assignmentHandle,
@@ -54,6 +57,7 @@ export async function POST(request: Request, { params }: RouteContext) {
     });
     return json({ engagement: "ok", ...result }, 201);
   } catch (error) {
+    if (error instanceof RateLimitError) return rateLimitResponse(error);
     if (error instanceof EngagementWriteError) return json({ error: error.code, message: error.message }, error.status);
     return json({ error: "ENGAGEMENT_UNAVAILABLE", message: "The engagement could not be recorded safely." }, 503);
   }

@@ -83,9 +83,9 @@ test("Reports page makes Campaigns a ready navigation tab and renders campaign r
   const source = readFileSync(new URL("../src/app/reports/page.tsx", import.meta.url), "utf8");
   assert.match(source, /getCampaignReport/);
   assert.match(source, /"campaigns"/);
-  assert.match(source, /Campaign overview/);
+  assert.match(source, /Campaign totals/);
   assert.match(source, /Campaign performance/);
-  assert.match(source, /Campaign status/);
+  assert.match(source, /Campaigns by status/);
   assert.match(source, /view === "campaigns"/);
   assert.doesNotMatch(source, /Campaigns · upcoming/);
 });

@@ -1,0 +1,37 @@
+[Unit]
+Description=Local 801 CAT malware scanner adapter
+After=network-online.target clamav-daemon.service
+Wants=network-online.target
+Requires=clamav-daemon.service
+
+[Service]
+Type=simple
+User=local801-scanner
+Group=local801-scanner
+EnvironmentFile=/etc/local801-cat-scanner.env
+ExecStart=/usr/bin/node /opt/local801-cat-scanner/server.mjs
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RuntimeDirectory=local801-cat-scanner
+RuntimeDirectoryMode=0700
+RestrictSUIDSGID=true
+LockPersonality=true
+# Node/V8 requires executable memory while initializing its runtime.
+MemoryDenyWriteExecute=false
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+IPAddressDeny=any
+IPAddressAllow=localhost
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

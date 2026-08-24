@@ -1,53 +1,31 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
-export const LOCAL801_MOBILE_APP_ID = "io.cyang.local801engage";
-export const LOCAL801_MOBILE_APP_ORIGIN = "https://cat.cyang.io";
-
-const configuredUrl = process.env.LOCAL801_MOBILE_APP_URL?.trim() || LOCAL801_MOBILE_APP_ORIGIN;
-const mobileUrl = new URL(configuredUrl);
-
-if (
-  mobileUrl.protocol !== "https:"
-  || mobileUrl.origin !== LOCAL801_MOBILE_APP_ORIGIN
-  || mobileUrl.pathname !== "/"
-  || mobileUrl.search
-  || mobileUrl.hash
-) {
-  throw new Error(`LOCAL801_MOBILE_APP_URL must be exactly ${LOCAL801_MOBILE_APP_ORIGIN}.`);
+const canonicalUrl = process.env.LOCAL801_NATIVE_SERVER_URL?.trim() || "https://cat.cyang.io";
+const origin = new URL(canonicalUrl);
+if (origin.protocol !== "https:" || origin.pathname !== "/" || origin.search || origin.hash) {
+  throw new Error("LOCAL801_NATIVE_SERVER_URL must be a canonical HTTPS origin.");
 }
 
 const config: CapacitorConfig = {
-  appId: LOCAL801_MOBILE_APP_ID,
-  appName: "Local 801 Engage",
+  appId: "io.cyang.local801.engage",
+  appName: "Engaging Local 801",
   webDir: "native-shell",
-  backgroundColor: "#ffffff",
-  loggingBehavior: "debug",
   server: {
-    url: mobileUrl.toString(),
+    url: origin.origin,
     cleartext: false,
-  },
-  ios: {
-    contentInset: "automatic",
-    preferredContentMode: "mobile",
-    allowsLinkPreview: false,
-    webContentsDebuggingEnabled: false,
+    // Keep Microsoft Entra inside the application WebView so the OIDC callback
+    // returns to the same cookie jar. Do not broaden this list to wildcards.
+    allowNavigation: [origin.hostname, "login.microsoftonline.com"],
   },
   android: {
     allowMixedContent: false,
+    captureInput: true,
     webContentsDebuggingEnabled: false,
   },
-  plugins: {
-    SplashScreen: {
-      launchAutoHide: false,
-      launchShowDuration: 10000,
-      backgroundColor: "#134D8C",
-      showSpinner: false,
-    },
-    StatusBar: {
-      style: "LIGHT",
-      backgroundColor: "#134D8C",
-      overlaysWebView: false,
-    },
+  ios: {
+    contentInset: "automatic",
+    limitsNavigationsToAppBoundDomains: true,
+    preferredContentMode: "mobile",
   },
 };
 

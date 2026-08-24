@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import type {
@@ -7,6 +8,7 @@ import type {
   EngagementAssignmentOption,
 } from "@/lib/engagement-recording";
 import type { EmployeeActionDefinition, EmployeeActionProfileItem } from "@/lib/employee-actions";
+import { followupSuggestionForOutcome, suggestedLocalDateTime } from "@/lib/follow-up-suggestions";
 
 const contactMethods = [
   ["in_person", "In person"],
@@ -29,11 +31,10 @@ const outcomes = [
 const noteVisibilities = [
   ["assigned_scope", "Assigned outreach team"],
   ["writer_only", "Only me"],
-  ["cat_members", "All CAT members"],
-  ["cat_leads", "CAT leads and administrators"],
+  ["cat_members", "All CATs"],
+  ["cat_leads", "LCATs and administrators"],
   ["administrators", "Administrators only"],
 ] as const;
-
 
 function localDateTimeToIso(value: FormDataEntryValue | null) {
   if (typeof value !== "string" || !value) return null;
@@ -67,9 +68,18 @@ export function EngagementRecorder({
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [outcome, setOutcome] = useState("contacted");
   const [followupEnabled, setFollowupEnabled] = useState(false);
+  const [followupDueAt, setFollowupDueAt] = useState("");
   const [lastEngagementHandle, setLastEngagementHandle] = useState<string | null>(null);
   const currentByAction = useMemo(() => new Map(currentActions.map((item) => [item.handle, item.response])), [currentActions]);
+  const followupSuggestion = useMemo(() => followupSuggestionForOutcome(outcome), [outcome]);
+
+  function applyFollowupSuggestion() {
+    if (!followupSuggestion) return;
+    setFollowupEnabled(true);
+    setFollowupDueAt(suggestedLocalDateTime(followupSuggestion.days));
+  }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -99,17 +109,19 @@ export function EngagementRecorder({
       });
       const result = await responseBody(response);
       if (!response.ok) {
-        setError(typeof result.message === "string" ? result.message : "The engagement could not be recorded.");
+        setError(typeof result.message === "string" ? result.message : "The conversation could not be saved.");
         return;
       }
       const engagementHandle = typeof result.engagementHandle === "string" ? result.engagementHandle : null;
       setLastEngagementHandle(engagementHandle);
-      setMessage("Engagement recorded. Action Readiness updates made now will be linked to this conversation.");
+      setMessage("Conversation saved. Any action-readiness changes you make now will be linked to it.");
+      setOutcome("contacted");
       setFollowupEnabled(false);
+      setFollowupDueAt("");
       formElement.reset();
       router.refresh();
     } catch {
-      setError("The engagement could not be recorded. Try again.");
+      setError("The conversation could not be saved. Try again.");
     } finally {
       setBusy(false);
     }
@@ -127,20 +139,20 @@ export function EngagementRecorder({
       });
       const result = await responseBody(response);
       if (!response.ok) {
-        setError(typeof result.message === "string" ? result.message : "Action Readiness could not be updated.");
+        setError(typeof result.message === "string" ? result.message : "Action readiness could not be updated.");
         return;
       }
-      setMessage("Action Readiness updated.");
+      setMessage("Action readiness updated.");
       router.refresh();
     } catch {
-      setError("Action Readiness could not be updated. Try again.");
+      setError("Action readiness could not be updated. Try again.");
     } finally {
       setActionBusy(null);
     }
   }
 
   async function declineAll() {
-    if (actionBusy || !window.confirm("Record that this employee currently declines all organizing actions? Previous history is preserved.")) return;
+    if (actionBusy || !window.confirm("Record that this person currently declines all organizing actions? Their earlier history will stay on file.")) return;
     setActionBusy("declines_all");
     setError(null);
     try {
@@ -151,13 +163,13 @@ export function EngagementRecorder({
       });
       const result = await responseBody(response);
       if (!response.ok) {
-        setError(typeof result.message === "string" ? result.message : "Action Readiness could not be updated.");
+        setError(typeof result.message === "string" ? result.message : "Action readiness could not be updated.");
         return;
       }
-      setMessage("Employee posture updated to declines all actions.");
+      setMessage("Action readiness updated to declines all actions.");
       router.refresh();
     } catch {
-      setError("Action Readiness could not be updated. Try again.");
+      setError("Action readiness could not be updated. Try again.");
     } finally {
       setActionBusy(null);
     }
@@ -166,39 +178,49 @@ export function EngagementRecorder({
   return (
     <div className="stack">
       <section className="section-card">
-        <div className="section-heading"><div><h3>Record conversation</h3><p>Use standardized outcomes so engagement reporting stays consistent.</p></div></div>
+        <div className="section-heading"><div><h3>Record a conversation</h3><p>Choose what happened so the next person can understand the contact at a glance.</p></div></div>
         <form onSubmit={submit} className="stack">
-          <div className="review-summary">
+          <div className="form-grid">
             <div className="field"><label htmlFor="contactMethod">Contact method</label><select id="contactMethod" name="contactMethod" defaultValue="in_person" required>{contactMethods.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
-            <div className="field"><label htmlFor="outcome">Outcome</label><select id="outcome" name="outcome" defaultValue="contacted" required>{outcomes.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
-            <div className="field"><label htmlFor="occurredAt">Occurred at</label><input id="occurredAt" name="occurredAt" type="datetime-local" /><small className="muted">Leave blank to use the current time. Entered times use your device time zone.</small></div>
-            <div className="field"><label htmlFor="assignmentHandle">Outreach context</label><select id="assignmentHandle" name="assignmentHandle" defaultValue={assignments[0]?.handle || ""} required={!organizationWide}>{organizationWide ? <option value="">General outreach</option> : null}{assignments.map((assignment) => <option key={assignment.handle} value={assignment.handle}>{assignment.label} · {assignment.relationship}</option>)}</select></div>
+            <div className="field"><label htmlFor="outcome">What happened?</label><select id="outcome" name="outcome" value={outcome} onChange={(event) => setOutcome(event.target.value)} required>{outcomes.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
+            <div className="field"><label htmlFor="occurredAt">When</label><input id="occurredAt" name="occurredAt" type="datetime-local" /><small>Leave this blank to use the current time. Entered times use your device time zone.</small></div>
+            <div className="field"><label htmlFor="assignmentHandle">Context</label><select id="assignmentHandle" name="assignmentHandle" defaultValue={assignments[0]?.handle || ""} required={!organizationWide}>{organizationWide ? <option value="">General outreach</option> : null}{assignments.map((assignment) => <option key={assignment.handle} value={assignment.handle}>{assignment.label} · {assignment.relationship}</option>)}</select></div>
           </div>
 
-          <div className="field"><label htmlFor="note">Restricted narrative note (optional)</label><textarea id="note" name="note" maxLength={2000} rows={4} placeholder="Keep this factual and operational. Do not enter unnecessary sensitive information." /></div>
-          <div className="field"><label htmlFor="noteVisibility">Note visibility</label><select id="noteVisibility" name="noteVisibility" defaultValue="assigned_scope">{noteVisibilities.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
+          <div className="field"><label htmlFor="note">Note (optional)</label><textarea id="note" name="note" maxLength={2000} rows={4} placeholder="Keep it factual and useful. Leave out sensitive details that are not needed for the work." /></div>
+          <div className="field"><label htmlFor="noteVisibility">Who can see this note?</label><select id="noteVisibility" name="noteVisibility" defaultValue="assigned_scope">{noteVisibilities.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
 
-          <label style={{ display: "flex", gap: 8, alignItems: "center" }}><input type="checkbox" checked={followupEnabled} onChange={(event: { target: { checked: boolean } }) => setFollowupEnabled(event.target.checked)} />Create a follow-up</label>
-          {followupEnabled ? <div className="review-summary">
-            <div className="field"><label htmlFor="followupDueAt">Follow-up due</label><input id="followupDueAt" name="followupDueAt" type="datetime-local" required /></div>
+          {outcome === "wrong_contact" ? <div className="workflow-suggestion" role="note">
+            <div><strong>Fix the contact info</strong><div className="muted">Record what happened, then send the corrected phone, email, or address to Membership Data. You can suggest a change, but you can’t replace the official contact information yourself.</div></div>
+            <Link className="button secondary" href={`/outreach/${employeeHandle}/contact`}>Open contact info</Link>
+          </div> : null}
+
+          {followupSuggestion ? <div className="workflow-suggestion" role="note">
+            <div><strong>Suggested next step: {followupSuggestion.label}</strong><div className="muted">{followupSuggestion.reason} Nothing is scheduled unless you use the suggestion and save the conversation.</div></div>
+            <button className="button secondary" type="button" onClick={applyFollowupSuggestion}>Use suggestion</button>
+          </div> : null}
+
+          <label className="choice-field"><input type="checkbox" checked={followupEnabled} onChange={(event: { target: { checked: boolean } }) => { setFollowupEnabled(event.target.checked); if (!event.target.checked) setFollowupDueAt(""); }} /><span><strong>Create a follow-up</strong><span className="field-help choice-help">Schedule the next contact while you’re recording this conversation.</span></span></label>
+          {followupEnabled ? <div className="form-grid">
+            <div className="field"><label htmlFor="followupDueAt">Follow-up due</label><input id="followupDueAt" name="followupDueAt" type="datetime-local" value={followupDueAt} onChange={(event) => setFollowupDueAt(event.target.value)} required /></div>
             <div className="field"><label htmlFor="assigneeHandle">Assign to</label><select id="assigneeHandle" name="assigneeHandle" defaultValue={assignees.find((item) => item.current)?.handle || assignees[0]?.handle || ""} required>{assignees.map((assignee) => <option key={assignee.handle} value={assignee.handle}>{assignee.label}{assignee.current ? " (me)" : ""}</option>)}</select></div>
           </div> : null}
-          <button className="button" type="submit" disabled={busy}>{busy ? "Recording…" : "Record engagement"}</button>
+          <div className="form-actions"><button className="button" type="submit" disabled={busy}>{busy ? "Saving…" : "Save conversation"}</button></div>
         </form>
       </section>
 
       <section className="section-card">
-        <div className="section-heading"><div><h3>Update Action Readiness</h3><p>These are cumulative employee signals. Previous history is preserved.</p></div></div>
-        {lastEngagementHandle ? <p className="muted">Updates in this session will be linked to the conversation just recorded.</p> : null}
-        {actionDefinitions.length === 0 ? <div className="empty-state"><strong>No employee actions configured</strong><p>Create the organizing action catalog before recording willingness.</p></div> : <div className="stack">
+        <div className="section-heading"><div><h3>Action readiness</h3><p>Keep the current response up to date. Earlier responses stay in the history.</p></div></div>
+        {lastEngagementHandle ? <p className="muted">Changes you make now will be linked to the conversation you just saved.</p> : null}
+        {actionDefinitions.length === 0 ? <div className="empty-state"><strong>No actions are set up yet</strong><p>Create the action catalog before recording willingness.</p></div> : <div className="stack">
           {actionDefinitions.map((action) => <article className="section-card" key={action.handle}>
             <div className="section-heading"><div><h3>{action.label}</h3><p>Engagement level {action.engagementLevel} · Current: {currentByAction.get(action.handle) || "not recorded"}</p></div></div>
-            <div className="page-actions">
+            <div className="page-actions compact-actions">
               {(["willing", "considering", "declined", "completed"] as const).map((value) => <button key={value} className="button secondary" type="button" disabled={Boolean(actionBusy)} onClick={() => updateAction(action.handle, value)}>{actionBusy === action.handle ? "Saving…" : value[0].toUpperCase() + value.slice(1)}</button>)}
             </div>
           </article>)}
         </div>}
-        <div className="page-actions"><button className="button danger" type="button" disabled={Boolean(actionBusy)} onClick={declineAll}>{actionBusy === "declines_all" ? "Saving…" : "Declines all actions"}</button></div>
+        <div className="form-actions"><button className="button danger" type="button" disabled={Boolean(actionBusy)} onClick={declineAll}>{actionBusy === "declines_all" ? "Saving…" : "Declines all actions"}</button></div>
       </section>
 
       {message ? <div className="form-message success" role="status">{message}</div> : null}

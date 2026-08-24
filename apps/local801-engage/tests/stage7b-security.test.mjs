@@ -32,12 +32,13 @@ test("note reads enforce writer, assignment, CAT, lead, and administrator visibi
   assert.match(notes, /decryptEnvelope/);
 });
 
-test("all Stage 7B mutation routes support gated Production and Preview with exact-origin recordEngagement auth", () => {
+test("all Stage 7B mutation routes require launch-gated runtime, exact same origin, rate limits, and recordEngagement auth", () => {
   for (const route of [engagementRoute, actionRoute, followupRoute]) {
     assert.match(route, /operationalRuntimeEnabled\(\)/);
     assert.match(route, /hasExactSameOrigin\(request\)/);
     assert.match(route, /requirePreviewUser\("recordEngagement"\)/);
     assert.match(route, /Cache-Control/);
+    assert.match(route, /enforceWorkspaceRateLimit\(context, "mutation"\)/);
   }
 });
 
@@ -58,10 +59,10 @@ test("client sends only opaque employee/action/engagement/assignee handles", () 
 
 test("Stage 7B UI uses controlled selects and supports follow-up and decline-all", () => {
   assert.match(recorder, /Contact method/);
-  assert.match(recorder, /Outcome/);
+  assert.match(recorder, /What happened\?/);
   assert.match(recorder, /Create a follow-up/);
   assert.match(recorder, /Declines all actions/);
-  assert.match(recorder, /Restricted narrative note/);
+  assert.match(recorder, /Who can see this note\?/);
   assert.match(page, /Mark complete|FollowupCompleteButton/);
 });
 

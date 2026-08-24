@@ -96,6 +96,7 @@ function legacyBundle() {
       hasNext: false,
       nextCursor: null,
       pageSize: 50,
+      filters: { assignment: "all", workflow: "all" },
     },
     options: {
       assignees: [{ handle: userHandle(), label: "WRONG OPTION", detail: "cat_lead" }],
@@ -110,6 +111,14 @@ function legacyBundle() {
         workLocation: "Downtown",
       }],
     },
+    organizerProgress: [{
+      assigneeHandle: userHandle(),
+      assigneeName: "WRONG PROGRESS NAME",
+      assigned: 10,
+      open: 6,
+      completed: 4,
+      overdue: 1,
+    }],
   };
 }
 
@@ -136,6 +145,7 @@ test("Campaign detail replaces participant, candidate, assignee, and option disp
   assert.equal(result.population.people[0].assignee_name, "Synthetic CAT Lead");
   assert.equal(result.options.assignees[0].label, "Synthetic CAT Lead");
   assert.equal(result.candidates.candidates[0].displayName, "Synthetic Campaign Person");
+  assert.equal(result.organizerProgress[0].assigneeName, "Synthetic CAT Lead");
 });
 
 test("Campaign detail protected reads fail closed when a visible assignee companion is missing", async () => {

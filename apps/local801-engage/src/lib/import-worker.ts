@@ -14,11 +14,22 @@ import {
   type ImportWorkflowInput,
 } from "./import-processing.ts";
 import {
+  areStrictSyntheticImportSheets,
   getImportMalwareScanner,
   isCsvImportSource,
+  isXlsxImportSource,
   type ImportMalwareScanner,
 } from "./import-scanner.ts";
-import { normalizeImportRow, parseCsv, recognizedMappings, shouldIncludeLocal801, stableRowHash } from "./imports.ts";
+import {
+  XlsxImportError,
+  normalizeImportRow,
+  parseCsv,
+  parseXlsxImportSheets,
+  recognizedMappings,
+  shouldIncludeLocal801,
+  stableRowHash,
+  type ParsedImportSheet,
+} from "./imports.ts";
 
 export const IMPORT_STAGE_CHUNK_SIZE = 500;
 
@@ -27,6 +38,7 @@ type WorkerDependencies = {
   transaction?: (statements: readonly DatabaseStatement[]) => Promise<void>;
   loadSource?: typeof loadCanonicalImportSourceForProcessing;
   scanner?: ImportMalwareScanner;
+  env?: NodeJS.ProcessEnv;
 };
 
 export class ImportWorkerError extends Error {
@@ -165,6 +177,36 @@ export async function ensureImportProcessingJob(
   return decideImportProcessingOwnership({ state: job.state, workflowRunId: job.workflow_run_id }, trustedWorkflowRunId);
 }
 
+export async function acknowledgeImportCancellation(
+  input: ImportWorkflowInput,
+  trustedWorkflowRunId: string,
+  query: DatabaseQuery = queryLocal801,
+) {
+  validate(input, trustedWorkflowRunId);
+  const rows = await query<{ id: string }>(`
+    /* import-worker:acknowledge-cancellation */
+    WITH cancelled_job AS (
+      UPDATE local801.import_processing_jobs job SET state = 'cancelled', cancelled_at = now(),
+        last_progress_at = now(), updated_at = now()
+      WHERE job.organization_id = $1 AND job.import_batch_id = $2
+        AND job.processing_version = $3 AND job.workflow_run_id = $4
+        AND job.state = 'running' AND job.cancellation_requested_at IS NOT NULL
+        AND job.cancelled_by IS NOT NULL AND job.operator_reason_code IS NOT NULL
+      RETURNING job.id, job.organization_id, job.import_batch_id
+    ), cancelled_batch AS (
+      UPDATE local801.import_batches batch SET processing_stage = 'cancelled', processing_error_code = NULL
+      FROM cancelled_job WHERE batch.organization_id = cancelled_job.organization_id
+        AND batch.id = cancelled_job.import_batch_id RETURNING batch.id
+    ) SELECT cancelled_job.id FROM cancelled_job JOIN cancelled_batch ON cancelled_batch.id = cancelled_job.import_batch_id
+  `, [input.organizationId, input.batchId, IMPORT_PROCESSING_VERSION, trustedWorkflowRunId]);
+  if (rows.length === 1) return true;
+  const [state] = await query<{ state: string; workflow_run_id: string | null }>(`
+    SELECT state, workflow_run_id FROM local801.import_processing_jobs
+    WHERE organization_id = $1 AND import_batch_id = $2 AND processing_version = $3
+  `, [input.organizationId, input.batchId, IMPORT_PROCESSING_VERSION]);
+  return state?.state === "cancelled" && state.workflow_run_id === trustedWorkflowRunId;
+}
+
 export async function scanImportSource(
   input: ImportWorkflowInput,
   trustedWorkflowRunId: string,
@@ -200,28 +242,67 @@ export async function parseAndStageImport(
   const transaction = dependencies.transaction ?? runLocal801Transaction;
   await advanceOwnedStage(input, trustedWorkflowRunId, ["scanning", "parsing"], "parsing", query);
   const source = await (dependencies.loadSource ?? loadCanonicalImportSourceForProcessing)(input.organizationId, input.batchId);
-  if (!isCsvImportSource(source.mediaType, source.originalFilename)) throw new ImportWorkerError("UNSUPPORTED_FILE");
-  if (source.plaintext.byteLength > getAppConfig().LOCAL801_IMPORT_MAX_BYTES) throw new ImportWorkerError("FILE_TOO_LARGE");
-  let text: string;
-  try { text = new TextDecoder("utf-8", { fatal: true }).decode(source.plaintext); }
-  catch { throw new ImportWorkerError("MALFORMED_FILE"); }
-  const rows = parseCsv(text);
-  const headers = rows[0] ?? [];
-  const body = rows.slice(1);
-  if (body.length === 0 || recognizedMappings(headers).length === 0) throw new ImportWorkerError("MALFORMED_FILE");
-  if (body.length > getAppConfig().LOCAL801_IMPORT_MAX_ROWS) throw new ImportWorkerError("ROW_LIMIT_EXCEEDED");
+  if (source.plaintext.byteLength > getAppConfig(dependencies.env).LOCAL801_IMPORT_MAX_BYTES) {
+    throw new ImportWorkerError("FILE_TOO_LARGE");
+  }
+  let sheets: ParsedImportSheet[];
+  const csvSource = isCsvImportSource(source.mediaType, source.originalFilename);
+  if (csvSource) {
+    let text: string;
+    try { text = new TextDecoder("utf-8", { fatal: true }).decode(source.plaintext); }
+    catch { throw new ImportWorkerError("MALFORMED_FILE"); }
+    sheets = [{ name: "CSV", state: "included", rows: parseCsv(text) }];
+  } else if (isXlsxImportSource(source.mediaType, source.originalFilename)) {
+    try {
+      sheets = await parseXlsxImportSheets(source.plaintext, {
+        includedDataRows: getAppConfig(dependencies.env).LOCAL801_IMPORT_MAX_ROWS,
+      });
+    } catch (error) {
+      if (error instanceof XlsxImportError && error.code === "row_count_exceeded") {
+        throw new ImportWorkerError("ROW_LIMIT_EXCEEDED");
+      }
+      if (error instanceof XlsxImportError && [
+        "entry_size_exceeded",
+        "total_size_exceeded",
+        "compression_ratio_exceeded",
+      ].includes(error.code)) {
+        throw new ImportWorkerError("WORKBOOK_STRUCTURE_TOO_LARGE");
+      }
+      throw new ImportWorkerError("MALFORMED_FILE");
+    }
+  } else {
+    throw new ImportWorkerError("UNSUPPORTED_FILE");
+  }
+  const includedSheets = sheets.map((sheet, index) => ({
+    ...sheet,
+    index,
+    headers: sheet.rows[0] ?? [],
+    body: sheet.rows.slice(1),
+    sheetId: deterministicUuid(csvSource
+      ? `${input.organizationId}:${input.batchId}:${source.id}:csv-sheet`
+      : `${input.organizationId}:${input.batchId}:${source.id}:sheet:${index}:${sheet.name}`),
+  })).filter((sheet) => sheet.state === "included");
+  const totalRows = includedSheets.reduce((count, sheet) => count + sheet.body.length, 0);
+  if (totalRows === 0 || !includedSheets.some((sheet) => recognizedMappings(sheet.headers).length > 0)) {
+    throw new ImportWorkerError("MALFORMED_FILE");
+  }
+  if (totalRows > getAppConfig(dependencies.env).LOCAL801_IMPORT_MAX_ROWS) {
+    throw new ImportWorkerError("ROW_LIMIT_EXCEEDED");
+  }
+  if ((dependencies.env ?? process.env).VERCEL_ENV === "preview" && !areStrictSyntheticImportSheets(sheets)) {
+    throw new ImportWorkerError("MALFORMED_FILE");
+  }
 
-  const sheetId = deterministicUuid(`${input.organizationId}:${input.batchId}:${source.id}:csv-sheet`);
-  const mappings = recognizedMappings(headers);
+  const sheetRecords = sheets.map((sheet, index) => ({
+    ...sheet,
+    index,
+    headers: sheet.rows[0] ?? [],
+    body: sheet.rows.slice(1),
+    sheetId: deterministicUuid(csvSource
+      ? `${input.organizationId}:${input.batchId}:${source.id}:csv-sheet`
+      : `${input.organizationId}:${input.batchId}:${source.id}:sheet:${index}:${sheet.name}`),
+  }));
   const initialization: DatabaseStatement[] = [{
-    sql: `INSERT INTO local801.import_sheets
-      (id, organization_id, import_file_id, sheet_name, sheet_state, row_count)
-      VALUES ($1, $2, $3, 'CSV', 'included', $4)
-      ON CONFLICT (id) DO UPDATE SET row_count = EXCLUDED.row_count
-      WHERE import_sheets.organization_id = EXCLUDED.organization_id
-        AND import_sheets.import_file_id = EXCLUDED.import_file_id`,
-    parameters: [sheetId, input.organizationId, source.id, body.length],
-  }, {
     sql: `UPDATE local801.import_batches batch
       SET total_row_count = $3, processed_row_count = LEAST($3,
         GREATEST(COALESCE(batch.processed_row_count, 0), 0))
@@ -230,79 +311,99 @@ export async function parseAndStageImport(
         AND EXISTS (SELECT 1 FROM local801.import_processing_jobs job
           WHERE job.organization_id = batch.organization_id AND job.import_batch_id = batch.id
             AND job.processing_version = $4 AND job.state = 'running' AND job.workflow_run_id = $5)`,
-    parameters: [input.organizationId, input.batchId, body.length, IMPORT_PROCESSING_VERSION, trustedWorkflowRunId],
+    parameters: [input.organizationId, input.batchId, totalRows, IMPORT_PROCESSING_VERSION, trustedWorkflowRunId],
   }];
-  for (const mapping of mappings) initialization.push({
-    sql: `INSERT INTO local801.import_mappings
-      (id, organization_id, import_sheet_id, source_column, target_column, transform)
-      VALUES ($1, $2, $3, $4, $5, NULL) ON CONFLICT (id) DO NOTHING`,
-    parameters: [deterministicUuid(`${sheetId}:mapping:${mapping.sourceColumn}:${mapping.targetColumn}`), input.organizationId,
-      sheetId, mapping.sourceColumn, mapping.targetColumn],
-  });
+  for (const sheet of sheetRecords) {
+    initialization.push({
+      sql: `INSERT INTO local801.import_sheets
+        (id, organization_id, import_file_id, sheet_name, sheet_state, row_count)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (id) DO UPDATE SET row_count = EXCLUDED.row_count, sheet_state = EXCLUDED.sheet_state
+        WHERE import_sheets.organization_id = EXCLUDED.organization_id
+          AND import_sheets.import_file_id = EXCLUDED.import_file_id`,
+      parameters: [sheet.sheetId, input.organizationId, source.id, sheet.name, sheet.state, sheet.body.length],
+    });
+    if (sheet.state !== "included") continue;
+    for (const mapping of recognizedMappings(sheet.headers)) initialization.push({
+      sql: `INSERT INTO local801.import_mappings
+        (id, organization_id, import_sheet_id, source_column, target_column, transform)
+        VALUES ($1, $2, $3, $4, $5, NULL) ON CONFLICT (id) DO NOTHING`,
+      parameters: [deterministicUuid(`${sheet.sheetId}:mapping:${mapping.sourceColumn}:${mapping.targetColumn}`), input.organizationId,
+        sheet.sheetId, mapping.sourceColumn, mapping.targetColumn],
+    });
+  }
   await transaction(initialization);
 
   let included = 0;
   let excluded = 0;
-  for (let offset = 0; offset < body.length; offset += IMPORT_STAGE_CHUNK_SIZE) {
-    const block = body.slice(offset, offset + IMPORT_STAGE_CHUNK_SIZE);
-    const staged = block.flatMap((cells, blockIndex) => {
-      const sourceRowNumber = offset + blockIndex + 2;
-      const values = normalizeImportRow(headers, cells);
-      if (values.local && !shouldIncludeLocal801(values.local)) { excluded += 1; return []; }
-      included += 1;
-      return [{
-        id: deterministicUuid(`${input.organizationId}:${input.batchId}:${source.id}:row:${sourceRowNumber}`),
-        source_row_number: sourceRowNumber,
-        row_hash: stableRowHash(values),
-        normalized_json: values,
-      }];
-    });
-    const statements: DatabaseStatement[] = [];
-    if (staged.length) statements.push({
-      sql: `INSERT INTO local801.import_rows
-        (id, organization_id, import_sheet_id, source_row_number, row_hash, normalized_json, state)
-        SELECT item.id, $1, $2, item.source_row_number, item.row_hash, item.normalized_json, 'pending'
-        FROM jsonb_to_recordset($3::text::jsonb) AS item(
-          id uuid, source_row_number integer, row_hash text, normalized_json jsonb)
-        ON CONFLICT (id) DO UPDATE SET row_hash = EXCLUDED.row_hash,
-          normalized_json = EXCLUDED.normalized_json
-        WHERE import_rows.organization_id = EXCLUDED.organization_id
-          AND import_rows.import_sheet_id = EXCLUDED.import_sheet_id
-          AND import_rows.source_row_number = EXCLUDED.source_row_number`,
-      parameters: [input.organizationId, sheetId, JSON.stringify(staged)],
-    });
-    statements.push({
-      sql: `UPDATE local801.import_batches batch
-        SET processed_row_count = LEAST(batch.total_row_count,
-          GREATEST(COALESCE(batch.processed_row_count, 0), $3)),
-          processing_stage = 'parsing'
-        WHERE batch.organization_id = $1 AND batch.id = $2
-          AND batch.processing_stage = 'parsing'
-          AND EXISTS (SELECT 1 FROM local801.import_processing_jobs job
-            WHERE job.organization_id = batch.organization_id AND job.import_batch_id = batch.id
-              AND job.processing_version = $4 AND job.state = 'running' AND job.workflow_run_id = $5)`,
-      parameters: [input.organizationId, input.batchId, offset + block.length, IMPORT_PROCESSING_VERSION, trustedWorkflowRunId],
-    }, {
-      sql: `UPDATE local801.import_processing_jobs SET last_progress_at = now(), updated_at = now()
-        WHERE organization_id = $1 AND import_batch_id = $2 AND processing_version = $3
-          AND state = 'running' AND workflow_run_id = $4`,
-      parameters: [input.organizationId, input.batchId, IMPORT_PROCESSING_VERSION, trustedWorkflowRunId],
-    });
-    await transaction(statements);
+  let processed = 0;
+  for (const sheet of sheetRecords.filter((record) => record.state === "included")) {
+    for (let offset = 0; offset < sheet.body.length; offset += IMPORT_STAGE_CHUNK_SIZE) {
+      const block = sheet.body.slice(offset, offset + IMPORT_STAGE_CHUNK_SIZE);
+      const staged = block.flatMap((cells, blockIndex) => {
+        const sourceRowNumber = offset + blockIndex + 2;
+        const values = normalizeImportRow(sheet.headers, cells);
+        if (values.local && !shouldIncludeLocal801(values.local)) { excluded += 1; return []; }
+        included += 1;
+        return [{
+          id: deterministicUuid(csvSource
+            ? `${input.organizationId}:${input.batchId}:${source.id}:row:${sourceRowNumber}`
+            : `${input.organizationId}:${input.batchId}:${source.id}:${sheet.sheetId}:row:${sourceRowNumber}`),
+          source_row_number: sourceRowNumber,
+          row_hash: stableRowHash(values),
+          normalized_json: values,
+        }];
+      });
+      processed += block.length;
+      const statements: DatabaseStatement[] = [];
+      if (staged.length) statements.push({
+        sql: `INSERT INTO local801.import_rows
+          (id, organization_id, import_sheet_id, source_row_number, row_hash, normalized_json, state)
+          SELECT item.id, $1, $2, item.source_row_number, item.row_hash, item.normalized_json, 'pending'
+          FROM jsonb_to_recordset($3::text::jsonb) AS item(
+            id uuid, source_row_number integer, row_hash text, normalized_json jsonb)
+          ON CONFLICT (id) DO UPDATE SET row_hash = EXCLUDED.row_hash,
+            normalized_json = EXCLUDED.normalized_json
+          WHERE import_rows.organization_id = EXCLUDED.organization_id
+            AND import_rows.import_sheet_id = EXCLUDED.import_sheet_id
+            AND import_rows.source_row_number = EXCLUDED.source_row_number`,
+        parameters: [input.organizationId, sheet.sheetId, JSON.stringify(staged)],
+      });
+      statements.push({
+        sql: `UPDATE local801.import_batches batch
+          SET processed_row_count = LEAST(batch.total_row_count,
+            GREATEST(COALESCE(batch.processed_row_count, 0), $3)),
+            processing_stage = 'parsing'
+          WHERE batch.organization_id = $1 AND batch.id = $2
+            AND batch.processing_stage = 'parsing'
+            AND EXISTS (SELECT 1 FROM local801.import_processing_jobs job
+              WHERE job.organization_id = batch.organization_id AND job.import_batch_id = batch.id
+                AND job.processing_version = $4 AND job.state = 'running' AND job.workflow_run_id = $5)`,
+        parameters: [input.organizationId, input.batchId, processed, IMPORT_PROCESSING_VERSION, trustedWorkflowRunId],
+      }, {
+        sql: `UPDATE local801.import_processing_jobs SET last_progress_at = now(), updated_at = now()
+          WHERE organization_id = $1 AND import_batch_id = $2 AND processing_version = $3
+            AND state = 'running' AND workflow_run_id = $4`,
+        parameters: [input.organizationId, input.batchId, IMPORT_PROCESSING_VERSION, trustedWorkflowRunId],
+      });
+      await transaction(statements);
+    }
   }
   await query(`UPDATE local801.import_batches batch
     SET included_row_count = $3, excluded_row_count = $4
     WHERE batch.organization_id = $1 AND batch.id = $2 AND batch.processing_stage = 'parsing'
       AND batch.total_row_count = $5 AND batch.processed_row_count = $5`,
-  [input.organizationId, input.batchId, included, excluded, body.length]);
+  [input.organizationId, input.batchId, included, excluded, totalRows]);
   const [persisted] = await query<{ row_count: number | string }>(`
-    SELECT count(*)::int AS row_count FROM local801.import_rows
-    WHERE organization_id = $1 AND import_sheet_id = $2
-  `, [input.organizationId, sheetId]);
-  if (numeric(persisted?.row_count) !== included || included + excluded !== body.length) {
+    SELECT count(*)::int AS row_count FROM local801.import_rows row
+    JOIN local801.import_sheets sheet ON sheet.id = row.import_sheet_id
+      AND sheet.organization_id = row.organization_id
+    WHERE row.organization_id = $1 AND sheet.import_file_id = $2
+  `, [input.organizationId, source.id]);
+  if (numeric(persisted?.row_count) !== included || included + excluded !== totalRows) {
     throw new ImportWorkerError("STAGING_INVARIANT_FAILED");
   }
-  return { totalRows: body.length, includedRows: included, excludedRows: excluded };
+  return { totalRows, includedRows: included, excludedRows: excluded };
 }
 
 export async function validateStagedImport(
@@ -508,6 +609,7 @@ export async function completeImportProcessing(
       JOIN local801.import_batches batch ON batch.organization_id = job.organization_id AND batch.id = job.import_batch_id
       WHERE job.organization_id = $1 AND job.import_batch_id = $2 AND job.processing_version = $3
         AND job.state = 'running' AND job.workflow_run_id = $4
+        AND job.cancellation_requested_at IS NULL
         AND batch.processing_stage = 'preparing_review'
         AND batch.total_row_count IS NOT NULL AND batch.processed_row_count = batch.total_row_count
         AND batch.included_row_count IS NOT NULL AND batch.excluded_row_count IS NOT NULL
@@ -566,7 +668,7 @@ export async function failImportProcessing(
       UPDATE local801.import_processing_jobs job SET state = 'failed', safe_error_code = $5,
         failed_at = now(), last_progress_at = now(), updated_at = now()
       WHERE job.organization_id = $1 AND job.import_batch_id = $2 AND job.processing_version = $3
-        AND job.state = 'running' AND job.workflow_run_id = $4
+        AND job.state = 'running' AND job.workflow_run_id = $4 AND job.cancellation_requested_at IS NULL
       RETURNING job.id, job.organization_id, job.import_batch_id
     ), failed_batch AS (
       UPDATE local801.import_batches batch SET processing_stage = 'failed', processing_error_code = $5

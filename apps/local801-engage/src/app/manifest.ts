@@ -2,11 +2,10 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    id: "/",
-    name: "Local 801 Engage",
-    short_name: "801 Engage",
+    name: "Engaging Local 801",
+    short_name: "Engaging 801",
     description:
-      "Private Local 801 membership data, CAT engagement, campaign management, reports, and document hub.",
+      "Private Local 801 workspace for membership, member outreach, campaigns, CAT work, reports, and documents.",
     start_url: "/",
     scope: "/",
     display: "standalone",

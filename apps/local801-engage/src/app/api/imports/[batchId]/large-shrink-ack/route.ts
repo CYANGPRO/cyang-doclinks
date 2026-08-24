@@ -7,6 +7,8 @@ import {
 import { hasExactSameOrigin } from "@/lib/request-security";
 import { operationalRuntimeEnabled } from "@/lib/operational-runtime";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
+import { enforceWorkspaceRateLimit, RateLimitError } from "@/lib/rate-limit";
+import { rateLimitResponse } from "@/lib/rate-limit-response";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -40,6 +42,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ bat
     if (Buffer.byteLength(text, "utf8") > MAX_BODY_BYTES) return json({ error: "REQUEST_TOO_LARGE", message: "Request body is too large." }, 413);
     const body = JSON.parse(text) as { fingerprint?: unknown };
     const [{ batchId }, context] = await Promise.all([params, resolveWorkspaceContext(auth.user)]);
+    await enforceWorkspaceRateLimit(context, "import");
     const result = await acknowledgeLargeRosterShrink(
       { organizationId: context.organizationId, userId: context.userId, role: context.role },
       batchId,
@@ -47,6 +50,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ bat
     );
     return json(result);
   } catch (error) {
+    if (error instanceof RateLimitError) return rateLimitResponse(error);
     if (error instanceof ImportExecutionPreflightError) return json({ error: error.code, message: error.message }, error.status);
     return json({ error: "PREFLIGHT_UNAVAILABLE", message: "The acknowledgement could not be saved safely." }, 503);
   }

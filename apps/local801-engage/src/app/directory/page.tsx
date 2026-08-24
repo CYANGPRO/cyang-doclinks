@@ -5,9 +5,9 @@ import { ProtectedPage } from "@/components/ProtectedPage";
 import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
 import { DEFAULT_DIRECTORY_PAGE_SIZE, getDirectoryPage, type DirectoryPage as Results } from "@/lib/directory";
-import { isPiiProtectedReadEnabled } from "@/lib/pii-protected-read";
+import { hydrateDirectoryPageFromProtectedPii, isPiiProtectedReadEnabled } from "@/lib/pii-protected-read";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
-import { enforceAuthenticatedRateLimit } from "@/lib/rate-limit";
+import { enforceWorkspaceRateLimit } from "@/lib/rate-limit";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 function emptyResults(): Results { return { people: [], term: "", pageSize: DEFAULT_DIRECTORY_PAGE_SIZE, total: 0, previousCursor: null, nextCursor: null, requestedScope: "assigned", effectiveScope: "assigned", filters: { membershipStatus: "", department: "", classification: "", workLocation: "" } }; }
@@ -19,9 +19,11 @@ function href(results: Results, cursor: string | null) {
   if (cursor) params.set("cursor", cursor);
   return `/directory?${params}`;
 }
-function dateLabel(value: string | null) {
-  if (!value) return "—";
-  return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" }).format(new Date(`${value}T00:00:00Z`));
+function membershipStatusLabel(status: string) {
+  if (status === "member") return "Member";
+  if (status === "nonmember") return "Nonmember";
+  if (status === "unknown") return "Unknown";
+  return status;
 }
 
 export default async function DirectoryPage({ searchParams }: { searchParams: SearchParams }) {
@@ -33,9 +35,9 @@ export default async function DirectoryPage({ searchParams }: { searchParams: Se
   let results = emptyResults(); let unavailable = false; let protectedReadEnabled = false;
   try {
     const context = await resolveWorkspaceContext(user);
-    const limit = await enforceAuthenticatedRateLimit({ organizationId: context.organizationId, userId: context.userId, policy: "search" });
-    if (!limit.ok) throw new Error("Directory rate limit denied.");
-    results = await getDirectoryPage(context, { term: parameters.q, scope: parameters.scope, pageSize: parameters.limit, cursor: parameters.cursor, membershipStatus: parameters.membershipStatus, department: parameters.department, classification: parameters.classification, workLocation: parameters.workLocation });
+    await enforceWorkspaceRateLimit(context, "search");
+    const legacyResults = await getDirectoryPage(context, { term: parameters.q, scope: parameters.scope, pageSize: parameters.limit, cursor: parameters.cursor, membershipStatus: parameters.membershipStatus, department: parameters.department, classification: parameters.classification, workLocation: parameters.workLocation });
+    results = await hydrateDirectoryPageFromProtectedPii(context.organizationId, legacyResults);
     protectedReadEnabled = isPiiProtectedReadEnabled();
   } catch (error) {
     const source = error && typeof error === "object" ? error as Record<string, unknown> : {};
@@ -48,41 +50,98 @@ export default async function DirectoryPage({ searchParams }: { searchParams: Se
     unavailable = true;
   }
   const constrained = results.requestedScope !== results.effectiveScope;
-  return <ProtectedPage permission="viewDirectory"><div className="content">
-    <PageHeader eyebrow="Members" title="Directory" description="Fast, server-side lookup with organization isolation, assignment scope for CAT roles, deterministic keyset pagination, and minimized contact fields." />
-    <SectionCard>
-      <form action="/directory" method="get">
+  const advancedFilterCount = [results.filters.department, results.filters.classification, results.filters.workLocation].filter(Boolean).length;
+  const peopleLabel = `${results.total} ${results.total === 1 ? "person" : "people"}`;
+  const paginationLabel = `Showing ${results.people.length} of ${results.total} people`;
+
+  return <ProtectedPage permission="viewDirectory"><div className="content directory-page">
+    <PageHeader eyebrow="Members" title="Directory" description="Find people by name, workplace, classification, membership status, or work email." />
+    <SectionCard className="directory-filter-card" title="Find someone">
+      <form className="directory-search-form" action="/directory" method="get">
         <FilterBar>
-          <div className="field"><label htmlFor="directory-search">Search</label><input id="directory-search" name="q" type="search" maxLength={100} defaultValue={results.term} placeholder="Name, department, location, classification, or work email" /></div>
-          <div className="field"><label htmlFor="directory-scope">Scope</label><select id="directory-scope" name="scope" defaultValue={results.requestedScope}><option value="assigned">Assigned records</option><option value="authorized">All authorized records</option></select></div>
-          <div className="field"><label htmlFor="membershipStatus">Membership status</label><select id="membershipStatus" name="membershipStatus" defaultValue={results.filters.membershipStatus}><option value="">Any status</option><option value="member">Member</option><option value="nonmember">Nonmember</option><option value="unknown">Unknown</option></select></div>
-          <div className="field"><label htmlFor="department">Department</label><input id="department" name="department" maxLength={80} defaultValue={results.filters.department} /></div>
-          <div className="field"><label htmlFor="classification">Classification</label><input id="classification" name="classification" maxLength={80} defaultValue={results.filters.classification} /></div>
-          <div className="field"><label htmlFor="workLocation">Work location</label><input id="workLocation" name="workLocation" maxLength={80} defaultValue={results.filters.workLocation} /></div>
-          <div className="field"><label htmlFor="limit">Rows per page</label><select id="limit" name="limit" defaultValue={String(results.pageSize)}><option value="25">25</option><option value="50">50</option><option value="100">100</option></select></div>
-          <button className="button" type="submit">Search directory</button>
+          <div className="field directory-search-field"><label htmlFor="directory-search">Search</label><input id="directory-search" name="q" type="search" maxLength={100} defaultValue={results.term} placeholder="Name, department, section, classification, or work email" /></div>
+          <div className="field directory-scope-field"><label htmlFor="directory-scope">Scope</label><select id="directory-scope" name="scope" defaultValue={results.requestedScope}><option value="assigned">My assignments</option><option value="authorized">Everyone I can access</option></select></div>
+          <div className="field directory-status-field"><label htmlFor="membershipStatus">Membership status</label><select id="membershipStatus" name="membershipStatus" defaultValue={results.filters.membershipStatus}><option value="">Any status</option><option value="member">Member</option><option value="nonmember">Nonmember</option><option value="unknown">Unknown</option></select></div>
+          <button className="button directory-search-submit" type="submit">Search</button>
+          <details className="directory-more-filters" open={advancedFilterCount > 0}>
+            <summary>More filters{advancedFilterCount ? ` (${advancedFilterCount} applied)` : ""}</summary>
+            <div className="directory-advanced-filter-grid">
+              <div className="field"><label htmlFor="department">Department</label><input id="department" name="department" maxLength={80} defaultValue={results.filters.department} /></div>
+              <div className="field"><label htmlFor="classification">Classification</label><input id="classification" name="classification" maxLength={80} defaultValue={results.filters.classification} /></div>
+              <div className="field"><label htmlFor="workLocation">Section name</label><input id="workLocation" name="workLocation" maxLength={80} defaultValue={results.filters.workLocation} /></div>
+            </div>
+          </details>
         </FilterBar>
       </form>
-      {constrained ? <p className="muted">Your role is limited to current primary or backup assignments. Query parameters cannot broaden this scope.</p> : null}
+      {constrained ? <p className="muted">Your CAT role only shows people in your current primary or backup assignments.</p> : null}
     </SectionCard>
-    <SectionCard title="Results" badge={<StatusBadge tone={unavailable ? "warning" : "info"}>{unavailable ? "Unavailable" : protectedReadEnabled ? `Protected PII · ${results.total} found` : `${results.total} found`}</StatusBadge>}>
-      {unavailable ? <UnavailableState title="Directory unavailable" description="Results are withheld because an authorized database and protected-PII context could not be established." /> : results.people.length === 0 ? <EmptyState title="No matching records" description="No active, authorized records matched the current server-side filters." /> : <>
-        <DataTable caption="Authorized directory results" headers={canOpenEmployee ? ["Person", "Hire Date", "Job Status", "Classification", "Department / Work Location", "Work Email", "Work Phone", "Cell Phone", "Home Phone", "Home Email", "Action"] : ["Person", "Hire Date", "Job Status", "Classification", "Department / Work Location", "Work Email", "Work Phone", "Cell Phone", "Home Phone", "Home Email"]}>
-          {results.people.map((person) => <tr key={person.handle}>
-            <td><strong>{person.displayName}</strong>{person.membershipStatus ? <div><StatusBadge>{person.membershipStatus}</StatusBadge></div> : null}</td>
-            <td>{dateLabel(person.hireDate)}</td>
-            <td>{person.jobStatus || "—"}</td>
-            <td>{person.classification || "—"}</td>
-            <td>{person.department || "—"}<div className="muted">{person.workLocation || "Work location unavailable"}</div></td>
-            <td>{person.workEmail ? <a href={`mailto:${person.workEmail}`}>{person.workEmail}</a> : "—"}</td>
-            <td>{person.workPhone || "—"}</td>
-            <td>{person.cellPhone || "—"}</td>
-            <td>{person.homePhone || "—"}</td>
-            <td>{person.homeEmail ? <a href={`mailto:${person.homeEmail}`}>{person.homeEmail}</a> : "—"}</td>
-            {canOpenEmployee ? <td><Link className="button secondary" href={`/outreach/${person.handle}`}>Open employee</Link></td> : null}
-          </tr>)}
-        </DataTable>
-        <Pagination previousHref={results.previousCursor ? href(results, results.previousCursor) : null} nextHref={results.nextCursor ? href(results, results.nextCursor) : null} label={`Showing up to ${results.pageSize} of ${results.total}`} />
+    <SectionCard
+      className="directory-results-card"
+      title="Directory matches"
+      description={unavailable ? undefined : peopleLabel}
+      badge={unavailable
+        ? null
+        : protectedReadEnabled ? <StatusBadge tone="info">Protected PII</StatusBadge> : null}
+    >
+      {unavailable ? <UnavailableState title="Directory unavailable" description="We couldn’t load the directory safely, so no member details are shown." /> : results.people.length === 0 ? <EmptyState title="No matches" description="No one matches the search and filters you chose." /> : <>
+        {results.total > 25 ? <div className="directory-results-toolbar">
+          <form className="directory-page-size" action="/directory" method="get">
+            {results.term ? <input type="hidden" name="q" value={results.term} /> : null}
+            <input type="hidden" name="scope" value={results.requestedScope} />
+            {results.filters.membershipStatus ? <input type="hidden" name="membershipStatus" value={results.filters.membershipStatus} /> : null}
+            {results.filters.department ? <input type="hidden" name="department" value={results.filters.department} /> : null}
+            {results.filters.classification ? <input type="hidden" name="classification" value={results.filters.classification} /> : null}
+            {results.filters.workLocation ? <input type="hidden" name="workLocation" value={results.filters.workLocation} /> : null}
+            <label htmlFor="directory-limit">Show</label>
+            <select id="directory-limit" name="limit" defaultValue={String(results.pageSize)} aria-label="People per page"><option value="25">25</option><option value="50">50</option><option value="100">100</option></select>
+            <span>per page</span>
+            <button className="button secondary directory-apply-size" type="submit">Apply</button>
+          </form>
+        </div> : null}
+
+        <div className="directory-desktop-results">
+          <DataTable caption="Directory results" headers={canOpenEmployee ? ["Employee ID", "Person", "Hire Date", "Job Status", "Classification", "Department / Work Location", "Work Email", "Work Phone", "Cell Phone", "Home Phone", "Home Email", "Action"] : ["Employee ID", "Person", "Hire Date", "Job Status", "Classification", "Department / Work Location", "Work Email", "Work Phone", "Cell Phone", "Home Phone", "Home Email"]}>
+            {results.people.map((person) => <tr key={person.handle}>
+              <td><span className="data-mono">{person.employeeReference}</span></td>
+              <td>
+                <strong>{canOpenEmployee ? <Link href={`/outreach/${person.handle}`}>{person.firstName} {person.lastName}</Link> : `${person.firstName} ${person.lastName}`}</strong>
+                {person.membershipStatus ? <div><StatusBadge>{membershipStatusLabel(person.membershipStatus)}</StatusBadge></div> : null}
+              </td>
+              <td>{person.hireDate || <span className="muted">Not recorded</span>}</td>
+              <td>{person.jobStatus || <span className="muted">Not recorded</span>}</td>
+              <td>{person.classification || <span className="muted">Not recorded</span>}</td>
+              <td>{person.department || <span className="muted">Not recorded</span>}<div className="muted">{person.workLocation || "Work location not recorded"}</div></td>
+              <td>{person.workEmail ? <a href={`mailto:${person.workEmail}`}>{person.workEmail}</a> : <span className="muted">Not recorded</span>}</td>
+              <td>{person.workPhone ? <a href={`tel:${person.workPhone}`}>{person.workPhone}</a> : <span className="muted">Not recorded</span>}</td>
+              <td>{person.cellPhone ? <a href={`tel:${person.cellPhone}`}>{person.cellPhone}</a> : <span className="muted">Not recorded</span>}</td>
+              <td>{person.homePhone ? <a href={`tel:${person.homePhone}`}>{person.homePhone}</a> : <span className="muted">Not recorded</span>}</td>
+              <td>{person.homeEmail ? <a href={`mailto:${person.homeEmail}`}>{person.homeEmail}</a> : <span className="muted">Not recorded</span>}</td>
+              {canOpenEmployee ? <td className="directory-action-cell"><Link className="button secondary directory-member360-button" href={`/outreach/${person.handle}`}>Outreach record <span aria-hidden="true">→</span></Link></td> : null}
+            </tr>)}
+          </DataTable>
+        </div>
+
+        <div className="directory-mobile-results" aria-label="Directory results">
+          {results.people.map((person) => <article className="directory-person-card" key={person.handle}>
+            <div className="directory-person-heading">
+              <h3>{canOpenEmployee ? <Link href={`/outreach/${person.handle}`}>{person.firstName} {person.lastName}</Link> : `${person.firstName} ${person.lastName}`}</h3>
+              {person.membershipStatus ? <StatusBadge>{membershipStatusLabel(person.membershipStatus)}</StatusBadge> : null}
+            </div>
+            <div className="muted data-mono">{person.employeeReference}</div>
+            <div className="directory-person-work">
+              <strong>{person.department || "Department not recorded"}</strong>
+              <span>{person.classification || "Classification not recorded"}</span>
+              <span>{person.workLocation || "Work location not recorded"}</span>
+            </div>
+            <div className="directory-person-contact">
+              <span>{person.workEmail ? <a href={`mailto:${person.workEmail}`}>{person.workEmail}</a> : <span className="muted">Work email not recorded</span>}</span>
+              <span>{person.workPhone ? <a href={`tel:${person.workPhone}`}>{person.workPhone}</a> : <span className="muted">Work phone not recorded</span>}</span>
+            </div>
+            {canOpenEmployee ? <Link className="directory-member360-link" href={`/outreach/${person.handle}`}>Outreach record <span aria-hidden="true">→</span></Link> : null}
+          </article>)}
+        </div>
+
+        {(results.previousCursor || results.nextCursor) ? <Pagination previousHref={results.previousCursor ? href(results, results.previousCursor) : null} nextHref={results.nextCursor ? href(results, results.nextCursor) : null} label={paginationLabel} /> : null}
       </>}
     </SectionCard>
   </div></ProtectedPage>;
