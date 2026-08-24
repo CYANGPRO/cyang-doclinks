@@ -3,7 +3,9 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const service = readFileSync(new URL("../src/lib/outreach.ts", import.meta.url), "utf8");
+const protectedQuery = readFileSync(new URL("../src/lib/pii-protected-outreach-query.ts", import.meta.url), "utf8");
 const queuePage = readFileSync(new URL("../src/app/outreach/page.tsx", import.meta.url), "utf8");
+const stage18Styles = readFileSync(new URL("../src/app/stage18.css", import.meta.url), "utf8");
 const workspacePage = readFileSync(new URL("../src/app/outreach/[handle]/page.tsx", import.meta.url), "utf8");
 const engagementRecorder = readFileSync(new URL("../src/components/EngagementRecorder.tsx", import.meta.url), "utf8");
 const employeeActions = readFileSync(new URL("../src/lib/employee-actions.ts", import.meta.url), "utf8");
@@ -81,4 +83,28 @@ test("outreach queue exposes the approved operational focus controls", () => {
   assert.match(queuePage, /My assignments/);
   assert.match(queuePage, /Everyone I can access/);
   assert.match(queuePage, /Open outreach record/);
+});
+
+test("outreach queue cards show full names, normalized membership, boxed fields, and every contact option", () => {
+  assert.match(service, /normalizedGivenName\.endsWith\(` \$\{normalizedFamilyName\}`\)/);
+  assert.match(protectedQuery, /displayName\(preferredName, firstName, lastName\)/);
+  assert.match(queuePage, /if \(status === "member"\) return "Member"/);
+  assert.match(queuePage, /if \(status === "nonmember"\) return "Nonmember"/);
+  for (const label of ["Cell phone", "Home phone", "Work phone", "Home email", "Work email"]) {
+    assert.match(queuePage, new RegExp(`label: "${label}"`));
+  }
+  assert.match(queuePage, /review-summary outreach-person-fields/);
+  assert.match(stage18Styles, /\.outreach-person-fields > div[\s\S]*border: 1px solid var\(--border\)/);
+  assert.match(stage18Styles, /\.outreach-card-actions[\s\S]*margin-top: 20px/);
+});
+
+test("legacy and protected outreach queries load every permitted contact option", () => {
+  for (const field of ["home_email", "work_phone", "cell_phone", "home_phone"]) {
+    assert.match(service, new RegExp(field));
+  }
+  assert.match(service, /method\.contact_type IN \('work_email', 'personal_email', 'phone'\)/);
+  assert.match(protectedQuery, /contact\.contact_type IN \('work_email', 'personal_email', 'phone'\)/);
+  assert.match(protectedQuery, /contact\.contact_type, contact\.contact_label/);
+  assert.match(protectedQuery, /homeEmail: contactValue\("personal_email"\)/);
+  assert.match(protectedQuery, /cellPhone: contactValue\("phone:cell"\)/);
 });

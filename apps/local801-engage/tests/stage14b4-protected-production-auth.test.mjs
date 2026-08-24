@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { authorizeProtectedProductionIdentity } from "../src/lib/pii-protected-production-auth.ts";
+import {
+  authorizeProtectedProductionIdentity,
+  resolveProtectedProductionSessionBinding,
+} from "../src/lib/pii-protected-production-auth.ts";
 import { encryptPiiField, getPiiKeyConfiguration } from "../src/lib/pii-protection.ts";
 
 const protectedAuthUrl = new URL("../src/lib/pii-protected-production-auth.ts", import.meta.url);
@@ -127,6 +130,7 @@ test("an established protected subject binding is resolved before the bootstrap 
     });
     assert.deepEqual(binding, {
       organizationSlug: "local801",
+      organizationId,
       userId,
       email,
       role: "system_owner",
@@ -213,6 +217,7 @@ test("the configured bootstrap object can atomically rebind one legacy active sy
     });
     assert.deepEqual(binding, {
       organizationSlug: "local801",
+      organizationId,
       userId,
       email,
       role: "system_owner",
@@ -250,6 +255,51 @@ test("production auth dispatches to protected implementation only after the data
   assert.equal(gates.length >= 2, true);
   assert.match(source, /authorizeProtectedProductionIdentity/);
   assert.match(source, /resolveProtectedProductionSessionBinding/);
+});
+
+test("protected session validation combines organization and active-user authorization in one query", async () => {
+  const restore = withPiiKeys();
+  try {
+    const encryptedEmail = encryptPiiField("owner@example.test", {
+      organizationId,
+      entity: "user",
+      recordId: userId,
+      field: "email",
+    }, getPiiKeyConfiguration());
+    const calls = [];
+    const binding = await resolveProtectedProductionSessionBinding({
+      organizationSlug: "local801",
+      userId,
+      sessionVersion: 4,
+    }, async (sql, parameters) => {
+      calls.push({ sql, parameters });
+      return [{
+        organization_slug: "local801",
+        organization_id: organizationId,
+        user_id: userId,
+        auth_session_version: 4,
+        role: "system_owner",
+        email_encrypted_payload: encryptedEmail.encryptedPayload,
+        email_encryption_key_version: encryptedEmail.encryptionKeyVersion,
+        email_encryption_format_version: encryptedEmail.encryptionFormatVersion,
+        policy_acknowledged: true,
+      }];
+    });
+    assert.equal(calls.length, 1);
+    assert.match(calls[0].sql, /organization\.slug = \$1::text/);
+    assert.match(calls[0].sql, /app_user\.id = \$2::uuid/);
+    assert.deepEqual(calls[0].parameters, [
+      "local801",
+      userId,
+      4,
+      "privacy-acceptable-use",
+      "2026-08-18",
+    ]);
+    assert.equal(binding?.organizationId, organizationId);
+    assert.equal(binding?.email, "owner@example.test");
+  } finally {
+    restore();
+  }
 });
 
 test("role assignments allow multiple users per role while keeping exactly one role per user", async () => {
@@ -475,6 +525,7 @@ test("an existing immutable subject binding resolves its active account before o
     });
     assert.deepEqual(result, {
       organizationSlug: "local801",
+      organizationId,
       userId,
       email: storedEmail,
       role: "cat_lead",

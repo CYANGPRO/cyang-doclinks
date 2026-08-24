@@ -128,7 +128,7 @@ export default async function MembershipDataQualityPage({ searchParams }: { sear
           <div className="data-quality-desktop-results">
             <DataTable caption="Data-quality issues" headers={["Person", "Issues", "Work", "Updated", "Actions"]}>
               {results.people.map((person) => <tr key={person.handle}>
-                <td>{canOpenMember ? <Link className="data-quality-person-link" href={`/outreach/${person.handle}`}><strong>{person.displayName}</strong></Link> : <strong>{person.displayName}</strong>}<div><StatusBadge>{membershipLabel(person.membershipStatus)}</StatusBadge></div></td>
+                <td><div className="person-membership-stack">{canOpenMember ? <Link className="data-quality-person-link" href={`/outreach/${person.handle}`}><strong>{person.displayName}</strong></Link> : <strong>{person.displayName}</strong>}<StatusBadge>{membershipLabel(person.membershipStatus)}</StatusBadge></div></td>
                 <td>{person.issues.map((issue) => <div className="data-quality-issue" key={issue}><strong>{labels.get(issue)}</strong><div className="muted">{explanations.get(issue)}</div></div>)}</td>
                 <td>{person.classification || "Classification unavailable"}<div className="muted">{person.department || "Department unavailable"}<br />{person.workLocation || "Work location unavailable"}</div></td>
                 <td>{formatDate(person.updatedAt)}</td>

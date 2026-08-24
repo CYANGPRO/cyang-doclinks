@@ -26,3 +26,13 @@ test("protected Directory forces stringified JSON through text before jsonb", ()
   assert.doesNotMatch(source, /\$11::jsonb/);
   assert.doesNotMatch(source, /\$3::jsonb/);
 });
+
+test("protected Directory uses exact matching for the dedicated classification filter", () => {
+  assert.match(
+    source,
+    /lower\(btrim\(person\.classification\)\) = lower\(btrim\(\$6::text\)\)/,
+  );
+  assert.doesNotMatch(source, /person\.classification ILIKE \$6::text/);
+  assert.match(source, /normalized\.classification \|\| null/);
+  assert.match(source, /person\.classification ILIKE \$8::text/);
+});

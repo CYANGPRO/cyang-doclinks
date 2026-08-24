@@ -185,7 +185,13 @@ function like(value: string) {
 }
 
 function displayName(preferredName: string | null, firstName: string, lastName: string) {
-  return preferredName?.trim() || `${firstName} ${lastName}`;
+  const givenName = preferredName?.trim() || firstName.trim();
+  const familyName = lastName.trim();
+  const normalizedGivenName = givenName.toLocaleLowerCase("en-US");
+  const normalizedFamilyName = familyName.toLocaleLowerCase("en-US");
+  return normalizedGivenName === normalizedFamilyName || normalizedGivenName.endsWith(` ${normalizedFamilyName}`)
+    ? givenName
+    : `${givenName} ${familyName}`;
 }
 
 function bucketFromRank(value: unknown): FollowupQueueItem["bucket"] {

@@ -49,6 +49,10 @@ export type OutreachQueuePerson = {
   classification: string | null;
   workLocation: string | null;
   workEmail: string | null;
+  homeEmail: string | null;
+  workPhone: string | null;
+  cellPhone: string | null;
+  homePhone: string | null;
   assignmentRelationship: "primary" | "backup" | "authorized";
   priority: OutreachPriority;
   latestEngagementAt: string | null;
@@ -85,6 +89,7 @@ export type OutreachWorkspace = {
   workEmail: string | null;
   assignmentRelationship: "primary" | "backup" | "authorized";
   activeAssignmentCount: number;
+  activeDirectAssignmentCount: number;
   campaignNames: string[];
   actionReadiness: EmployeeActionProfile;
   followups: Array<{
@@ -106,6 +111,10 @@ type QueueRow = {
   classification: string | null;
   work_location: string | null;
   work_email: string | null;
+  home_email: string | null;
+  work_phone: string | null;
+  cell_phone: string | null;
+  home_phone: string | null;
   is_primary: boolean | null;
   is_backup: boolean | null;
   latest_engagement_at: string | Date | null;
@@ -139,6 +148,7 @@ type WorkspaceRow = {
   is_primary: boolean;
   is_backup: boolean;
   active_assignment_count: unknown;
+  active_direct_assignment_count: unknown;
   campaign_names: string[] | null;
 };
 
@@ -270,7 +280,13 @@ function relationship(row: Pick<QueueRow, "is_primary" | "is_backup">): Outreach
 }
 
 function displayName(preferred: string | null, first: string, last: string) {
-  return preferred?.trim() || `${first} ${last}`;
+  const givenName = preferred?.trim() || first.trim();
+  const familyName = last.trim();
+  const normalizedGivenName = givenName.toLocaleLowerCase("en-US");
+  const normalizedFamilyName = familyName.toLocaleLowerCase("en-US");
+  return normalizedGivenName === normalizedFamilyName || normalizedGivenName.endsWith(` ${normalizedFamilyName}`)
+    ? givenName
+    : `${givenName} ${familyName}`;
 }
 
 export function outreachHandle(organizationId: string, personId: string) {
@@ -318,7 +334,11 @@ export async function getOutreachQueue(
     ), signals AS (
       SELECT
         base.*,
-        contact.contact_value AS work_email,
+        contact.work_email,
+        contact.home_email,
+        contact.work_phone,
+        contact.cell_phone,
+        contact.home_phone,
         COALESCE(assignment_info.is_primary, false) AS is_primary,
         COALESCE(assignment_info.is_backup, false) AS is_backup,
         assignment_info.assignment_due_at,
@@ -344,12 +364,21 @@ export async function getOutreachQueue(
           AND assignment.status = 'open'
       ) assignment_info ON true
       LEFT JOIN LATERAL (
-        SELECT method.contact_value
+        SELECT
+          (array_agg(method.contact_value ORDER BY method.is_primary DESC, method.created_at DESC, method.id DESC)
+            FILTER (WHERE method.contact_type = 'work_email'))[1] AS work_email,
+          (array_agg(method.contact_value ORDER BY method.is_primary DESC, method.created_at DESC, method.id DESC)
+            FILTER (WHERE method.contact_type = 'personal_email' AND method.contact_label = 'home'))[1] AS home_email,
+          (array_agg(method.contact_value ORDER BY method.is_primary DESC, method.created_at DESC, method.id DESC)
+            FILTER (WHERE method.contact_type = 'phone' AND method.contact_label = 'work'))[1] AS work_phone,
+          (array_agg(method.contact_value ORDER BY method.is_primary DESC, method.created_at DESC, method.id DESC)
+            FILTER (WHERE method.contact_type = 'phone' AND method.contact_label = 'cell'))[1] AS cell_phone,
+          (array_agg(method.contact_value ORDER BY method.is_primary DESC, method.created_at DESC, method.id DESC)
+            FILTER (WHERE method.contact_type = 'phone' AND method.contact_label = 'home'))[1] AS home_phone
         FROM local801.person_contact_methods method
         WHERE method.organization_id = $1::uuid
           AND method.person_id = base.person_id
-          AND method.contact_type = 'work_email'
-          AND method.is_primary = true
+          AND method.contact_type IN ('work_email', 'personal_email', 'phone')
           AND method.archived_at IS NULL
           AND (
             method.visibility = 'authorized_directory'
@@ -366,8 +395,6 @@ export async function getOutreachQueue(
               )
             )
           )
-        ORDER BY method.created_at ASC, method.id ASC
-        LIMIT 1
       ) contact ON true
       LEFT JOIN LATERAL (
         SELECT event.occurred_at, event.outcome
@@ -398,7 +425,11 @@ export async function getOutreachQueue(
         OR base.department ILIKE $4 ESCAPE '\\'
         OR base.classification ILIKE $4 ESCAPE '\\'
         OR base.work_location ILIKE $4 ESCAPE '\\'
-        OR contact.contact_value ILIKE $4 ESCAPE '\\'
+        OR contact.work_email ILIKE $4 ESCAPE '\\'
+        OR contact.home_email ILIKE $4 ESCAPE '\\'
+        OR contact.work_phone ILIKE $4 ESCAPE '\\'
+        OR contact.cell_phone ILIKE $4 ESCAPE '\\'
+        OR contact.home_phone ILIKE $4 ESCAPE '\\'
       )
     ), prioritized AS (
       SELECT
@@ -466,6 +497,10 @@ export async function getOutreachQueue(
     classification: row.classification,
     workLocation: row.work_location,
     workEmail: row.work_email,
+    homeEmail: row.home_email,
+    workPhone: row.work_phone,
+    cellPhone: row.cell_phone,
+    homePhone: row.home_phone,
     assignmentRelationship: relationship(row),
     priority: priorityLabel(row.priority_rank),
     latestEngagementAt: normalizeTimestamp(row.latest_engagement_at),
@@ -518,6 +553,7 @@ export async function getOutreachWorkspace(
       COALESCE(assignments.is_primary, false) AS is_primary,
       COALESCE(assignments.is_backup, false) AS is_backup,
       COALESCE(assignments.active_assignment_count, 0) AS active_assignment_count,
+      COALESCE(assignments.active_direct_assignment_count, 0) AS active_direct_assignment_count,
       COALESCE(assignments.campaign_names, ARRAY[]::text[]) AS campaign_names
     FROM local801.people person
     LEFT JOIN LATERAL (
@@ -551,6 +587,10 @@ export async function getOutreachWorkspace(
         bool_or(assignment.primary_user_id = $2::uuid) AS is_primary,
         bool_or(assignment.backup_user_id = $2::uuid) AS is_backup,
         count(*) AS active_assignment_count,
+        count(*) FILTER (
+          WHERE assignment.campaign_id IS NULL
+            AND assignment.assignment_type = 'direct'
+        ) AS active_direct_assignment_count,
         array_agg(DISTINCT campaign.name ORDER BY campaign.name) FILTER (WHERE campaign.name IS NOT NULL) AS campaign_names
       FROM local801.engagement_assignments assignment
       LEFT JOIN local801.outreach_campaigns campaign
@@ -614,6 +654,7 @@ export async function getOutreachWorkspace(
     workEmail: row.work_email,
     assignmentRelationship: relationship(row),
     activeAssignmentCount: finiteInteger(row.active_assignment_count),
+    activeDirectAssignmentCount: finiteInteger(row.active_direct_assignment_count),
     campaignNames: Array.isArray(row.campaign_names) ? row.campaign_names.filter((value): value is string => typeof value === "string") : [],
     actionReadiness,
     followups: followups.map((followup) => ({

@@ -39,7 +39,7 @@ export function ImportExecutionControl({ batchId, fingerprint, fingerprintShort,
   const [pending, setPending] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(null);
   const protectedMode = mode === "protected";
-  const noun = protectedMode ? "protected authoritative import" : "synthetic Preview import";
+  const noun = protectedMode ? "protected authoritative import" : "Preview import";
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -59,7 +59,7 @@ export function ImportExecutionControl({ batchId, fingerprint, fingerprintShort,
       });
       const payload = await response.json().catch(() => ({})) as ExecutionResponse;
       if (!response.ok) throw new Error(failureMessage(payload));
-      setFeedback({ tone: "success", message: protectedMode ? "Protected authoritative import executed atomically." : "Synthetic Preview import executed atomically." });
+      setFeedback({ tone: "success", message: protectedMode ? "Protected authoritative import executed atomically." : "Preview import executed atomically." });
       setConfirmation("");
       router.refresh();
     } catch (error) {
@@ -88,7 +88,7 @@ export function ImportExecutionControl({ batchId, fingerprint, fingerprintShort,
     </div>
     <div className="form-actions">
       <button className="button" type="submit" disabled={pending}>
-        {pending ? "Executing…" : protectedMode ? "Execute protected import" : "Execute synthetic Preview import"}
+        {pending ? "Executing…" : protectedMode ? "Execute protected import" : "Execute Preview import"}
       </button>
     </div>
     {feedback ? <div className={`form-message${feedback.tone === "success" ? " success" : ""}`} role={feedback.tone === "error" ? "alert" : "status"}>{feedback.message}</div> : null}

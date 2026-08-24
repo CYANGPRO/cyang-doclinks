@@ -85,6 +85,8 @@ function protectedContact(keyConfig) {
   return {
     person_id: personId,
     contact_method_id: contactId,
+    contact_type: "work_email",
+    contact_label: "work",
     contact_value_encrypted_payload: email.encryptedPayload,
     encryption_key_version: email.encryptionKeyVersion,
     encryption_format_version: email.encryptionFormatVersion,

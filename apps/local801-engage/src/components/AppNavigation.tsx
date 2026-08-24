@@ -18,7 +18,7 @@ const mobileGlyphs: Record<string, string> = {
   Directory: "◎",
   "Member outreach": "◉",
   "Data imports": "⇅",
-  "Work inbox": "□",
+  "To Do": "□",
   Reports: "▥",
 };
 

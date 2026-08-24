@@ -231,4 +231,103 @@ export async function assignOutreachOrganizer(
   return { assigned: true, unchanged: false };
 }
 
+export async function deleteMemberOutreach(
+  context: WorkspaceContext,
+  input: { personHandle: unknown },
+  dependencies: OutreachAssignmentDependencies = {},
+) {
+  requireAccess(context);
+  const query = dependencies.query ?? queryLocal801;
+  const runTransaction = dependencies.runTransaction ?? runLocal801Transaction;
+  const prepareAudit = dependencies.prepareAudit ?? prepareAtomicAuditStatement;
+  const person = await resolvePerson(context, input.personHandle, query);
+  const currentRows = await query<IdRow>(`
+    /* outreach-assignment:current-direct-for-delete */
+    SELECT assignment.id, assignment.primary_user_id
+    FROM local801.engagement_assignments assignment
+    WHERE assignment.organization_id = $1::uuid
+      AND assignment.person_id = $2::uuid
+      AND assignment.campaign_id IS NULL
+      AND assignment.assignment_type = 'direct'
+      AND assignment.status = 'open'
+      AND assignment.archived_at IS NULL
+    ORDER BY assignment.created_at, assignment.id
+    LIMIT 2
+  `, [context.organizationId, person.id]);
+  if (currentRows.length > 1) {
+    throw new OutreachAssignmentError("ASSIGNMENT_CONFLICT", "More than one direct outreach assignment is active. An administrator must resolve the duplicate before deleting it.", 409);
+  }
+  const current = currentRows[0];
+  if (!current?.id) {
+    throw new OutreachAssignmentError("NOT_FOUND", "There is no direct member outreach assignment to delete.", 404);
+  }
+
+  const lock: DatabaseStatement = {
+    sql: `SELECT pg_advisory_xact_lock(hashtextextended($1::text || ':' || $2::text, 0))`,
+    parameters: [context.organizationId, person.id],
+  };
+  const archive: DatabaseStatement = {
+    sql: `
+      WITH actor AS MATERIALIZED (
+        SELECT app_user.id
+        FROM local801.users app_user
+        WHERE app_user.organization_id = $1::uuid
+          AND app_user.id = $3::uuid
+          AND app_user.deactivated_at IS NULL
+          AND EXISTS (
+            SELECT 1 FROM local801.workspace_user_roles user_role
+            JOIN local801.workspace_roles role
+              ON role.id = user_role.role_id AND role.organization_id = $1::uuid
+            WHERE user_role.user_id = app_user.id
+              AND role.code = $4::text
+              AND role.code IN ('system_owner','local_admin','cat_admin','cat_lead')
+          )
+      ), person AS MATERIALIZED (
+        SELECT candidate.id
+        FROM local801.people candidate
+        WHERE candidate.organization_id = $1::uuid
+          AND candidate.archived_at IS NULL
+          AND encode(public.digest($1::text || ':' || candidate.id::text, 'sha256'), 'hex') = $5::text
+      ), updated AS (
+        UPDATE local801.engagement_assignments assignment
+        SET status = 'closed', archived_at = now()
+        FROM actor, person
+        WHERE assignment.id = $2::uuid
+          AND assignment.organization_id = $1::uuid
+          AND assignment.person_id = person.id
+          AND assignment.campaign_id IS NULL
+          AND assignment.assignment_type = 'direct'
+          AND assignment.status = 'open'
+          AND assignment.archived_at IS NULL
+        RETURNING assignment.id
+      )
+      SELECT CASE WHEN count(*) = 1 THEN true ELSE 1 / count(*)::integer = 1 END AS assignment_archived
+      FROM updated
+    `,
+    parameters: [context.organizationId, current.id, context.userId, context.role, person.handle],
+  };
+  const audit = await prepareAudit({
+    eventType: "record.archive",
+    actorId: context.userId,
+    organizationId: context.organizationId,
+    subjectType: "engagement_assignment",
+    subjectId: current.id,
+    payload: {
+      source: "member_outreach",
+      assignmentType: "direct",
+      removedFromActiveOutreach: true,
+      campaignAssignmentsRetained: true,
+      followupsRetained: true,
+      engagementHistoryRetained: true,
+    },
+  }, query);
+
+  try {
+    await runTransaction([lock, archive, audit]);
+  } catch {
+    throw new OutreachAssignmentError("DELETE_UNAVAILABLE", "The member outreach assignment could not be deleted safely. Refresh and try again.", 503);
+  }
+  return { deleted: true };
+}
+
 export const __testing = { requireHandle, userHandle };

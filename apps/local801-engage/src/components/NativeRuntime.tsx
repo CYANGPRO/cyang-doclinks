@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect } from "react";
-import { App } from "@capacitor/app";
-import { Capacitor } from "@capacitor/core";
-import { SplashScreen } from "@capacitor/splash-screen";
-import { StatusBar, Style } from "@capacitor/status-bar";
 
 const APPROVED_ORIGIN = "https://cat.cyang.io";
+
+function nativeBridge() {
+  return (window as Window & { Capacitor?: { getPlatform(): string; isNativePlatform(): boolean } }).Capacitor;
+}
 
 function approvedDeepLink(rawUrl: string) {
   try {
@@ -19,30 +19,44 @@ function approvedDeepLink(rawUrl: string) {
 
 export function NativeRuntime() {
   useEffect(() => {
-    if (!Capacitor.isNativePlatform()) return;
+    let active = true;
+    let removeListeners: (() => Promise<void>) | undefined;
 
-    document.documentElement.dataset.nativeRuntime = Capacitor.getPlatform();
+    void (async () => {
+      const Capacitor = nativeBridge();
+      if (!active || !Capacitor?.isNativePlatform()) return;
+      const [{ App }, { SplashScreen }, { StatusBar, Style }] = await Promise.all([
+        import("@capacitor/app"),
+        import("@capacitor/splash-screen"),
+        import("@capacitor/status-bar"),
+      ]);
+      if (!active) return;
 
-    void Promise.allSettled([
-      StatusBar.setStyle({ style: Style.Light }),
-      StatusBar.setBackgroundColor({ color: "#134D8C" }),
-      SplashScreen.hide(),
-    ]);
+      document.documentElement.dataset.nativeRuntime = Capacitor.getPlatform();
+      void Promise.allSettled([
+        StatusBar.setStyle({ style: Style.Light }),
+        StatusBar.setBackgroundColor({ color: "#134D8C" }),
+        SplashScreen.hide(),
+      ]);
 
-    const listeners = [
-      App.addListener("appStateChange", ({ isActive }) => {
-        document.documentElement.dataset.nativeAppState = isActive ? "active" : "background";
-      }),
-      App.addListener("appUrlOpen", ({ url }) => {
-        const destination = approvedDeepLink(url);
-        if (destination) window.location.assign(destination.toString());
-      }),
-    ];
+      const listeners = await Promise.all([
+        App.addListener("appStateChange", ({ isActive }) => {
+          document.documentElement.dataset.nativeAppState = isActive ? "active" : "background";
+        }),
+        App.addListener("appUrlOpen", ({ url }) => {
+          const destination = approvedDeepLink(url);
+          if (destination) window.location.assign(destination.toString());
+        }),
+      ]);
+      removeListeners = async () => { await Promise.all(listeners.map((listener) => listener.remove())); };
+      if (!active) await removeListeners();
+    })();
 
     return () => {
+      active = false;
       delete document.documentElement.dataset.nativeRuntime;
       delete document.documentElement.dataset.nativeAppState;
-      void Promise.all(listeners.map(async (listener) => (await listener).remove()));
+      void removeListeners?.();
     };
   }, []);
 

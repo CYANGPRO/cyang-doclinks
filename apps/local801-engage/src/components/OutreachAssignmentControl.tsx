@@ -9,10 +9,14 @@ export function OutreachAssignmentControl({
   memberHandle,
   memberName,
   assignees,
+  canDelete,
+  returnHref,
 }: {
   memberHandle: string;
   memberName: string;
   assignees: AssigneeOption[];
+  canDelete: boolean;
+  returnHref: string;
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState("");
@@ -46,32 +50,56 @@ export function OutreachAssignmentControl({
     }
   }
 
-  if (assignees.length === 0) {
-    return <p className="muted">No active LCAT or CAT accounts are available to assign.</p>;
+  async function remove() {
+    if (busy || !canDelete) return;
+    const confirmed = window.confirm(`Delete ${memberName} from member outreach? The direct assignment will close. Campaign assignments, follow-ups, conversations, and audit history will be retained.`);
+    if (!confirmed) return;
+    setBusy(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const response = await fetch(`/api/outreach/${encodeURIComponent(memberHandle)}/assignment`, {
+        method: "DELETE",
+      });
+      const body = await response.json().catch(() => ({})) as { message?: unknown };
+      if (!response.ok) {
+        setError(typeof body.message === "string" ? body.message : "The member outreach assignment could not be deleted.");
+        return;
+      }
+      router.push(returnHref);
+      router.refresh();
+    } catch {
+      setError("The member outreach assignment could not be deleted. Try again.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return <div className="stack">
-    <div className="form-grid">
-      <div className="field">
-        <label htmlFor="outreach-primary-organizer">Primary organizer</label>
-        <select
-          id="outreach-primary-organizer"
-          aria-label={`Assign outreach for ${memberName}`}
-          value={selected}
-          disabled={busy}
-          onChange={(event) => setSelected(event.target.value)}
-        >
-          <option value="">Choose an LCAT or CAT</option>
-          {assignees.map((assignee) => <option key={assignee.handle} value={assignee.handle}>
-            {assignee.label}{assignee.current ? " (you)" : ""}
-          </option>)}
-        </select>
-      </div>
-    </div>
+    {assignees.length > 0 ? <div className="form-grid">
+        <div className="field">
+          <label htmlFor="outreach-primary-organizer">Primary organizer</label>
+          <select
+            id="outreach-primary-organizer"
+            aria-label={`Assign outreach for ${memberName}`}
+            value={selected}
+            disabled={busy}
+            onChange={(event) => setSelected(event.target.value)}
+          >
+            <option value="">Choose an LCAT or CAT</option>
+            {assignees.map((assignee) => <option key={assignee.handle} value={assignee.handle}>
+              {assignee.label}{assignee.current ? " (you)" : ""}
+            </option>)}
+          </select>
+        </div>
+      </div> : <p className="muted">No active LCAT or CAT accounts are available to assign.</p>}
     <div className="form-actions">
-      <button className="button secondary" type="button" disabled={busy || !selected} onClick={assign}>
-        {busy ? "Assigning…" : "Assign organizer"}
-      </button>
+      {assignees.length > 0 ? <button className="button secondary" type="button" disabled={busy || !selected} onClick={assign}>
+          {busy ? "Saving…" : "Assign organizer"}
+        </button> : null}
+      {canDelete ? <button className="button danger" type="button" disabled={busy} onClick={remove}>
+          {busy ? "Working…" : "Delete from member outreach"}
+        </button> : null}
     </div>
     {message ? <div className="form-message success" role="status">{message}</div> : null}
     {error ? <div className="form-message" role="alert">{error}</div> : null}

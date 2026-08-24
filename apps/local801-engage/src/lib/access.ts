@@ -62,7 +62,7 @@ const navigationItems: readonly NavigationItem[] = [
   { href: "/action-readiness", label: "Action catalog", group: "Programs", permission: "manageActionCatalog" },
   { href: "/workload", label: "Work planner", group: "My work", permission: "recordEngagement" },
   { href: "/follow-ups", label: "Follow-ups", group: "My work", permission: "recordEngagement" },
-  { href: "/notifications", label: "Work inbox", group: "My work", permission: "viewPersonalWorkspace", mobilePriority: ["system_owner", "local_admin", "membership_data_manager", "cat_admin", "cat_lead", "cat_member"] },
+  { href: "/notifications", label: "To Do", group: "My work", permission: "viewPersonalWorkspace", mobilePriority: ["system_owner", "local_admin", "membership_data_manager", "cat_admin", "cat_lead", "cat_member"] },
   { href: "/campaigns", label: "Campaigns", group: "Programs", permission: "manageCampaigns" },
   { href: "/cat-actions", label: "CAT actions", group: "Programs", permission: "manageCatActions" },
   { href: "/imports", label: "Data imports", group: "Operations", permission: "manageImports", mobilePriority: ["membership_data_manager"] },

@@ -144,14 +144,15 @@ test("new-hire queue allows assignment roles and denies only CAT Member and Repo
   }
 });
 
-test("new-hire page uses the database-backed queue and existing outreach-record handoff", async () => {
+test("new-hire page uses the database-backed queue and person-name outreach handoff", async () => {
   const page = await readFile(new URL("../src/app/new-hires/page.tsx", import.meta.url), "utf8");
   assert.match(page, /getNewHireQueue\(context/);
   assert.match(page, /resolveWorkspaceContext\(user\)/);
   assert.match(page, /permission="assignNewHires"/);
   assert.match(page, /\/outreach\/\$\{person\.handle\}/);
   assert.match(page, /No current organizer assignment/);
-  assert.match(page, /Outreach record/);
+  assert.match(page, /<Link href=\{`\/outreach\/\$\{person\.handle\}`\}>\{person\.displayName\}<\/Link>/);
+  assert.doesNotMatch(page, />Outreach record/);
   assert.doesNotMatch(page, /Backend wiring pending/);
   assert.doesNotMatch(page, /INSERT INTO|UPDATE local801|DELETE FROM/i);
 });

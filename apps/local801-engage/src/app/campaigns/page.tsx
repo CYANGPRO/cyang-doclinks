@@ -25,7 +25,7 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
     const context = await resolveWorkspaceContext(user);
     page = await getCampaignsPage(context, { cursor: input.cursor, pageSize: input.limit });
   } catch {
-    // Fail closed. Do not replace unavailable campaign data with synthetic placeholders.
+    // Fail closed. Do not replace unavailable campaign data with placeholder records.
   }
 
   return <ProtectedPage permission="manageCampaigns"><div className="content route-campaigns-page queue-first-page">
@@ -38,7 +38,7 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
       <CampaignCreateForm />
     </SectionCard>
     <SectionCard title="Campaign portfolio" badge={<StatusBadge tone="info">Aggregate SQL</StatusBadge>}>
-      {!page ? <UnavailableState title="Campaigns unavailable" description="No synthetic campaign is presented as live." /> : page.campaigns.length === 0 ? <EmptyState title="No campaigns" description="Create a draft campaign to begin the organizing workflow." /> : <>
+      {!page ? <UnavailableState title="Campaigns unavailable" description="No placeholder campaign is presented as live." /> : page.campaigns.length === 0 ? <EmptyState title="No campaigns" description="Create a draft campaign to begin the organizing workflow." /> : <>
         <DataTable caption="Campaign summaries" headers={["Campaign", "Status", "Dates", "Population", "Assigned", "Contacted", "Completed", "Remaining"]}>
           {page.campaigns.map((campaign) => <tr key={campaign.handle}>
             <td><strong><Link href={`/campaigns/${campaign.handle}`}>{campaign.name}</Link></strong></td>

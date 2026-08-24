@@ -235,7 +235,7 @@ test("CAT Actions pages use database-backed portfolio, opaque task detail, and a
   assert.match(detail, /CatActionEditForm/);
   assert.match(detail, /CatActionTaskCreateForm/);
   assert.match(detail, /CatActionTaskEditForm/);
-  assert.match(detail, /CatActionArchiveButton/);
+  assert.match(detail, /CatActionDeleteButton/);
   assert.doesNotMatch(detail, /strategy_hash|cat_action_strategy/i);
   assert.doesNotMatch(`${portfolio}\n${detail}`, /INSERT INTO|UPDATE local801|DELETE FROM/i);
 });

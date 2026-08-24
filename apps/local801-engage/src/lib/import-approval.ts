@@ -195,7 +195,7 @@ const reasonMessages: Record<ImportApprovalReasonCode, string> = {
   EFFECTIVE_DATE_REQUIRED: "An effective date is required for this approval plan.",
   DUPLICATE_SOURCE_ACK_REQUIRED: "An identical source was previously approved and must be acknowledged.",
   MALWARE_NOT_CLEAN: "The source file does not satisfy the malware-status requirement.",
-  SYNTHETIC_PREVIEW_REQUIRED: "Pending malware status is allowed only for strictly synthetic Preview data.",
+  SYNTHETIC_PREVIEW_REQUIRED: "Pending malware status is allowed only for strictly isolated Preview records.",
 };
 
 function parseJson(value: Record<string, string | null> | string) {

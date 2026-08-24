@@ -66,10 +66,6 @@ body {
   margin-top: 10px;
 }
 
-.brand-region {
-  font-size: .7rem;
-}
-
 .brand-title {
   font-size: 1.06rem;
   margin-top: 2px;
@@ -428,7 +424,6 @@ body {
 
 .form-grid,
 .filter-bar,
-.field-grid,
 .review-summary {
   display: grid;
   gap: 16px;
@@ -495,8 +490,7 @@ body {
   color: var(--text-primary);
 }
 
-.status-row,
-.assignment-row {
+.status-row {
   gap: 16px;
   padding: 18px 0;
 }

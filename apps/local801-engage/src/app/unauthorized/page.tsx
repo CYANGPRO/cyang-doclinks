@@ -20,7 +20,7 @@ export default async function UnauthorizedPage({
   const description = !user
     ? "Sign in to continue. After authentication, you’ll return to the requested Local 801 page when your role allows it."
     : isPreview
-      ? `You’re using ${roleLabel} access. Choose an available area or switch synthetic Preview roles.`
+      ? `You’re using ${roleLabel} access. Choose an available area or switch Preview roles.`
       : `You’re using ${roleLabel} access. Choose an area available to your production account.`;
 
   return (
@@ -37,7 +37,7 @@ export default async function UnauthorizedPage({
         />
       </SectionCard>
       <DisclosureCard title="Why you saw this" description="Access is limited by your current Local 801 role">
-        <p className="muted">Direct links do not bypass role checks. {isPreview ? "In synthetic Preview, you can switch to another role and safely return to the requested page." : "Production roles are assigned inside CAT and cannot be selected at sign-in. If you expected access, use the account and session menu to sign out, or contact a Local 801 administrator to review your production role."}</p>
+        <p className="muted">Direct links do not bypass role checks. {isPreview ? "In Preview, you can switch to another role and safely return to the requested page." : "Production roles are assigned inside CAT and cannot be selected at sign-in. If you expected access, use the account and session menu to sign out, or contact a Local 801 administrator to review your production role."}</p>
         <p className="muted">An administrator should change the role only when the person’s approved duties require it. Signing in with another account is not a substitute for correct access assignment.</p>
       </DisclosureCard>
     </div>

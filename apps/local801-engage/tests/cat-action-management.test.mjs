@@ -4,9 +4,9 @@ import test from "node:test";
 import {
   CatActionMutationError,
   __testing,
-  archiveCatAction,
   createCatAction,
   createCatActionTask,
+  deleteCatAction,
   getCatActionManagementOptions,
   updateCatAction,
   updateCatActionTask,
@@ -112,19 +112,25 @@ test("update CAT action resolves opaque scope and writes only allowed operationa
   });
 });
 
-test("CAT action archive requires closed status and is atomic with record.archive audit", async () => {
-  const openState = deps({ query: async () => [{ id: actionId, name: "Open", status: "active", contract_cycle_id: null }] });
-  await assert.rejects(
-    archiveCatAction(context(), actionHandle, openState.values),
-    (error) => error instanceof CatActionMutationError && error.code === "ACTION_NOT_CLOSED",
-  );
-  assert.equal(openState.transactions.length, 0);
+test("CAT action delete handles every operational status and is atomic with a durable audit event", async () => {
+  for (const status of ["draft", "active", "closed"]) {
+    const state = deps({ query: async () => [{ id: actionId, name: "Action", status, contract_cycle_id: null }] });
+    const result = await deleteCatAction(context(), actionHandle, state.values);
+    assert.equal(result.deleted, true);
+    assert.match(state.transactions[0][0].sql, /SET status = 'archived', archived_at = now\(\)/);
+    assert.match(state.transactions[0][0].sql, /action\.status IN \('draft','active','closed'\)/);
+    assert.equal(state.audits[0].eventType, "record.archive");
+    assert.equal(state.audits[0].payload.previousStatus, status);
+  }
+});
 
-  const closedState = deps({ query: async () => [{ id: actionId, name: "Closed", status: "closed", contract_cycle_id: null }] });
-  await archiveCatAction(context(), actionHandle, closedState.values);
-  assert.match(closedState.transactions[0][0].sql, /SET status = 'archived', archived_at = now\(\)/);
-  assert.match(closedState.transactions[0][0].sql, /action\.status = 'closed'/);
-  assert.equal(closedState.audits[0].eventType, "record.archive");
+test("CAT action delete is available to the action management role and every role above it", async () => {
+  for (const role of ["cat_admin", "local_admin", "system_owner"]) {
+    const state = deps({ query: async () => [{ id: actionId, name: "Action", status: "draft", contract_cycle_id: null }] });
+    await deleteCatAction(context(role), actionHandle, state.values);
+    assert.equal(state.transactions[0][0].parameters[3], role);
+    assert.match(state.transactions[0][0].sql, /role\.code IN \('system_owner','local_admin','cat_admin'\)/);
+  }
 });
 
 test("create CAT task rejects closed actions and otherwise inserts an open task atomically", async () => {
@@ -185,7 +191,7 @@ test("all CAT action mutations deny non-management roles before SQL", async () =
     const denied = { query: async () => { calls += 1; return []; } };
     await assert.rejects(createCatAction(context(role), { name: "No" }, denied), /not authorized/i);
     await assert.rejects(updateCatAction(context(role), { actionHandle, name: "No" }, denied), /not authorized/i);
-    await assert.rejects(archiveCatAction(context(role), actionHandle, denied), /not authorized/i);
+    await assert.rejects(deleteCatAction(context(role), actionHandle, denied), /not authorized/i);
     await assert.rejects(createCatActionTask(context(role), { actionHandle, title: "No" }, denied), /not authorized/i);
     await assert.rejects(updateCatActionTask(context(role), { actionHandle, taskHandle, status: "complete" }, denied), /not authorized/i);
     assert.equal(calls, 0);
@@ -205,7 +211,7 @@ test("CAT action mutation HTTP routes are launch-gated, same-origin, permission 
   assert.match(helper, /MAX_JSON_BYTES = 8_192/);
   assert.match(createRoute, /createCatAction/);
   assert.match(actionRoute, /updateCatAction/);
-  assert.match(actionRoute, /archiveCatAction/);
+  assert.match(actionRoute, /deleteCatAction/);
   assert.match(taskCreateRoute, /createCatActionTask/);
   assert.match(taskRoute, /updateCatActionTask/);
   assert.doesNotMatch(`${helper}\n${createRoute}\n${actionRoute}\n${taskCreateRoute}\n${taskRoute}`, /cat_action_strategy|strategy_hash/i);

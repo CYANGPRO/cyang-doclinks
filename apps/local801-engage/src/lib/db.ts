@@ -8,6 +8,7 @@ import {
 } from "./pii-dual-write.ts";
 import { rewriteProtectedImportWorkerStatements } from "./pii-protected-import-worker.ts";
 import { preparePiiProtectedLookupQuery } from "./pii-protected-query.ts";
+import { measureDatabaseQuery } from "./performance-timing.ts";
 import {
   augmentPiiProtectedTransactionStatements,
   preparePiiProtectedDirectQuery,
@@ -53,9 +54,9 @@ const defaultQueryLocal801: DatabaseQuery = async <T extends DatabaseRow>(
   const dualWritePrepared = protectedLookup || protectedPrepared ? null : preparePiiDualWriteDirectQuery(query, parameters);
   const prepared = protectedLookup ?? protectedPrepared ?? dualWritePrepared;
   const sql = getSql();
-  const rows = prepared
-    ? await sql.unsafe(prepared.sql, sqlParameters(prepared.parameters))
-    : await sql.unsafe(query, sqlParameters(parameters));
+  const rows = await measureDatabaseQuery(query, () => prepared
+    ? sql.unsafe(prepared.sql, sqlParameters(prepared.parameters))
+    : sql.unsafe(query, sqlParameters(parameters)));
   return rows as unknown as T[];
 };
 

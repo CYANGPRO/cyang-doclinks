@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getAuditPage, type AuditEventRecord } from "./audit.ts";
+import { getAuditExportEvents, getAuditPage, MAX_AUDIT_EXPORT_EVENTS, type AuditEventRecord } from "./audit.ts";
 import { queryLocal801, type DatabaseQuery } from "./db.ts";
 import {
   decryptPiiField,
@@ -12,6 +12,7 @@ import { assertPiiProtectedReadState, getPiiProtectedReadMode } from "./pii-prot
 import type { WorkspaceContext } from "./workspace-context.ts";
 
 const MAX_AUDIT_ACTORS = 100;
+const MAX_AUDIT_EXPORT_ACTORS = MAX_AUDIT_EXPORT_EVENTS;
 
 const EVENT_LABELS: Record<string, string> = {
   "auth.sign_in": "Signed in",
@@ -109,37 +110,31 @@ export type AuditDisplayPage = Omit<Awaited<ReturnType<typeof getAuditPage>>, "e
   protectedActorNames: boolean;
 };
 
-export async function getAuditDisplayPage(
+async function hydrateAuditDisplayEvents(
   context: WorkspaceContext,
-  input: { eventType?: unknown; cursor?: unknown; pageSize?: unknown },
+  events: AuditEventRecord[],
   dependencies: {
-    query?: DatabaseQuery;
-    env?: NodeJS.ProcessEnv;
+    query: DatabaseQuery;
+    env: NodeJS.ProcessEnv;
     keyConfig?: PiiKeyConfiguration;
-  } = {},
-): Promise<AuditDisplayPage> {
-  const query = dependencies.query ?? queryLocal801;
-  const page = await getAuditPage(context, input, query);
-  const env = dependencies.env ?? process.env;
-  const mode = getPiiProtectedReadMode(env);
-
-  const baseEvents = page.events.map((event) => ({
+    maxActors: number;
+  },
+) {
+  const baseEvents = events.map((event) => ({
     ...event,
     eventLabel: auditEventLabel(event.event_type),
     subjectLabel: auditSubjectLabel(event.subject_type),
     actorDisplayName: null as string | null,
   }));
+  const mode = getPiiProtectedReadMode(dependencies.env);
+  if (mode === "legacy") return { events: baseEvents, protectedActorNames: false };
 
-  if (mode === "legacy") {
-    return { ...page, events: baseEvents, protectedActorNames: false };
-  }
+  await assertPiiProtectedReadState(context.organizationId, dependencies.query, mode);
+  const actorIds = [...new Set(events.flatMap((event) => event.actor_user_id ? [event.actor_user_id] : []))];
+  if (actorIds.length > dependencies.maxActors) throw new Error("Audit actor display exceeded its bounded read limit.");
+  if (actorIds.length === 0) return { events: baseEvents, protectedActorNames: true };
 
-  await assertPiiProtectedReadState(context.organizationId, query, mode);
-  const actorIds = [...new Set(page.events.flatMap((event) => event.actor_user_id ? [event.actor_user_id] : []))];
-  if (actorIds.length > MAX_AUDIT_ACTORS) throw new Error("Audit actor display exceeded its bounded read limit.");
-  if (actorIds.length === 0) return { ...page, events: baseEvents, protectedActorNames: true };
-
-  const rows = await query<ProtectedActorRow>(`
+  const rows = await dependencies.query<ProtectedActorRow>(`
     /* audit-display:protected-actors */
     WITH requested AS (
       SELECT requested_id::uuid AS user_id
@@ -153,28 +148,63 @@ export async function getAuditDisplayPage(
     JOIN requested ON requested.user_id = protected.user_id
     WHERE protected.organization_id = $1::uuid
     ORDER BY protected.user_id
-    LIMIT ${MAX_AUDIT_ACTORS + 1}
+    LIMIT ${dependencies.maxActors + 1}
   `, [context.organizationId, JSON.stringify(actorIds)]);
-  if (rows.length > MAX_AUDIT_ACTORS) throw new Error("Audit actor display exceeded its bounded read limit.");
+  if (rows.length > dependencies.maxActors) throw new Error("Audit actor display exceeded its bounded read limit.");
 
-  const keyConfig = dependencies.keyConfig ?? getPiiKeyConfiguration(env);
+  const keyConfig = dependencies.keyConfig ?? getPiiKeyConfiguration(dependencies.env);
   const actors = new Map<string, string>();
   for (const row of rows) {
     if (actors.has(row.user_id)) throw new Error("Duplicate protected audit actor companion detected.");
-    const displayName = decryptPiiField(
+    actors.set(row.user_id, decryptPiiField(
       encryptedDisplayName(row),
       { organizationId: context.organizationId, entity: "user", recordId: row.user_id, field: "display-name" },
       keyConfig,
-    );
-    actors.set(row.user_id, displayName);
+    ));
   }
-
   return {
-    ...page,
     protectedActorNames: true,
     events: baseEvents.map((event) => ({
       ...event,
       actorDisplayName: event.actor_user_id ? actors.get(event.actor_user_id) ?? null : null,
     })),
   };
+}
+
+export async function getAuditDisplayPage(
+  context: WorkspaceContext,
+  input: { eventType?: unknown; cursor?: unknown; pageSize?: unknown },
+  dependencies: {
+    query?: DatabaseQuery;
+    env?: NodeJS.ProcessEnv;
+    keyConfig?: PiiKeyConfiguration;
+  } = {},
+): Promise<AuditDisplayPage> {
+  const query = dependencies.query ?? queryLocal801;
+  const page = await getAuditPage(context, input, query);
+  const env = dependencies.env ?? process.env;
+  const display = await hydrateAuditDisplayEvents(context, page.events, {
+    query, env, keyConfig: dependencies.keyConfig, maxActors: MAX_AUDIT_ACTORS,
+  });
+  return { ...page, ...display };
+}
+
+export async function getAuditDisplayExport(
+  context: WorkspaceContext,
+  input: { eventType?: unknown },
+  dependencies: {
+    query?: DatabaseQuery;
+    env?: NodeJS.ProcessEnv;
+    keyConfig?: PiiKeyConfiguration;
+  } = {},
+) {
+  const query = dependencies.query ?? queryLocal801;
+  const exported = await getAuditExportEvents(context, input, query);
+  const display = await hydrateAuditDisplayEvents(context, exported.events, {
+    query,
+    env: dependencies.env ?? process.env,
+    keyConfig: dependencies.keyConfig,
+    maxActors: MAX_AUDIT_EXPORT_ACTORS,
+  });
+  return { ...exported, ...display };
 }

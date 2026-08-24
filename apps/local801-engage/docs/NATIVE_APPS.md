@@ -9,7 +9,7 @@ The `ios/` and `android/` projects are signed Capacitor applications for the can
 - iOS VisionKit and Android ML Kit capture PDFs in memory for review. QR intake opens only canonical `https://cat.cyang.io` destinations.
 - Android PDF share intake and iOS registered PDF “Open in” intake hold a bounded file in process memory until the operator confirms or discards it.
 - Confirmed uploads use Android Keystore AES-GCM plus WorkManager or iOS complete file protection plus a background URL session. Temporary files are excluded from backup and removed on success or terminal rejection. Every upload still passes the same-origin session, role, malware-scan, encrypted-storage and audit path as a web upload.
-- APNs/FCM tokens are encrypted server-side. Native and local notification content is generic and routes back to the authenticated Work inbox. No member detail is placed in the notification payload.
+- APNs/FCM tokens are encrypted server-side. Native and local notification content is generic and routes back to the authenticated To Do page. No member detail is placed in the notification payload.
 - Calendar entries, Android widgets, and iOS/Android shortcuts contain only generic task text, aggregate counts, and canonical application routes.
 
 ## Security contract

@@ -161,7 +161,7 @@ export default async function ImportDetailPage({ params, searchParams }: { param
           {preflight.ready && preflight.fingerprint && preflight.fingerprintShort ? (
             executionMode ? (
               <div className="section-card">
-                <h3>{executionMode === "protected" ? "Protected authoritative execution" : "Synthetic Preview execution"}</h3>
+                <h3>{executionMode === "protected" ? "Protected authoritative execution" : "Preview execution"}</h3>
                 <p className="muted">The server independently rechecks organization, role, clean scan, review decisions, dates, duplicate acknowledgement, shrink acknowledgement, idempotency, and the exact current fingerprints. In protected mode it additionally prepares target-bound encrypted mutations and applies them under row locks in one transaction.</p>
                 <ImportExecutionControl batchId={batchId} fingerprint={preflight.fingerprint} fingerprintShort={preflight.fingerprintShort} mode={executionMode} />
               </div>

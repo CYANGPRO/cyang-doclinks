@@ -243,7 +243,7 @@ function selectionCtes() {
           OR (
             ($3::text IS NULL OR person.membership_status = $3::text)
             AND ($4::text IS NULL OR person.department ILIKE $4::text ESCAPE '\\')
-            AND ($5::text IS NULL OR person.classification ILIKE $5::text ESCAPE '\\')
+            AND ($5::text IS NULL OR lower(btrim(person.classification)) = lower(btrim($5::text)))
             AND ($6::text IS NULL OR person.work_location ILIKE $6::text ESCAPE '\\')
             AND ($7::text IS NULL
               OR person.department ILIKE $7::text ESCAPE '\\'
@@ -315,7 +315,7 @@ function selectionParameters(
     campaignHandle,
     criteria.membershipStatus,
     escapeLike(criteria.department),
-    escapeLike(criteria.classification),
+    criteria.classification || null,
     escapeLike(criteria.workLocation),
     escapeLike(criteria.search),
     operationValue,

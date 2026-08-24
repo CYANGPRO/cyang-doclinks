@@ -72,7 +72,7 @@ export function MobileDeviceControl({ urgentCount, totalCount }: { urgentCount: 
     const permission = await LocalNotifications.requestPermissions();
     if (permission.display !== "granted") throw new Error("Notification permission was not granted.");
     await LocalNotifications.registerActionTypes({ types: [{ id: "LOCAL801_GENERIC_WORK", actions: [
-      { id: "open", title: "Open work inbox" }, { id: "later", title: "Remind me later" },
+      { id: "open", title: "Open To Do" }, { id: "later", title: "Remind me later" },
     ] }] });
     await LocalNotifications.schedule({ notifications: [{
       id: Math.floor(Date.now() / 1000) % 2_147_483_647,

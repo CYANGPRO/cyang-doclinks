@@ -5,7 +5,10 @@ import test from "node:test";
 import {
   ContactCorrectionError,
   decideContactCorrection,
+  getVisibleContactActions,
   listContactCorrectionsForReview,
+  preferredVisibleEmail,
+  preferredVisiblePhone,
   submitContactCorrection,
 } from "../src/lib/contact-corrections.ts";
 import { encryptPiiField, getPiiKeyConfiguration } from "../src/lib/pii-protection.ts";
@@ -69,11 +72,69 @@ function proposedRow(value = "synthetic.member@example.test") {
   };
 }
 
+function visibleContactRow(id, contactType, contactLabel, value) {
+  const protectedValue = envelope(value, "person-contact", id, "contact-value");
+  return {
+    contact_method_id: id,
+    contact_type: contactType,
+    contact_label: contactLabel,
+    contact_value_encrypted_payload: protectedValue.encryptedPayload,
+    encryption_key_version: protectedValue.encryptionKeyVersion,
+    encryption_format_version: protectedValue.encryptionFormatVersion,
+  };
+}
+
 function commonQuery(sql) {
   if (sql.includes("pii-protected-read:acceptance-state")) return [protectedState];
   if (sql.includes("SELECT event_hash FROM local801.audit_events")) return [];
   throw new Error(`Unexpected query: ${sql}`);
 }
+
+test("contact view loads every phone and email type and applies the requested contact preference order", async () => {
+  const ids = {
+    cell: "55555555-5555-4555-8555-555555555551",
+    homePhone: "55555555-5555-4555-8555-555555555552",
+    workPhone: "55555555-5555-4555-8555-555555555553",
+    homeEmail: "55555555-5555-4555-8555-555555555554",
+    workEmail: "55555555-5555-4555-8555-555555555555",
+  };
+  let contactSql = "";
+  const contacts = await getVisibleContactActions(context("cat_member"), personHandle, {
+    env: environment(),
+    keyConfig,
+    query: async (sql) => {
+      if (sql.includes("pii-protected-read:acceptance-state")) return [protectedState];
+      if (sql.includes("contact-correction:resolve-person")) return [{ id: personId }];
+      if (sql.includes("contact-correction:visible-contact-actions")) {
+        contactSql = sql;
+        return [
+          visibleContactRow(ids.cell, "phone", "cell", "651-555-0101"),
+          visibleContactRow(ids.homePhone, "phone", "home", "651-555-0102"),
+          visibleContactRow(ids.workPhone, "phone", "work", "651-555-0103"),
+          visibleContactRow(ids.homeEmail, "personal_email", "home", "member.home@example.test"),
+          visibleContactRow(ids.workEmail, "work_email", "work", "member.work@example.test"),
+        ];
+      }
+      throw new Error(`Unexpected query: ${sql}`);
+    },
+  });
+
+  assert.deepEqual(contacts, {
+    cellPhone: "651-555-0101",
+    homePhone: "651-555-0102",
+    workPhone: "651-555-0103",
+    homeEmail: "member.home@example.test",
+    workEmail: "member.work@example.test",
+  });
+  assert.match(contactSql, /contact\.contact_type IN \('work_email','personal_email','phone'\)/);
+  assert.match(contactSql, /DISTINCT ON \(contact\.contact_type, contact\.contact_label\)/);
+  assert.doesNotMatch(contactSql, /contact\.is_primary = true/);
+  assert.equal(preferredVisiblePhone(contacts), "651-555-0101");
+  assert.equal(preferredVisiblePhone({ ...contacts, cellPhone: null }), "651-555-0102");
+  assert.equal(preferredVisiblePhone({ ...contacts, cellPhone: null, homePhone: null }), "651-555-0103");
+  assert.equal(preferredVisibleEmail(contacts), "member.home@example.test");
+  assert.equal(preferredVisibleEmail({ ...contacts, homeEmail: null }), "member.work@example.test");
+});
 
 test("assigned organizers submit an encrypted contact update with atomic PII-free audit evidence", async () => {
   const transactions = [];

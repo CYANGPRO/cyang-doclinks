@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requirePreviewUser } from "@/lib/authz.server";
-import { assignOutreachOrganizer, OutreachAssignmentError } from "@/lib/outreach-assignment";
+import { assignOutreachOrganizer, deleteMemberOutreach, OutreachAssignmentError } from "@/lib/outreach-assignment";
 import { enforceWorkspaceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import { rateLimitResponse } from "@/lib/rate-limit-response";
 import { hasExactSameOrigin } from "@/lib/request-security";
@@ -70,5 +70,30 @@ export async function POST(request: Request, { params }: RouteContext) {
     if (error instanceof RateLimitError) return rateLimitResponse(error);
     if (error instanceof OutreachAssignmentError) return json({ error: error.code, message: error.message }, error.status);
     return json({ error: "ASSIGNMENT_UNAVAILABLE", message: "The outreach assignment could not be saved safely." }, 503);
+  }
+}
+
+export async function DELETE(request: Request, { params }: RouteContext) {
+  if (!operationalRuntimeEnabled()) return json({ error: "NOT_FOUND" }, 404);
+  if (!hasExactSameOrigin(request)) {
+    return json({ error: "FORBIDDEN_ORIGIN", message: "This request must come from the signed-in application." }, 403);
+  }
+  const auth = await requirePreviewUser("assignOutreach");
+  if (!auth.ok) {
+    auth.response.headers.set("Cache-Control", noStore["Cache-Control"]);
+    return auth.response;
+  }
+  try {
+    const [{ handle }, context] = await Promise.all([
+      params,
+      resolveWorkspaceContext(auth.user),
+    ]);
+    await enforceWorkspaceRateLimit(context, "mutation");
+    const result = await deleteMemberOutreach(context, { personHandle: handle });
+    return json({ assignment: "deleted", ...result });
+  } catch (error) {
+    if (error instanceof RateLimitError) return rateLimitResponse(error);
+    if (error instanceof OutreachAssignmentError) return json({ error: error.code, message: error.message }, error.status);
+    return json({ error: "DELETE_UNAVAILABLE", message: "The member outreach assignment could not be deleted safely." }, 503);
   }
 }

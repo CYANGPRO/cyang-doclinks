@@ -187,7 +187,7 @@ export async function getProtectedDirectoryPage(
       ))
       AND ($4::text IS NULL OR person.membership_status = $4::text)
       AND ($5::text IS NULL OR person.department ILIKE $5::text ESCAPE '\\')
-      AND ($6::text IS NULL OR person.classification ILIKE $6::text ESCAPE '\\')
+      AND ($6::text IS NULL OR lower(btrim(person.classification)) = lower(btrim($6::text)))
       AND ($7::text IS NULL OR person.work_location ILIKE $7::text ESCAPE '\\')
       AND ($8::text IS NULL
         OR person.department ILIKE $8::text ESCAPE '\\'
@@ -223,7 +223,7 @@ export async function getProtectedDirectoryPage(
     assignmentRequired,
     normalized.membershipStatus || null,
     normalized.department ? `%${normalized.department.replace(/[\\%_]/g, (character) => `\\${character}`)}%` : null,
-    normalized.classification ? `%${normalized.classification.replace(/[\\%_]/g, (character) => `\\${character}`)}%` : null,
+    normalized.classification || null,
     normalized.workLocation ? `%${normalized.workLocation.replace(/[\\%_]/g, (character) => `\\${character}`)}%` : null,
     operationalPattern,
     search.email?.key_version ?? null,

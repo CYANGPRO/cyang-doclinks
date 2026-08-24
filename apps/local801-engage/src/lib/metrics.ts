@@ -87,88 +87,117 @@ export async function getDashboardMetrics(
       open_cat_actions: number | string;
     }>(
       `
-        WITH target_organization AS (SELECT $1::uuid AS id),
+        /* dashboard:summary */
+        WITH target_organization AS (
+          SELECT id
+          FROM local801.organizations
+          WHERE id = $1::uuid AND archived_at IS NULL
+        ),
         chicago_tomorrow AS (
           SELECT (date_trunc('day', now() AT TIME ZONE 'America/Chicago') + interval '1 day') AT TIME ZONE 'America/Chicago' AS starts_at
+        ),
+        membership_counts AS (
+          SELECT
+            count(*) FILTER (WHERE membership_status IN ('member', 'nonmember')) AS represented,
+            count(*) FILTER (WHERE membership_status = 'member') AS members
+          FROM reporting.current_membership
+          WHERE organization_id = $1::uuid
+        ),
+        assignment_counts AS (
+          SELECT
+            count(*) AS open_assignments,
+            count(DISTINCT assignment.person_id) FILTER (WHERE NOT EXISTS (
+              SELECT 1
+              FROM local801.engagement_events event
+              WHERE event.organization_id = assignment.organization_id
+                AND event.person_id = assignment.person_id
+                AND event.voided_at IS NULL
+                AND event.occurred_at >= now() - interval '90 days'
+            )) AS assigned_attention_90
+          FROM local801.engagement_assignments assignment
+          WHERE assignment.organization_id = $1::uuid
+            AND assignment.status = 'open'
+            AND assignment.archived_at IS NULL
+            AND ($3::boolean OR assignment.primary_user_id = $2 OR assignment.backup_user_id = $2)
+        ),
+        new_hire_counts AS (
+          SELECT count(*) AS new_hires_this_month
+          FROM reporting.new_hires
+          WHERE organization_id = $1::uuid
+            AND hire_date >= date_trunc('month', current_date)
+        ),
+        new_hire_engagement_counts AS (
+          SELECT count(*) AS new_hires_awaiting_first_engagement_14
+          FROM reporting.new_hire_engagement
+          WHERE organization_id = $1::uuid
+            AND hire_date >= current_date - interval '90 days'
+            AND hire_date <= current_date - interval '14 days'
+            AND engagement_count = 0
+        ),
+        membership_change_counts AS (
+          SELECT
+            count(*) FILTER (WHERE event_type = 'addition' AND effective_date >= date_trunc('month', current_date)) AS additions_this_month,
+            count(*) FILTER (WHERE event_type = 'drop' AND effective_date >= date_trunc('month', current_date)) AS drops_this_month,
+            count(*) FILTER (WHERE effective_date >= current_date - interval '7 days') AS recent_membership_changes_7_days
+          FROM local801.membership_events
+          WHERE organization_id = $1::uuid
+        ),
+        followup_counts AS (
+          SELECT
+            count(*) FILTER (WHERE followup.due_at < now()) AS overdue_followups,
+            count(*) FILTER (WHERE followup.due_at >= now() AND followup.due_at < tomorrow.starts_at) AS followups_due_today,
+            count(*) FILTER (WHERE followup.due_at >= tomorrow.starts_at) AS upcoming_followups
+          FROM local801.engagement_followups followup
+          CROSS JOIN chicago_tomorrow tomorrow
+          WHERE followup.organization_id = $1::uuid
+            AND followup.status = 'open'
+            AND followup.completed_at IS NULL
+            AND (
+              $3::boolean
+              OR (
+                followup.assigned_to = $2
+                AND EXISTS (
+                  SELECT 1
+                  FROM local801.engagement_assignments assignment
+                  WHERE assignment.organization_id = followup.organization_id
+                    AND assignment.person_id = followup.person_id
+                    AND assignment.archived_at IS NULL
+                    AND assignment.status = 'open'
+                    AND (assignment.primary_user_id = $2 OR assignment.backup_user_id = $2)
+                )
+              )
+            )
+        ),
+        workspace_counts AS (
+          SELECT
+            (SELECT count(*) FROM local801.import_batches WHERE organization_id = $1::uuid AND state = 'under_review') AS imports_in_review,
+            (SELECT count(*) FROM local801.outreach_campaigns WHERE organization_id = $1::uuid AND status = 'active' AND archived_at IS NULL) AS active_campaigns,
+            (SELECT count(*) FROM local801.cat_actions WHERE organization_id = $1::uuid AND status = 'active' AND archived_at IS NULL) AS open_cat_actions
         )
         SELECT
           EXISTS (SELECT 1 FROM target_organization) AS organization_exists,
-          (SELECT count(*) FROM reporting.current_membership m JOIN target_organization o ON o.id = m.organization_id WHERE m.membership_status IN ('member', 'nonmember')) AS represented,
-          (SELECT count(*) FROM reporting.current_membership m JOIN target_organization o ON o.id = m.organization_id WHERE m.membership_status = 'member') AS members,
-          (SELECT count(*) FROM local801.engagement_assignments a JOIN target_organization o ON o.id = a.organization_id
-            WHERE a.status = 'open' AND a.archived_at IS NULL
-              AND ($3::boolean OR a.primary_user_id = $2 OR a.backup_user_id = $2)) AS open_assignments,
-          (SELECT count(DISTINCT a.person_id) FROM local801.engagement_assignments a JOIN target_organization o ON o.id = a.organization_id
-            WHERE a.status = 'open' AND a.archived_at IS NULL
-              AND ($3::boolean OR a.primary_user_id = $2 OR a.backup_user_id = $2)
-              AND NOT EXISTS (
-                SELECT 1 FROM local801.engagement_events e
-                WHERE e.organization_id = a.organization_id
-                  AND e.person_id = a.person_id
-                  AND e.voided_at IS NULL
-                  AND e.occurred_at >= now() - interval '90 days'
-              )) AS assigned_attention_90,
-          (SELECT count(*) FROM reporting.new_hires h JOIN target_organization o ON o.id = h.organization_id WHERE h.hire_date >= date_trunc('month', current_date)) AS new_hires_this_month,
-          (SELECT count(*) FROM reporting.new_hire_engagement h JOIN target_organization o ON o.id = h.organization_id
-            WHERE h.hire_date >= current_date - interval '90 days'
-              AND h.hire_date <= current_date - interval '14 days'
-              AND h.engagement_count = 0) AS new_hires_awaiting_first_engagement_14,
-          (SELECT count(*) FROM local801.membership_events e JOIN target_organization o ON o.id = e.organization_id WHERE e.event_type = 'addition' AND e.effective_date >= date_trunc('month', current_date)) AS additions_this_month,
-          (SELECT count(*) FROM local801.membership_events e JOIN target_organization o ON o.id = e.organization_id WHERE e.event_type = 'drop' AND e.effective_date >= date_trunc('month', current_date)) AS drops_this_month,
-          (SELECT count(*) FROM local801.membership_events e JOIN target_organization o ON o.id = e.organization_id WHERE e.effective_date >= current_date - interval '7 days') AS recent_membership_changes_7_days,
-          (SELECT count(*) FROM local801.engagement_followups f JOIN target_organization o ON o.id = f.organization_id
-            WHERE f.status = 'open' AND f.completed_at IS NULL AND f.due_at < now()
-              AND (
-                $3::boolean
-                OR (
-                  f.assigned_to = $2
-                  AND EXISTS (
-                    SELECT 1 FROM local801.engagement_assignments a
-                    WHERE a.organization_id = f.organization_id
-                      AND a.person_id = f.person_id
-                      AND a.archived_at IS NULL
-                      AND a.status = 'open'
-                      AND (a.primary_user_id = $2 OR a.backup_user_id = $2)
-                  )
-                )
-              )) AS overdue_followups,
-          (SELECT count(*) FROM local801.engagement_followups f JOIN target_organization o ON o.id = f.organization_id CROSS JOIN chicago_tomorrow t
-            WHERE f.status = 'open' AND f.completed_at IS NULL
-              AND f.due_at >= now() AND f.due_at < t.starts_at
-              AND (
-                $3::boolean
-                OR (
-                  f.assigned_to = $2
-                  AND EXISTS (
-                    SELECT 1 FROM local801.engagement_assignments a
-                    WHERE a.organization_id = f.organization_id
-                      AND a.person_id = f.person_id
-                      AND a.archived_at IS NULL
-                      AND a.status = 'open'
-                      AND (a.primary_user_id = $2 OR a.backup_user_id = $2)
-                  )
-                )
-              )) AS followups_due_today,
-          (SELECT count(*) FROM local801.engagement_followups f JOIN target_organization o ON o.id = f.organization_id CROSS JOIN chicago_tomorrow t
-            WHERE f.status = 'open' AND f.completed_at IS NULL
-              AND f.due_at >= t.starts_at
-              AND (
-                $3::boolean
-                OR (
-                  f.assigned_to = $2
-                  AND EXISTS (
-                    SELECT 1 FROM local801.engagement_assignments a
-                    WHERE a.organization_id = f.organization_id
-                      AND a.person_id = f.person_id
-                      AND a.archived_at IS NULL
-                      AND a.status = 'open'
-                      AND (a.primary_user_id = $2 OR a.backup_user_id = $2)
-                  )
-                )
-              )) AS upcoming_followups,
-          (SELECT count(*) FROM local801.import_batches b JOIN target_organization o ON o.id = b.organization_id WHERE b.state = 'under_review') AS imports_in_review,
-          (SELECT count(*) FROM local801.outreach_campaigns c JOIN target_organization o ON o.id = c.organization_id WHERE c.status = 'active' AND c.archived_at IS NULL) AS active_campaigns,
-          (SELECT count(*) FROM local801.cat_actions c JOIN target_organization o ON o.id = c.organization_id WHERE c.status = 'active' AND c.archived_at IS NULL) AS open_cat_actions
+          membership_counts.represented,
+          membership_counts.members,
+          assignment_counts.open_assignments,
+          assignment_counts.assigned_attention_90,
+          new_hire_counts.new_hires_this_month,
+          new_hire_engagement_counts.new_hires_awaiting_first_engagement_14,
+          membership_change_counts.additions_this_month,
+          membership_change_counts.drops_this_month,
+          membership_change_counts.recent_membership_changes_7_days,
+          followup_counts.overdue_followups,
+          followup_counts.followups_due_today,
+          followup_counts.upcoming_followups,
+          workspace_counts.imports_in_review,
+          workspace_counts.active_campaigns,
+          workspace_counts.open_cat_actions
+        FROM membership_counts
+        CROSS JOIN assignment_counts
+        CROSS JOIN new_hire_counts
+        CROSS JOIN new_hire_engagement_counts
+        CROSS JOIN membership_change_counts
+        CROSS JOIN followup_counts
+        CROSS JOIN workspace_counts
       `,
       [context.organizationId, context.userId, context.role !== "cat_member"],
     );
@@ -195,7 +224,7 @@ export async function getDashboardMetrics(
       activeCampaigns: rowToNumber(row.active_campaigns),
       openCatActions: rowToNumber(row.open_cat_actions),
       reportingDate: new Date().toISOString().slice(0, 10),
-      sourceSnapshot: process.env.VERCEL_ENV === "production" ? "Protected Local 801 database" : "Neon synthetic preview",
+      sourceSnapshot: process.env.VERCEL_ENV === "production" ? "Protected Local 801 database" : "Neon Preview database",
       source: "database",
     };
   } catch {

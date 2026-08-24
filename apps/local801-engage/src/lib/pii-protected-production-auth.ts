@@ -734,6 +734,7 @@ export async function authorizeProtectedProductionIdentity(
     ));
     return {
       organizationSlug: boundAccount.row.organization_slug,
+      organizationId: boundAccount.row.organization_id,
       userId: boundAccount.row.user_id,
       email: boundAccount.email,
       role: boundAccount.role,
@@ -814,6 +815,7 @@ export async function authorizeProtectedProductionIdentity(
   }
   return {
     organizationSlug: account.row.organization_slug,
+    organizationId: account.row.organization_id,
     userId: account.row.user_id,
     email: account.email,
     role: account.role,
@@ -827,12 +829,6 @@ export async function resolveProtectedProductionSessionBinding(
   query: DatabaseQuery = queryLocal801,
 ): Promise<ProductionAuthBinding | null> {
   if (!session.organizationSlug || !UUID_RE.test(session.userId) || !Number.isSafeInteger(session.sessionVersion)) return null;
-  const organizations = await query<OrganizationRow>(`
-    SELECT id::text, slug FROM local801.organizations
-    WHERE slug = $1::text AND archived_at IS NULL LIMIT 2
-  `, [session.organizationSlug]);
-  if (organizations.length !== 1) return null;
-  const organization = organizations[0];
   const rows = await query<UserRow>(`
     /* production-auth:protected-session */
     SELECT organization.slug AS organization_slug, organization.id::text AS organization_id,
@@ -852,10 +848,12 @@ export async function resolveProtectedProductionSessionBinding(
       ON protected.organization_id = organization.id AND protected.user_id = app_user.id
     JOIN local801.workspace_user_roles user_role ON user_role.user_id = app_user.id
     JOIN local801.workspace_roles role ON role.id = user_role.role_id AND role.organization_id = organization.id
-    WHERE organization.id = $1::uuid AND app_user.auth_session_version = $3::integer
+    WHERE organization.slug = $1::text
+      AND organization.archived_at IS NULL
+      AND app_user.auth_session_version = $3::integer
     LIMIT 2
   `, [
-    organization.id,
+    session.organizationSlug,
     session.userId,
     session.sessionVersion,
     CURRENT_ACCESS_POLICY.key,
@@ -868,11 +866,12 @@ export async function resolveProtectedProductionSessionBinding(
   const keyConfig = getPiiKeyConfiguration();
   const email = decryptPiiField(
     encrypted(row.email_encrypted_payload, row.email_encryption_key_version, row.email_encryption_format_version),
-    { organizationId: organization.id, entity: "user", recordId: row.user_id, field: "email" },
+    { organizationId: row.organization_id, entity: "user", recordId: row.user_id, field: "email" },
     keyConfig,
   );
   return {
     organizationSlug: row.organization_slug,
+    organizationId: row.organization_id,
     userId: row.user_id,
     email,
     role,

@@ -94,7 +94,13 @@ function decryptPersonDisplayName(row: ProtectedPersonRow, organizationId: strin
       keyConfig,
     );
   }
-  return preferredName?.trim() || `${firstName} ${lastName}`;
+  const givenName = preferredName?.trim() || firstName.trim();
+  const familyName = lastName.trim();
+  const normalizedGivenName = givenName.toLocaleLowerCase("en-US");
+  const normalizedFamilyName = familyName.toLocaleLowerCase("en-US");
+  return normalizedGivenName === normalizedFamilyName || normalizedGivenName.endsWith(` ${normalizedFamilyName}`)
+    ? givenName
+    : `${givenName} ${familyName}`;
 }
 
 function decryptUserDisplayName(row: ProtectedUserRow, organizationId: string, keyConfig: PiiKeyConfiguration) {

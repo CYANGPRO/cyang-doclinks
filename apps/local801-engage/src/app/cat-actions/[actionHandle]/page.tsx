@@ -16,7 +16,7 @@ import {
   type StatusTone,
 } from "@/components/DesignSystem";
 import {
-  CatActionArchiveButton,
+  CatActionDeleteButton,
   CatActionEditForm,
   CatActionTaskCreateForm,
   CatActionTaskEditForm,
@@ -188,7 +188,6 @@ export default async function CatActionDetailPage({
           initialStatus={action.status}
           cycles={options!.contractCycles}
         /> : <UnavailableState title="Action editing unavailable" description="Authorized management options could not be loaded." />}
-        {action.status === "closed" && mutationReady ? <div className="section-separator"><CatActionArchiveButton actionHandle={action.handle} actionName={action.name} /></div> : null}
       </SectionCard>
 
       {action.status !== "closed" ? <SectionCard title="Create task" description="Create an operational task with an optional CAT organizer and due date. Strategy notes are not accepted here."
@@ -308,7 +307,10 @@ export default async function CatActionDetailPage({
           initialStatus={action.status}
           cycles={options!.contractCycles}
         /> : <UnavailableState title="Editing unavailable" description="We couldn’t load the options needed to edit this action." />}
-        {action.status === "closed" && mutationReady ? <div className="section-separator"><CatActionArchiveButton actionHandle={action.handle} actionName={action.name} /></div> : null}
+        {mutationReady ? <div className="section-separator">
+          <p className="muted">Deletion is available to 801 Administrators, Local Administrators, and System Owners. The CAT Action and its tasks leave operational views while audit history is retained.</p>
+          <CatActionDeleteButton actionHandle={action.handle} actionName={action.name} />
+        </div> : null}
       </DisclosureCard>
     </>}
   </div></ProtectedPage>;

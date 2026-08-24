@@ -68,8 +68,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .brand { color: var(--text); display: block; margin: 0 auto var(--space-6); max-width: 204px; text-decoration: none; width: 100%; }
 .brand-logo { display: block; height: auto; width: 100%; }
 .brand-copy { display: block; margin-top: var(--space-2); }
-.brand-region, .brand-title, .brand-subtitle { display: block; }
-.brand-region { color: var(--brand-burgundy); font-size: .68rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.brand-title, .brand-subtitle { display: block; }
 .brand-title { font-size: 1rem; font-weight: 700; line-height: 1.3; }
 .brand-subtitle { color: var(--text-muted); font-size: .75rem; }
 .nav-groups { display: grid; gap: var(--space-5); }
@@ -152,8 +151,8 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .form-message { color: var(--danger); font-weight: 600; }
 .form-grid, .filter-bar { display: grid; gap: var(--space-3); grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .filter-bar { align-items: end; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: var(--space-4); }
-.status-row, .assignment-row { align-items: start; border-top: 1px solid var(--border); display: grid; gap: var(--space-3); grid-template-columns: minmax(0, 1.4fr) minmax(0, .8fr) auto; padding: var(--space-4) 0; }
-.status-row:first-child, .assignment-row:first-child { border-top: 0; }
+.status-row { align-items: start; border-top: 1px solid var(--border); display: grid; gap: var(--space-3); grid-template-columns: minmax(0, 1.4fr) minmax(0, .8fr) auto; padding: var(--space-4) 0; }
+.status-row:first-child { border-top: 0; }
 .table-scroll { max-width: 100%; overflow-x: auto; }
 .table-scroll-hint { color: var(--text-muted); display: none; font-size: .76rem; margin: 0 0 var(--space-2); }
 .data-table { border-collapse: collapse; font-size: .86rem; min-width: 720px; width: 100%; }
@@ -207,7 +206,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
   .page-actions { align-items: stretch; }
   .page-actions .button { flex: 1; }
   .metrics-grid, .two-grid, .form-grid, .filter-bar { grid-template-columns: 1fr; }
-  .status-row, .assignment-row { grid-template-columns: 1fr; }
+  .status-row { grid-template-columns: 1fr; }
   .section-card, .card { padding: var(--space-4); }
   .section-heading { flex-wrap: wrap; }
   .pagination { grid-template-columns: repeat(2, minmax(0, 1fr)); }

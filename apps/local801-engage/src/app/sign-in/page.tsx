@@ -38,14 +38,14 @@ export default async function SignInPage({ searchParams }: {
         eyebrow={preview ? "Private preview" : "Local 801 workspace"}
         title={preview ? "Choose how you want to explore" : "Sign in to Engaging Local 801"}
         description={preview
-          ? "Select a synthetic role. This changes what the Preview shows and never connects to production data. It does not create an account, change production access, or connect to production member records."
+          ? "Select a Preview role to explore the available permissions. Preview access does not create an account, change Production access, or connect to Production member records."
           : "This is a private, approval-only workspace. Signing in verifies your identity; your assigned Local 801 role determines which pages, records, and actions you can use."}
       />
 
       {preview ? <>
         <SectionCard
           title={switchingPreviewRole ? "Switch Preview role" : "Choose a Preview role"}
-          description="Each option uses synthetic example.test records and the same server-enforced permissions as the corresponding role."
+          description="Each option uses isolated Preview records and the same server-enforced permissions as the corresponding role."
         >
           <PreviewRoleForm csrfToken={previewCsrfToken} currentRole={currentPreviewUser?.role ?? "local_admin"} nextPath={nextPath} switching={switchingPreviewRole} />
         </SectionCard>

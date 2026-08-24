@@ -3,7 +3,9 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const service = readFileSync(new URL("../src/lib/follow-ups.ts", import.meta.url), "utf8");
+const protectedRead = readFileSync(new URL("../src/lib/pii-protected-followup-read.ts", import.meta.url), "utf8");
 const page = readFileSync(new URL("../src/app/follow-ups/page.tsx", import.meta.url), "utf8");
+const stage18Styles = readFileSync(new URL("../src/app/stage18.css", import.meta.url), "utf8");
 
 test("follow-up queue requires recordEngagement permission", () => {
   assert.match(service, /if \(!can\(context\.role, "recordEngagement"\)\) throw new FollowupAccessError/);
@@ -83,4 +85,14 @@ test("public queue model does not return raw database identifiers", () => {
   assert.doesNotMatch(publicType, /\bid\b|personId|followupId|assignmentId|engagementEventId/);
   assert.match(publicType, /employeeHandle: string/);
   assert.match(publicType, /followupHandle: string/);
+});
+
+test("Follow-ups cards use complete names, bordered fields, and separated actions", () => {
+  assert.match(service, /normalizedGivenName\.endsWith\(` \$\{normalizedFamilyName\}`\)/);
+  assert.match(protectedRead, /normalizedGivenName\.endsWith\(` \$\{normalizedFamilyName\}`\)/);
+  assert.match(page, /review-summary followup-person-fields/);
+  assert.match(page, /page-actions followup-card-actions/);
+  assert.match(page, /if \(status === "member"\) return "Member"/);
+  assert.match(stage18Styles, /\.followup-person-fields > div[\s\S]*border: 1px solid var\(--border\)/);
+  assert.match(stage18Styles, /\.followup-card-actions[\s\S]*margin-top: 20px/);
 });

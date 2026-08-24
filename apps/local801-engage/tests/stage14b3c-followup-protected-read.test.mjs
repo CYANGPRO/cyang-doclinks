@@ -134,7 +134,7 @@ test("Follow-ups replaces employee and organizer display PII with protected comp
   };
 
   const result = await hydrateFollowupQueueFromProtectedPii(organizationId, queue(), { query, env: environment, keyConfig });
-  assert.equal(result.items[0].displayName, "Synthetic Avery");
+  assert.equal(result.items[0].displayName, "Synthetic Avery Person");
   assert.equal(result.items[0].assignedTo, "Synthetic CAT Member");
   assert.deepEqual(result.items[0].assigneeOptions.map((item) => item.label), ["Synthetic CAT Member", "Synthetic CAT Lead"]);
   const peopleQuery = protectedQueries.find((entry) => entry.sql.includes("pii-protected-followup-read:people"));

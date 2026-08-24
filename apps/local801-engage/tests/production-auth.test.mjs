@@ -42,6 +42,7 @@ const identity = {
 function bindingRow(overrides = {}) {
   return {
     organization_slug: "local801",
+    organization_id: organizationId,
     user_id: userId,
     email: "person@example.test",
     auth_session_version: "3",
@@ -209,6 +210,7 @@ test("production identity binding requires one active provisioned user with one 
   });
   assert.deepEqual(result, {
     organizationSlug: "local801",
+    organizationId,
     userId,
     email: "person@example.test",
     role: "cat_lead",
@@ -255,6 +257,7 @@ test("production session is revalidated against live active user, role, organiza
     return [bindingRow()];
   });
   assert.equal(valid?.role, "cat_lead");
+  assert.equal(valid?.organizationId, organizationId);
   assert.equal(valid?.email, "person@example.test");
   assert.equal(valid?.policyAcknowledged, true);
   assert.deepEqual(parameters, ["local801", userId, 3, "privacy-acceptable-use", "2026-08-18"]);
@@ -299,14 +302,15 @@ test("production NextAuth route and server authorization keep Preview cookies se
   assert.match(options, /session\.user = undefined/);
   assert.doesNotMatch(authTypes, /email:/);
   assert.match(route, /productionAuthRuntimeEnabled\(\)/);
+  assert.match(authz, /const getAuthenticatedUserForRequest = cache/);
   assert.match(authz, /if \(previewAuthEnabled\(\)\) return getSyntheticPreviewUser\(\)/);
   assert.match(authz, /getServerSession\(authOptions\)/);
   assert.match(authz, /resolveProductionSessionBinding/);
   assert.doesNotMatch(authz, /sessionAuth\.email/);
   assert.match(authz, /productionAuthRuntimeEnabled\(\)/);
   assert.doesNotMatch(authz, /process\.env\.LOCAL801_PRODUCTION_AUTH_ENABLED === "1"/);
-  assert.match(signIn, /does not create an account, change production access, or connect to production member records/);
-  assert.match(signIn, /synthetic example\.test records/);
+  assert.match(signIn, /does not create an account, change Production access, or connect to Production member records/);
+  assert.match(signIn, /isolated Preview records/);
   assert.match(signIn, /ProductionSignInButton/);
   assert.match(signIn, /production\.enabled && productionAuthRuntimeEnabled\(\)/);
   assert.match(signIn, /Sign-in is not open yet/);

@@ -17,7 +17,6 @@ import { NewHireAssignmentControl } from "@/components/NewHireAssignmentControl"
 import { ProtectedPage } from "@/components/ProtectedPage";
 import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
-import { newHireLifecycle, type NewHireLifecycleStage } from "@/lib/new-hire-lifecycle";
 import { getNewHireAssignmentOptions } from "@/lib/new-hire-assignment";
 import {
   DEFAULT_NEW_HIRE_PAGE_SIZE,
@@ -65,16 +64,6 @@ function contactPresentation(state: NewHireContactState): { label: string; tone:
     case "followup_open": return { label: "Follow-up open", tone: "warning" };
     case "never_engaged": return { label: "No conversation yet", tone: "pending" };
     default: return { label: "Contacted", tone: "ready" };
-  }
-}
-
-function lifecycleTone(stage: NewHireLifecycleStage): StatusTone {
-  switch (stage) {
-    case "membership_resolved": return "ready";
-    case "conversation_completed": return "info";
-    case "contact_attempted": return "pending";
-    case "assigned": return "info";
-    default: return "warning";
   }
 }
 
@@ -258,15 +247,15 @@ export default async function NewHiresPage({ searchParams }: { searchParams: Sea
           </div> : null}
 
           <div className="new-hire-desktop-results">
-            <DataTable caption="New hires" headers={["Employee ID", "Person", "Hire Date", "Job Status", "Classification", "Department / Work Location", "Work Email", "Work Phone", "Cell Phone", "Home Phone", "Home Email", "Progress", "Assignment", "Action"]}>
+            <DataTable caption="New hires" headers={["Person", "Hire Date", "Job Status", "Classification", "Department / Work Location", "Work Email", "Work Phone", "Cell Phone", "Home Phone", "Home Email", "Assignment"]}>
               {results.people.map((person) => {
                 const contact = contactPresentation(person.contactState);
-                const lifecycle = newHireLifecycle(person);
                 return <tr key={`${person.hireDate}:${person.handle}`}>
-                  <td><span className="data-mono">{person.employeeReference}</span></td>
                   <td>
-                    <strong>{canOpenEmployee ? <Link href={`/outreach/${person.handle}`}>{person.displayName}</Link> : person.displayName}</strong>
-                    <div className="muted">{membershipStatusLabel(person.membershipStatus)}</div>
+                    <div className="person-membership-stack">
+                      <strong>{canOpenEmployee ? <Link href={`/outreach/${person.handle}`}>{person.displayName}</Link> : person.displayName}</strong>
+                      <StatusBadge>{membershipStatusLabel(person.membershipStatus)}</StatusBadge>
+                    </div>
                   </td>
                   <td>
                     <strong>{hireDate(person.hireDate)}</strong>
@@ -281,13 +270,6 @@ export default async function NewHiresPage({ searchParams }: { searchParams: Sea
                   <td>{person.homePhone ? <a href={`tel:${person.homePhone}`}>{person.homePhone}</a> : <span className="muted">Not recorded</span>}</td>
                   <td>{person.homeEmail ? <a href={`mailto:${person.homeEmail}`}>{person.homeEmail}</a> : <span className="muted">Not recorded</span>}</td>
                   <td>
-                    <div className="new-hire-progress-badges">
-                      <StatusBadge tone={lifecycleTone(lifecycle.stage)}>{lifecycle.label}</StatusBadge>
-                      <span className="new-hire-membership-status">Membership: {membershipStatusLabel(person.membershipStatus)}</span>
-                    </div>
-                    <div className="muted">Step {lifecycle.step} of {lifecycle.totalSteps}</div>
-                  </td>
-                  <td>
                     <StatusBadge tone={person.assigned ? "info" : "warning"}>{person.assigned ? "Assigned" : "Unassigned"}</StatusBadge>
                     <div className="muted">{organizerLabel(person)}</div>
                     {!person.assigned && canAssignNewHires
@@ -295,11 +277,6 @@ export default async function NewHiresPage({ searchParams }: { searchParams: Sea
                         ? <div className="muted">Assignment options are temporarily unavailable.</div>
                         : <NewHireAssignmentControl employeeHandle={person.handle} employeeName={person.displayName} assignees={assignmentOptions} />
                       : null}
-                  </td>
-                  <td className="new-hire-action-cell">
-                    {canOpenEmployee
-                      ? <Link className="button secondary new-hire-member360-button" aria-label={`Open outreach record for ${person.displayName}`} href={`/outreach/${person.handle}`}>Outreach record <span aria-hidden="true">→</span></Link>
-                      : <Link className="button secondary new-hire-member360-button" href={`/directory?scope=authorized&q=${encodeURIComponent(person.displayName)}`}>View directory</Link>}
                   </td>
                 </tr>;
               })}
@@ -309,18 +286,14 @@ export default async function NewHiresPage({ searchParams }: { searchParams: Sea
           <div className="new-hire-mobile-results" aria-label="New hires">
             {results.people.map((person) => {
               const contact = contactPresentation(person.contactState);
-              const lifecycle = newHireLifecycle(person);
               return <article className="new-hire-person-row" key={`${person.hireDate}:${person.handle}`}>
                 <div className="new-hire-person-heading">
-                  <h3>{canOpenEmployee ? <Link href={`/outreach/${person.handle}`}>{person.displayName}</Link> : person.displayName}</h3>
-                  <StatusBadge tone={lifecycleTone(lifecycle.stage)}>{lifecycle.label}</StatusBadge>
+                  <div className="person-membership-stack">
+                    <h3>{canOpenEmployee ? <Link href={`/outreach/${person.handle}`}>{person.displayName}</Link> : person.displayName}</h3>
+                    <StatusBadge>{membershipStatusLabel(person.membershipStatus)}</StatusBadge>
+                  </div>
                 </div>
                 <div className="new-hire-person-meta">Hired {hireDate(person.hireDate)} · {daysLabel(person.daysSinceHire)}</div>
-                <div className="muted data-mono">{person.employeeReference}</div>
-                <div className="new-hire-mobile-progress">
-                  <span>Step {lifecycle.step} of {lifecycle.totalSteps}</span>
-                  <span className="new-hire-membership-status">Membership: {membershipStatusLabel(person.membershipStatus)}</span>
-                </div>
                 <div className="new-hire-mobile-work">
                   <strong>{person.department || "Department not recorded"}</strong>
                   <span>{person.classification || "Classification not recorded"} · {person.workLocation || "Work location not recorded"}</span>
@@ -347,9 +320,6 @@ export default async function NewHiresPage({ searchParams }: { searchParams: Sea
                   <span>{person.workEmail ? <a href={`mailto:${person.workEmail}`}>{person.workEmail}</a> : <span className="muted">Work email not recorded</span>}</span>
                   <span>{person.workPhone ? <a href={`tel:${person.workPhone}`}>{person.workPhone}</a> : <span className="muted">Work phone not recorded</span>}</span>
                 </div>
-                {canOpenEmployee
-                  ? <Link className="new-hire-member360-link" aria-label={`Open outreach record for ${person.displayName}`} href={`/outreach/${person.handle}`}>Outreach record <span aria-hidden="true">→</span></Link>
-                  : <Link className="new-hire-member360-link" href={`/directory?scope=authorized&q=${encodeURIComponent(person.displayName)}`}>View directory <span aria-hidden="true">→</span></Link>}
               </article>;
             })}
           </div>

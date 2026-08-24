@@ -5,7 +5,13 @@ import { AlertBanner, DisclosureCard, PageHeader, SectionCard, StatusBadge, Unav
 import { ProtectedPage } from "@/components/ProtectedPage";
 import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
-import { ContactCorrectionError, getVisibleContactActions, type VisibleContactActions } from "@/lib/contact-corrections";
+import {
+  ContactCorrectionError,
+  getVisibleContactActions,
+  preferredVisibleEmail,
+  preferredVisiblePhone,
+  type VisibleContactActions,
+} from "@/lib/contact-corrections";
 import { fieldContextFromOutreachReturnPath, fieldPersonHref, fieldQueueHref, member360Href, normalizeFieldModeContext, outreachReturnPath } from "@/lib/field-mode";
 import { getOutreachWorkspace, OutreachAccessError, type OutreachWorkspace } from "@/lib/outreach";
 import { hydrateOutreachWorkspaceFromProtectedPii } from "@/lib/pii-protected-outreach-read";
@@ -32,7 +38,13 @@ export default async function OutreachContactPage({ params, searchParams }: { pa
   const memberHref = member360Href(handle, returnHref);
 
   let workspace: OutreachWorkspace | null = null;
-  let contacts: VisibleContactActions = { workEmail: null, phone: null };
+  let contacts: VisibleContactActions = {
+    cellPhone: null,
+    homePhone: null,
+    workPhone: null,
+    homeEmail: null,
+    workEmail: null,
+  };
   let unavailable = false;
   try {
     const context = await resolveWorkspaceContext(user);
@@ -54,6 +66,11 @@ export default async function OutreachContactPage({ params, searchParams }: { pa
     </div></ProtectedPage>;
   }
 
+  const preferredPhone = preferredVisiblePhone(contacts);
+  const preferredEmail = preferredVisibleEmail(contacts);
+  const preferredPhoneLabel = contacts.cellPhone ? "cell phone" : contacts.homePhone ? "home phone" : contacts.workPhone ? "work phone" : null;
+  const preferredEmailLabel = contacts.homeEmail ? "home email" : contacts.workEmail ? "work email" : null;
+
   return <ProtectedPage permission="recordEngagement"><div className="content member360-contact-page">
     <PageHeader
       eyebrow="Member outreach · Contact"
@@ -63,11 +80,14 @@ export default async function OutreachContactPage({ params, searchParams }: { pa
     />
     <SectionCard className="member360-contact-primary-actions" title="Available contact methods" badge={<StatusBadge tone="info">Protected PII</StatusBadge>}>
       <div className="review-summary">
+        <div><strong>Cell phone</strong><div>{contacts.cellPhone ? <a href={telHref(contacts.cellPhone)}>{contacts.cellPhone}</a> : "Not available to you"}</div></div>
+        <div><strong>Home phone</strong><div>{contacts.homePhone ? <a href={telHref(contacts.homePhone)}>{contacts.homePhone}</a> : "Not available to you"}</div></div>
+        <div><strong>Work phone</strong><div>{contacts.workPhone ? <a href={telHref(contacts.workPhone)}>{contacts.workPhone}</a> : "Not available to you"}</div></div>
+        <div><strong>Home email</strong><div>{contacts.homeEmail ? <a href={`mailto:${contacts.homeEmail}`}>{contacts.homeEmail}</a> : "Not available to you"}</div></div>
         <div><strong>Work email</strong><div>{contacts.workEmail ? <a href={`mailto:${contacts.workEmail}`}>{contacts.workEmail}</a> : "Not available to you"}</div></div>
-        <div><strong>Phone</strong><div>{contacts.phone ?? "Not available to you"}</div></div>
       </div>
-      {contacts.phone ? <div className="page-actions member360-contact-actions"><a className="button member360-contact-call-action" href={telHref(contacts.phone)}>Call</a><a className="button secondary member360-contact-text-action" href={smsHref(contacts.phone)}>Text</a></div> : null}
-      {contacts.workEmail ? <div className="page-actions member360-contact-actions"><a className="button secondary member360-contact-email-action" href={`mailto:${contacts.workEmail}`}>Email</a></div> : null}
+      {preferredPhone ? <div className="page-actions member360-contact-actions"><a className="button member360-contact-call-action" href={telHref(preferredPhone)}>Call</a><a className="button secondary member360-contact-text-action" href={smsHref(preferredPhone)}>Text</a><span className="muted">Uses {preferredPhoneLabel}.</span></div> : null}
+      {preferredEmail ? <div className="page-actions member360-contact-actions"><a className="button secondary member360-contact-email-action" href={`mailto:${preferredEmail}`}>Email</a><span className="muted">Uses {preferredEmailLabel}.</span></div> : null}
     </SectionCard>
 
     <DisclosureCard className="member360-contact-privacy" title="Contact privacy and availability" description="Details are limited to your access and are not saved for offline use.">

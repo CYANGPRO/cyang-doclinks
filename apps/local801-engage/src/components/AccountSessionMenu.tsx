@@ -68,7 +68,7 @@ export function AccountSessionMenu({
       <div className="account-menu-summary">
         <span>Current role</span>
         <strong>{roleLabel}</strong>
-        <span>{authentication === "preview" ? "Synthetic Preview session" : "Production session"}</span>
+        <span>{authentication === "preview" ? "Preview session" : "Production session"}</span>
       </div>
       {authentication === "preview" ? (
         <Link className="button secondary account-menu-action" href={`/sign-in?next=${encodeURIComponent(pathname)}`} onClick={(event) => {

@@ -3,11 +3,13 @@ import "server-only";
 import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 import { getServerSession } from "next-auth/next";
+import { cache } from "react";
 import { can, type Permission, type Role } from "@/lib/access";
 import { authOptions } from "@/lib/auth-options";
 import { previewAuthEnabled } from "@/lib/preview-auth-policy";
 import { getProductionAuthConfig, resolveProductionSessionBinding } from "@/lib/production-auth";
 import { productionAuthRuntimeEnabled } from "@/lib/production-launch-policy";
+import { measureServerOperation } from "@/lib/performance-timing";
 import { enforceAuthenticatedIdentityRateLimit, type RateLimitPolicy } from "@/lib/rate-limit";
 import { writeSecuritySignal } from "@/lib/security-signal";
 
@@ -41,6 +43,7 @@ export type PreviewUser = {
   email: string;
   role: Role;
   organizationId: string;
+  databaseOrganizationId: string | null;
   authentication: "preview" | "production";
   policyAcknowledged: boolean;
   sessionVersion: number | null;
@@ -59,6 +62,7 @@ async function getSyntheticPreviewUser(): Promise<PreviewUser | null> {
     email: previewEmails[role],
     role,
     organizationId: "local801-preview",
+    databaseOrganizationId: null,
     authentication: "preview",
     policyAcknowledged: true,
     sessionVersion: null,
@@ -83,6 +87,7 @@ async function getProductionUser(): Promise<PreviewUser | null> {
     email: binding.email,
     role: binding.role,
     organizationId: binding.organizationSlug,
+    databaseOrganizationId: binding.organizationId,
     authentication: "production",
     policyAcknowledged: binding.policyAcknowledged,
     sessionVersion: binding.sessionVersion,
@@ -93,24 +98,24 @@ async function getProductionUser(): Promise<PreviewUser | null> {
  * Compatibility name retained while existing pages/routes migrate. In private Preview it resolves
  * the synthetic role cookie; otherwise it resolves and revalidates a production OIDC session.
  */
-export async function getPreviewUser(): Promise<PreviewUser | null> {
+const getAuthenticatedUserForRequest = cache(() => measureServerOperation("auth.request-validation", async (): Promise<PreviewUser | null> => {
   if (previewAuthEnabled()) return getSyntheticPreviewUser();
   try {
-    const user = await getProductionUser();
-    return user?.policyAcknowledged ? user : null;
+    return await getProductionUser();
   } catch {
     return null;
   }
+}));
+
+export async function getPreviewUser(): Promise<PreviewUser | null> {
+  const user = await getAuthenticatedUserForRequest();
+  return user?.policyAcknowledged ? user : null;
 }
 
 export async function getPolicyAcknowledgementUser(): Promise<PreviewUser | null> {
   if (previewAuthEnabled()) return null;
-  try {
-    const user = await getProductionUser();
-    return user && !user.policyAcknowledged ? user : null;
-  } catch {
-    return null;
-  }
+  const user = await getAuthenticatedUserForRequest();
+  return user && !user.policyAcknowledged ? user : null;
 }
 
 const permissionRatePolicy: Partial<Record<Permission, RateLimitPolicy>> = {

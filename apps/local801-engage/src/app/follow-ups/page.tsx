@@ -82,6 +82,12 @@ function readiness(item: FollowupQueueItem) {
   return parts.length ? parts.join(" · ") : "Not recorded";
 }
 
+function membershipStatusLabel(status: FollowupQueueItem["membershipStatus"]) {
+  if (status === "member") return "Member";
+  if (status === "nonmember") return "Nonmember";
+  return "Unknown";
+}
+
 export default async function FollowUpsPage({ searchParams }: { searchParams: SearchParams }) {
   const user = await getPreviewUser();
   if (!user) redirect("/sign-in");
@@ -176,7 +182,7 @@ export default async function FollowUpsPage({ searchParams }: { searchParams: Se
         : <div className="stack">
           {results.items.map((item) => {
             const state = bucket(item);
-            return <article className="section-card" key={item.followupHandle}>
+            return <article className="section-card followup-person-card" key={item.followupHandle}>
               <div className="section-heading">
                 <div>
                   <h3>{item.displayName}</h3>
@@ -185,16 +191,16 @@ export default async function FollowUpsPage({ searchParams }: { searchParams: Se
                 <StatusBadge tone={state.tone}>{state.label}</StatusBadge>
               </div>
 
-              <div className="review-summary">
+              <div className="review-summary followup-person-fields">
                 <div><strong>{item.status === "completed" ? "Completed" : "Due"}</strong><div>{dateTime(item.completedAt || item.dueAt)}</div></div>
                 <div><strong>Assigned to</strong><div>{item.assignedTo || "Unassigned"}</div></div>
                 <div><strong>Campaign</strong><div>{item.campaignName || "General outreach"}</div></div>
-                <div><strong>Membership</strong><div>{item.membershipStatus}</div></div>
+                <div><strong>Membership</strong><div>{membershipStatusLabel(item.membershipStatus)}</div></div>
                 <div><strong>Last conversation</strong><div>{dateTime(item.latestEngagementAt)}{item.latestOutcome ? ` · ${item.latestOutcome}` : ""}</div></div>
                 <div><strong>Action readiness</strong><div>{readiness(item)}</div></div>
               </div>
 
-              <div className="page-actions">
+              <div className="page-actions followup-card-actions">
                 <Link className="button secondary" href={`/outreach/${item.employeeHandle}`}>Open outreach record</Link>
                 {item.status === "open" ? <FollowupCompleteButton employeeHandle={item.employeeHandle} followupHandle={item.followupHandle} personName={item.displayName} /> : null}
               </div>

@@ -284,8 +284,8 @@ test("Reports view routing keeps Overview and New hires on separate render paths
   const page = readFileSync(new URL("../src/app/reports/page.tsx", import.meta.url), "utf8");
   assert.match(page, /if \(view === "overview"\) \{/);
   assert.match(page, /const report = await getEngagementCommandCenterReport\(context, params\)/);
-  assert.match(page, /commandCenterReport = await hydrateCommandCenterReportFromProtectedPii\(context\.organizationId, report\)/);
-  assert.match(page, /else if \(view === "new-hires"\) newHireReport = await getNewHireReport/);
+  assert.match(page, /loaded\.commandCenterReport = await hydrateCommandCenterReportFromProtectedPii\(context\.organizationId, report\)/);
+  assert.match(page, /else if \(view === "new-hires"\) loaded\.newHireReport = await getNewHireReport/);
   assert.match(page, /\{view === "overview" \? \(/);
   assert.match(page, /: view === "new-hires" \? \(/);
   assert.ok(page.indexOf('{view === "overview" ? (') < page.indexOf(': view === "new-hires" ? ('));

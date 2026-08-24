@@ -4,8 +4,8 @@ import test from "node:test";
 import {
   CampaignMutationError,
   __testing,
-  archiveCampaign,
   createCampaign,
+  deleteCampaign,
   getCampaignManagementOptions,
   updateCampaign,
   updateCampaignAssignment,
@@ -178,22 +178,29 @@ test("update campaign enforces lifecycle transitions and audits operational chan
   );
 });
 
-test("campaign archive requires closed status and atomically removes open assignments from active queues", async () => {
-  const openState = deps({ query: async () => [campaignResolution({ status: "active" })] });
-  await assert.rejects(
-    archiveCampaign(context(), campaignHandle, openState.values),
-    (error) => error instanceof CampaignMutationError && error.code === "CAMPAIGN_NOT_CLOSED",
-  );
-  assert.equal(openState.transactions.length, 0);
+test("campaign delete handles every operational status and atomically removes open assignments from active queues", async () => {
+  for (const status of ["draft", "active", "closed"]) {
+    const state = deps({ query: async () => [campaignResolution({ status })] });
+    const result = await deleteCampaign(context(), campaignHandle, state.values);
+    assert.equal(result.deleted, true);
+    assert.equal(state.transactions[0].length, 3);
+    assert.match(state.transactions[0][0].sql, /SET status = 'archived', archived_at = now\(\)/);
+    assert.match(state.transactions[0][0].sql, /campaign\.status IN \('draft','active','closed'\)/);
+    assert.match(state.transactions[0][1].sql, /UPDATE local801\.engagement_assignments assignment/);
+    assert.match(state.transactions[0][1].sql, /assignment\.status <> 'completed'/);
+    assert.equal(state.audits[0].eventType, "record.archive");
+    assert.equal(state.audits[0].payload.previousStatus, status);
+    assert.equal(state.audits[0].payload.openAssignmentsArchived, true);
+  }
+});
 
-  const state = deps({ query: async () => [campaignResolution({ status: "closed" })] });
-  await archiveCampaign(context(), campaignHandle, state.values);
-  assert.equal(state.transactions[0].length, 3);
-  assert.match(state.transactions[0][0].sql, /SET status = 'archived', archived_at = now\(\)/);
-  assert.match(state.transactions[0][1].sql, /UPDATE local801\.engagement_assignments assignment/);
-  assert.match(state.transactions[0][1].sql, /assignment\.status <> 'completed'/);
-  assert.equal(state.audits[0].eventType, "record.archive");
-  assert.equal(state.audits[0].payload.openAssignmentsArchived, true);
+test("campaign delete is available to the campaign management role and every role above it", async () => {
+  for (const role of ["cat_admin", "local_admin", "system_owner"]) {
+    const state = deps({ query: async () => [campaignResolution({ status: "draft" })] });
+    await deleteCampaign(context(role), campaignHandle, state.values);
+    assert.equal(state.transactions[0][0].parameters[3], role);
+    assert.match(state.transactions[0][0].sql, /role\.code IN \('system_owner','local_admin','cat_admin'\)/);
+  }
 });
 
 test("campaign assignment creates organizer ownership only for an existing campaign population member", async () => {
@@ -278,7 +285,7 @@ test("all campaign mutations deny non-management roles before SQL", async () => 
     const denied = { query: async () => { calls += 1; return []; } };
     await assert.rejects(createCampaign(context(role), { name: "No" }, denied), /not authorized/i);
     await assert.rejects(updateCampaign(context(role), { campaignHandle, name: "No" }, denied), /not authorized/i);
-    await assert.rejects(archiveCampaign(context(role), campaignHandle, denied), /not authorized/i);
+    await assert.rejects(deleteCampaign(context(role), campaignHandle, denied), /not authorized/i);
     await assert.rejects(updateCampaignAssignment(context(role), { campaignHandle, personHandle, assigneeHandle }, denied), /not authorized/i);
     assert.equal(calls, 0);
   }
@@ -297,7 +304,7 @@ test("campaign mutation HTTP routes are launch-gated, same-origin, permission ch
   assert.match(helper, /MAX_JSON_BYTES = 8_192/);
   assert.match(createRoute, /createCampaign/);
   assert.match(campaignRoute, /updateCampaign/);
-  assert.match(campaignRoute, /archiveCampaign/);
+  assert.match(campaignRoute, /deleteCampaign/);
   assert.match(assignmentRoute, /updateCampaignAssignment/);
   assert.doesNotMatch(combined, /campaign_instructions|DELETE FROM local801\.outreach_campaign_population/i);
 });

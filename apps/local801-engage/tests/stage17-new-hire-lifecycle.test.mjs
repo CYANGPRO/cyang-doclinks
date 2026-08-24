@@ -28,9 +28,8 @@ test("known membership alone does not silently skip organizing workflow stages",
   assert.match(lifecycle.detail, /No open outreach assignment or engagement/);
 });
 
-test("new-hire page explains lifecycle without treating it as a score", () => {
+test("new-hire page omits progress and action columns", () => {
   const page = readFileSync(new URL("../src/app/new-hires/page.tsx", import.meta.url), "utf8");
-  assert.match(page, /Stages move forward from recorded work\. They are progress markers, not scores\./);
-  assert.match(page, /headers=\{\["Employee ID", "Person", "Hire Date", "Job Status", "Classification", "Department \/ Work Location", "Work Email", "Work Phone", "Cell Phone", "Home Phone", "Home Email", "Progress", "Assignment", "Action"\]\}/);
-  assert.match(page, /Step \{lifecycle\.step\} of \{lifecycle\.totalSteps\}/);
+  assert.match(page, /headers=\{\["Person", "Hire Date", "Job Status", "Classification", "Department \/ Work Location", "Work Email", "Work Phone", "Cell Phone", "Home Phone", "Home Email", "Assignment"\]\}/);
+  assert.doesNotMatch(page, /new-hire-progress-badges|new-hire-mobile-progress|new-hire-action-cell|new-hire-member360/);
 });

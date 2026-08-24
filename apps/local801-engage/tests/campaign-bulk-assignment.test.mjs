@@ -70,6 +70,23 @@ test("bulk assignment preview resolves one explicit eligible organizer and retur
   assert.equal(confirmation.wouldAssign, 12000);
 });
 
+test("bulk assignment classification criteria match the complete classification", async () => {
+  let sqlText = "";
+  let parameters = [];
+  await previewCampaignBulkAssignment(context(), campaignHandle, {
+    assigneeHandle,
+    criteria: { ...criteria, classification: "  accounting   officer  " },
+  }, {
+    query: async (sql, values) => { sqlText = sql; parameters = values; return row(); },
+    tokenSecret,
+    now: () => now,
+  });
+
+  assert.match(sqlText, /lower\(btrim\(person\.classification\)\) = lower\(btrim\(\$6::text\)\)/);
+  assert.doesNotMatch(sqlText, /person\.classification ILIKE \$6::text/);
+  assert.equal(parameters[5], "accounting officer");
+});
+
 test("bulk assignment confirms under a campaign lock, inserts the unassigned set once, verifies counts, and audits atomically", async () => {
   const initial = await preview();
   const calls = [];

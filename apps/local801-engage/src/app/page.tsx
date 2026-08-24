@@ -4,6 +4,7 @@ import { AlertBanner, EmptyState, PageHeader, SectionCard, StatCard, Unavailable
 import { dashboardForRole } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
 import { getDashboardMetrics } from "@/lib/metrics";
+import { measureServerOperation } from "@/lib/performance-timing";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
 
 function metricNumber(value: number | string) {
@@ -22,8 +23,10 @@ type AttentionItem = {
 export default async function HomePage() {
   const user = await getPreviewUser();
   if (!user) redirect("/sign-in");
-  const context = await resolveWorkspaceContext(user);
-  const metrics = await getDashboardMetrics(context);
+  const metrics = await measureServerOperation("page.home.data", async () => {
+    const context = await resolveWorkspaceContext(user);
+    return getDashboardMetrics(context);
+  });
   const dashboard = dashboardForRole(user.role);
   const membershipRole = dashboard.membership;
   const organizingRole = dashboard.organizing;
@@ -119,9 +122,9 @@ export default async function HomePage() {
             ? <Link className="button" href="/imports">Review imports</Link>
             : <Link className="button" href="/reports">Open reports</Link>}
       />
-      {user.authentication === "production"
-        ? <AlertBanner title="Production workspace">Values below come from the protected Local 801 production database and are limited to the signed-in user&apos;s authorized role.</AlertBanner>
-        : <AlertBanner title="Synthetic Preview" tone="preview">No real member data. Values below come from the isolated Preview database when available.</AlertBanner>}
+      {user.authentication === "preview"
+        ? <AlertBanner title="Preview environment" tone="preview">Values below come from the isolated Preview environment when available.</AlertBanner>
+        : null}
 
       {metrics.source === "unavailable" ? (
         <SectionCard><UnavailableState title="Operational metrics unavailable" description="The protected Local 801 database could not provide aggregate metrics. No static values are substituted." /></SectionCard>

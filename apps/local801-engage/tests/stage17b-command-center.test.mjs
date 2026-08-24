@@ -46,13 +46,13 @@ test("dashboard command-center metrics use explicit operational facts and Chicag
 
   assert.deepEqual(recorded.parameters, [organizationId, userId, true]);
   assert.match(recorded.sql, /America\/Chicago/);
-  assert.match(recorded.sql, /count\(DISTINCT a\.person_id\)/i);
-  assert.match(recorded.sql, /e\.occurred_at >= now\(\) - interval '90 days'/);
-  assert.match(recorded.sql, /h\.hire_date <= current_date - interval '14 days'/);
-  assert.match(recorded.sql, /h\.engagement_count = 0/);
-  assert.match(recorded.sql, /e\.effective_date >= current_date - interval '7 days'/);
-  assert.match(recorded.sql, /a\.person_id = f\.person_id/);
-  assert.match(recorded.sql, /a\.status = 'open'/);
+  assert.match(recorded.sql, /count\(DISTINCT assignment\.person_id\)/i);
+  assert.match(recorded.sql, /event\.occurred_at >= now\(\) - interval '90 days'/);
+  assert.match(recorded.sql, /hire_date <= current_date - interval '14 days'/);
+  assert.match(recorded.sql, /engagement_count = 0/);
+  assert.match(recorded.sql, /effective_date >= current_date - interval '7 days'/);
+  assert.match(recorded.sql, /assignment\.person_id = followup\.person_id/);
+  assert.match(recorded.sql, /assignment\.status = 'open'/);
 
   assert.equal(metrics.assignedAttention90, 4);
   assert.equal(metrics.newHiresAwaitingFirstEngagement14, 2);

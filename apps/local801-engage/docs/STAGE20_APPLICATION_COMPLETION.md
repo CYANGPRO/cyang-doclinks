@@ -31,7 +31,7 @@ The live authority remains `src/lib/access.ts`. Navigation is derived from the s
 | Manage campaigns and CAT Actions | Yes | Yes | — | Yes | — | — | — |
 | Record engagement / Member 360 | Yes | Yes | — | Yes | Yes | Yes | — |
 | View Directory | Yes | Yes | Yes | Yes | Yes | Yes | — |
-| View personal workspace / Work inbox | Yes | Yes | Yes | Yes | Yes | Yes | — |
+| View personal workspace / To Do | Yes | Yes | Yes | Yes | Yes | Yes | — |
 | View documents | Yes | Yes | Yes | Yes | Yes | Yes | — |
 | Manage documents | Yes | Yes | Yes | Yes | — | — | — |
 | View native reports | Yes | Yes | Yes | Yes | Yes | — | Yes |
@@ -49,7 +49,7 @@ The live authority remains `src/lib/access.ts`. Navigation is derived from the s
 | Directory | `viewDirectory`; Member 360 links only with `recordEngagement` | Read only | Organization/assignment scope, protected search/read, bounded keyset pages | Retained |
 | New Hires | `assignNewHires`; Member 360 link still needs `recordEngagement` | `assignNewHires`, Preview-only mutation boundary | Opaque handles, active assignee validation, organization scope, transaction and atomic audit | Retained |
 | Member 360, outreach, engagements, follow-ups, workload | `recordEngagement` | `recordEngagement`, same-origin and bounded request checks | Organization plus assignment scope, opaque handles, protected reads/writes, transactional audit | Retained |
-| Work inbox and saved views | `viewPersonalWorkspace` | Same permission through work-preference authorization helpers | User/organization scoped, bounded views and notification summaries, no browser persistence | Retained |
+| To Do and saved views | `viewPersonalWorkspace` | Same permission through work-preference authorization helpers | User/organization scoped, bounded views and notification summaries, no browser persistence | Retained |
 | Campaigns | `manageCampaigns` | Campaign mutation authorization helper; Preview-only write policy | Organization/campaign locks, opaque handles, bounded criteria, confirmation revisions, atomic aggregate audit | Retained |
 | CAT Actions | `manageCatActions` | CAT Action mutation authorization helper; Preview-only write policy | Organization/action scope, opaque handles, bounded tasks, atomic audit | Retained |
 | Documents | `viewDocuments`; upload/delete need `manageDocuments`; visibility adds subtype permissions | Explicit view/manage permission on download, upload, delete | Opaque download handle, organization and visibility recheck, scanner, private encrypted storage, no raw storage URL | Retained |

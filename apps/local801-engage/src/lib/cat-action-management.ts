@@ -413,7 +413,7 @@ export async function updateCatAction(
   return { updated: true };
 }
 
-export async function archiveCatAction(
+export async function deleteCatAction(
   context: WorkspaceContext,
   actionHandle: unknown,
   dependencies: CatActionManagementDependencies = {},
@@ -423,9 +423,6 @@ export async function archiveCatAction(
   const runTransaction = dependencies.runTransaction ?? runLocal801Transaction;
   const prepareAudit = dependencies.prepareAudit ?? prepareAtomicAuditStatement;
   const action = await resolveAction(context, actionHandle, query);
-  if (action.status !== "closed") {
-    throw new CatActionMutationError("ACTION_NOT_CLOSED", "Close the CAT action before archiving it.", 409);
-  }
   const archiveStatement: DatabaseStatement = {
     sql: `
       WITH ${actorCte()}, updated AS (
@@ -435,7 +432,7 @@ export async function archiveCatAction(
         WHERE action.id = $2::uuid
           AND action.organization_id = $1::uuid
           AND action.archived_at IS NULL
-          AND action.status = 'closed'
+          AND action.status IN ('draft','active','closed')
         RETURNING action.id
       )
       SELECT CASE WHEN count(*) = 1 THEN true ELSE 1 / count(*)::integer = 1 END AS action_archived
@@ -452,7 +449,7 @@ export async function archiveCatAction(
     payload: { previousStatus: action.status },
   }, query);
   await runTransaction([archiveStatement, audit]);
-  return { archived: true };
+  return { deleted: true };
 }
 
 export async function createCatActionTask(

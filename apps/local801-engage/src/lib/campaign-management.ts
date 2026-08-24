@@ -455,7 +455,7 @@ export async function updateCampaign(
   return { updated: true };
 }
 
-export async function archiveCampaign(
+export async function deleteCampaign(
   context: WorkspaceContext,
   campaignHandle: unknown,
   dependencies: CampaignManagementDependencies = {},
@@ -465,10 +465,6 @@ export async function archiveCampaign(
   const runTransaction = dependencies.runTransaction ?? runLocal801Transaction;
   const prepareAudit = dependencies.prepareAudit ?? prepareAtomicAuditStatement;
   const campaign = await resolveCampaign(context, campaignHandle, query);
-  if (campaign.status !== "closed") {
-    throw new CampaignMutationError("CAMPAIGN_NOT_CLOSED", "Close the campaign before archiving it.", 409);
-  }
-
   const campaignStatement: DatabaseStatement = {
     sql: `
       WITH ${actorCte()}, updated AS (
@@ -478,7 +474,7 @@ export async function archiveCampaign(
         WHERE campaign.id = $2::uuid
           AND campaign.organization_id = $1::uuid
           AND campaign.archived_at IS NULL
-          AND campaign.status = 'closed'
+          AND campaign.status IN ('draft','active','closed')
         RETURNING campaign.id
       )
       SELECT CASE WHEN count(*) = 1 THEN true ELSE 1 / count(*)::integer = 1 END AS campaign_archived
@@ -508,7 +504,7 @@ export async function archiveCampaign(
     payload: { previousStatus: campaign.status, openAssignmentsArchived: true },
   }, query);
   await runTransaction([campaignStatement, assignmentStatement, audit]);
-  return { archived: true };
+  return { deleted: true };
 }
 
 export async function updateCampaignAssignment(

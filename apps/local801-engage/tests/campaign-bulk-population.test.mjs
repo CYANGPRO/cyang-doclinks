@@ -113,6 +113,25 @@ test("population preview returns aggregate counts and an actor/campaign/criteria
   assert.match(parameters[9], new RegExp(includeHandle));
 });
 
+test("campaign population classification criteria match the complete classification", async () => {
+  let sqlText = "";
+  let parameters = [];
+  await previewCampaignPopulationChange(context(), campaignHandle, {
+    operation: "add",
+    criteria: { ...criteria, classification: "  accounting   officer  " },
+  }, {
+    query: async (sql, values) => { sqlText = sql; parameters = values; return previewRow(); },
+    searchMaterial,
+    tokenSecret,
+    now: () => now,
+  });
+
+  assert.match(sqlText, /lower\(btrim\(person\.classification\)\) = lower\(btrim\(\$5::text\)\)/);
+  assert.doesNotMatch(sqlText, /person\.classification ILIKE \$5::text/);
+  assert.equal(parameters[4], "accounting officer");
+  assert.match(sqlText, /person\.classification ILIKE \$7::text/);
+});
+
 test("population apply locks and rechecks the live set, mutates set-wise, verifies counts, and audits once in the transaction", async () => {
   const preview = await makePreview();
   const calls = [];

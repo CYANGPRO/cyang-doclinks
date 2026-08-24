@@ -36,6 +36,8 @@ import {
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
 import { enforceAuthenticatedRateLimit } from "@/lib/rate-limit";
 import { recordReportAccess } from "@/lib/report-access";
+import { reportValueLabel } from "@/lib/report-labels";
+import { measureServerOperation } from "@/lib/performance-timing";
 
 type ReportView = "overview" | "membership" | "new-hires" | "engagement" | "campaigns" | "cat-actions" | "data-quality";
 
@@ -87,7 +89,7 @@ function refreshedLabel(value: string | null) {
 }
 
 function statusLabel(value: string) {
-  return value.replaceAll("_", " ");
+  return reportValueLabel(value);
 }
 
 function reportNavigation(activeView: ReportView) {
@@ -217,11 +219,12 @@ function engagementBreakdownTable(
   rows: EngagementBreakdown[],
   drilldown: "department" | "workLocation" | null = null,
   canDrilldown = false,
+  formatLabel: (value: string) => string = (value) => value,
 ) {
   return <SectionCard title={title} description={`Showing ${Math.min(rows.length, 50)} group${Math.min(rows.length, 50) === 1 ? "" : "s"}.`}>
     {rows.length === 0 ? <EmptyState title={`No ${title.toLowerCase()} data`} description="No outreach activity totals are available for this organization." /> :
       <DataTable caption={title} headers={[firstHeader, "Recorded contacts"]}>{rows.map((row) => <tr key={row.label}>
-        <td><strong>{drilldown && canDrilldown && row.label !== "Unspecified" ? <Link href={directoryDrilldown(drilldown, row.label)}>{row.label}</Link> : row.label}</strong></td><td>{whole(row.eventCount)}</td>
+        <td><strong>{drilldown && canDrilldown && row.label !== "Unspecified" ? <Link href={directoryDrilldown(drilldown, row.label)}>{formatLabel(row.label)}</Link> : formatLabel(row.label)}</strong></td><td>{whole(row.eventCount)}</td>
       </tr>)}</DataTable>}
   </SectionCard>;
 }
@@ -301,33 +304,49 @@ export default async function ReportsPage({
   const params = await searchParams;
   const view = selectedView(params.view);
   if (view === "data-quality") redirect("/reports/data-quality");
-  let commandCenterReport: Awaited<ReturnType<typeof getEngagementCommandCenterReport>> | null = null;
-  let membershipReport: Awaited<ReturnType<typeof getMembershipReport>> | null = null;
-  let newHireReport: Awaited<ReturnType<typeof getNewHireReport>> | null = null;
-  let engagementReport: Awaited<ReturnType<typeof getEngagementReport>> | null = null;
-  let campaignReport: Awaited<ReturnType<typeof getCampaignReport>> | null = null;
-  let catActionReport: Awaited<ReturnType<typeof getCatActionReport>> | null = null;
-  let protectedReadEnabled = false;
+  const emptyReports = () => ({
+    commandCenterReport: null as Awaited<ReturnType<typeof getEngagementCommandCenterReport>> | null,
+    membershipReport: null as Awaited<ReturnType<typeof getMembershipReport>> | null,
+    newHireReport: null as Awaited<ReturnType<typeof getNewHireReport>> | null,
+    engagementReport: null as Awaited<ReturnType<typeof getEngagementReport>> | null,
+    campaignReport: null as Awaited<ReturnType<typeof getCampaignReport>> | null,
+    catActionReport: null as Awaited<ReturnType<typeof getCatActionReport>> | null,
+    protectedReadEnabled: false,
+  });
+  let loadedReports = emptyReports();
 
   try {
-    const context = await resolveWorkspaceContext(user);
-    const limit = await enforceAuthenticatedRateLimit({ organizationId: context.organizationId, userId: context.userId, policy: "download_export" });
-    if (!limit.ok) throw new Error("Report rate limit denied.");
-    if (view === "overview") {
-      const report = await getEngagementCommandCenterReport(context, params);
-      commandCenterReport = await hydrateCommandCenterReportFromProtectedPii(context.organizationId, report);
-    } else if (view === "new-hires") newHireReport = await getNewHireReport(context);
-    else if (view === "engagement") {
-      const report = await getEngagementReport(context);
-      engagementReport = await hydrateEngagementReportFromProtectedPii(context.organizationId, report);
-    } else if (view === "campaigns") campaignReport = await getCampaignReport(context);
-    else if (view === "cat-actions") catActionReport = await getCatActionReport(context);
-    else membershipReport = await getMembershipReport(context);
-    await recordReportAccess(context, view);
-    protectedReadEnabled = isPiiProtectedReadEnabled();
+    loadedReports = await measureServerOperation(`page.reports.${view}`, async () => {
+      const loaded = emptyReports();
+      const context = await resolveWorkspaceContext(user);
+      const limit = await enforceAuthenticatedRateLimit({ organizationId: context.organizationId, userId: context.userId, policy: "download_export" });
+      if (!limit.ok) throw new Error("Report rate limit denied.");
+      if (view === "overview") {
+        const report = await getEngagementCommandCenterReport(context, params);
+        loaded.commandCenterReport = await hydrateCommandCenterReportFromProtectedPii(context.organizationId, report);
+      } else if (view === "new-hires") loaded.newHireReport = await getNewHireReport(context);
+      else if (view === "engagement") {
+        const report = await getEngagementReport(context);
+        loaded.engagementReport = await hydrateEngagementReportFromProtectedPii(context.organizationId, report);
+      } else if (view === "campaigns") loaded.campaignReport = await getCampaignReport(context);
+      else if (view === "cat-actions") loaded.catActionReport = await getCatActionReport(context);
+      else loaded.membershipReport = await getMembershipReport(context);
+      await recordReportAccess(context, view);
+      loaded.protectedReadEnabled = isPiiProtectedReadEnabled();
+      return loaded;
+    });
   } catch {
-    // Fail closed. Never substitute synthetic report values when the reporting query is unavailable.
+    // Fail closed. Never substitute placeholder report values when the reporting query is unavailable.
   }
+  const {
+    commandCenterReport,
+    membershipReport,
+    newHireReport,
+    engagementReport,
+    campaignReport,
+    catActionReport,
+    protectedReadEnabled,
+  } = loadedReports;
 
   const activeReport = reportTabs.find((tab) => tab.key === view) ?? reportTabs[0];
   const canDrilldown = can(user.role, "viewDirectory");
@@ -411,13 +430,13 @@ export default async function ReportsPage({
           </div>
         </SectionCard>
         <SectionCard title="Recorded contacts by day" description="Daily recorded outreach activity for the most recent 30 days with data.">{engagementTrend(engagementReport.daily)}</SectionCard>
-        {engagementBreakdownTable("Contact methods", "Contact method", engagementReport.contactMethods)}
-        {engagementBreakdownTable("Contact outcomes", "Outcome", engagementReport.outcomes)}
+        {engagementBreakdownTable("Contact methods", "Contact method", engagementReport.contactMethods, null, false, reportValueLabel)}
+        {engagementBreakdownTable("Contact outcomes", "Outcome", engagementReport.outcomes, null, false, reportValueLabel)}
         {engagementBreakdownTable("Activity by department", "Department", engagementReport.departments, "department", canDrilldown)}
         {engagementBreakdownTable("Activity by work location", "Work location", engagementReport.workLocations, "workLocation", canDrilldown)}
         {engagementBreakdownTable("Activity by organizer", "Organizer", engagementReport.organizers)}
         <SectionCard title="Follow-ups by status" description={`Showing ${Math.min(engagementReport.followupStatuses.length, 20)} follow-up status group${Math.min(engagementReport.followupStatuses.length, 20) === 1 ? "" : "s"}.`}>
-          {engagementReport.followupStatuses.length === 0 ? <EmptyState title="No follow-up data" description="No follow-up status totals are available for this organization." /> : <DataTable caption="Follow-up status" headers={["Status", "Follow-ups"]}>{engagementReport.followupStatuses.map((row) => <tr key={row.label}><td><strong>{row.label}</strong></td><td>{whole(row.followupCount)}</td></tr>)}</DataTable>}
+          {engagementReport.followupStatuses.length === 0 ? <EmptyState title="No follow-up data" description="No follow-up status totals are available for this organization." /> : <DataTable caption="Follow-up status" headers={["Status", "Follow-ups"]}>{engagementReport.followupStatuses.map((row) => <tr key={row.label}><td><strong>{statusLabel(row.label)}</strong></td><td>{whole(row.followupCount)}</td></tr>)}</DataTable>}
         </SectionCard>
         <SectionCard title="Campaign contact coverage" description={`Assigned and contacted counts for ${Math.min(engagementReport.campaignCoverage.length, 50)} campaign${Math.min(engagementReport.campaignCoverage.length, 50) === 1 ? "" : "s"}.`}>
           {engagementReport.campaignCoverage.length === 0 ? <EmptyState title="No campaign coverage data" description="No campaign contact coverage is available for this organization." /> : <DataTable caption="Campaign engagement coverage" headers={["Campaign", "Assigned", "Contacted", "Coverage"]}>{engagementReport.campaignCoverage.map((row) => <tr key={row.label}><td><strong>{row.label}</strong></td><td>{whole(row.assignedCount)}</td><td>{whole(row.contactedCount)}</td><td>{percent(row.coverageRate)}</td></tr>)}</DataTable>}

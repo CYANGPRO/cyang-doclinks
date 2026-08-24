@@ -102,7 +102,13 @@ function decryptPersonDisplayName(row: ProtectedPersonRow, organizationId: strin
       keyConfig,
     );
   }
-  return preferredName?.trim() || `${firstName} ${lastName}`;
+  const givenName = preferredName?.trim() || firstName.trim();
+  const familyName = lastName.trim();
+  const normalizedGivenName = givenName.toLocaleLowerCase();
+  const normalizedFamilyName = familyName.toLocaleLowerCase();
+  return normalizedGivenName === normalizedFamilyName || normalizedGivenName.endsWith(` ${normalizedFamilyName}`)
+    ? givenName
+    : `${givenName} ${familyName}`;
 }
 
 function decryptContact(row: ProtectedContactRow, organizationId: string, keyConfig: PiiKeyConfiguration) {

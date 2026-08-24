@@ -27,7 +27,8 @@ test("account and session actions are authentication-mode aware and restore keyb
   const navigation = source("src/components/AppNavigation.tsx");
   const unauthorized = source("src/app/unauthorized/page.tsx");
 
-  assert.match(shell, /user\?\.authentication === "production" \? "Production session" : "Synthetic preview"/);
+  assert.match(shell, /user\?\.authentication === "preview" \? <div className="preview-status"/);
+  assert.doesNotMatch(shell, /Production workspace|Production session/);
   assert.match(shell, /user\?\.authentication === "preview" \? <Link href="\/sign-in">Switch Preview role<\/Link> : null/);
   assert.match(navigation, /previewAuth \? <NavLink[\s\S]*Switch Preview role/);
   assert.match(menu, /authentication === "preview"/);
@@ -39,6 +40,19 @@ test("account and session actions are authentication-mode aware and restore keyb
   assert.match(unauthorized, /safeReturnPath\(input\.next\)/);
   assert.match(unauthorized, /isPreview && user/);
   assert.match(unauthorized, /production account/);
+});
+
+test("Production pages omit redundant workspace banners while Preview remains clearly identified", () => {
+  const home = source("src/app/page.tsx");
+  const shell = source("src/components/AppShell.tsx");
+
+  assert.doesNotMatch(home, /title="Production workspace"/);
+  assert.doesNotMatch(shell, /Production workspace/);
+  assert.match(home, /user\.authentication === "preview"/);
+  assert.match(home, /title="Preview environment"/);
+  assert.match(shell, /Preview environment/);
+  assert.doesNotMatch(home, /synthetic/i);
+  assert.doesNotMatch(shell, /synthetic/i);
 });
 
 test("request protection retains same-origin path and filters for sign-in and unauthorized recovery", () => {

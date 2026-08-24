@@ -105,7 +105,7 @@ export default async function NotificationsPage() {
   return <ProtectedPage permission="viewPersonalWorkspace"><div className="content">
     <PageHeader
       eyebrow="My work"
-      title="Work inbox"
+      title="To Do"
       description={unavailable ? "Your deadlines, review requests, and saved work views could not be loaded safely." : `${notifications.length} current ${notifications.length === 1 ? "item is" : "items are"} ordered by urgency; ${urgent.length} ${urgent.length === 1 ? "requires" : "require"} action today.`}
     />
 
@@ -115,9 +115,9 @@ export default async function NotificationsPage() {
 
     <MobileDeviceControl urgentCount={urgent.length} totalCount={notifications.length} />
 
-    {unavailable ? <SectionCard><UnavailableState title="Work inbox unavailable" description="We couldn’t safely load your current work reminders or saved views, so no substitute data is shown." /></SectionCard> : <>
+    {unavailable ? <SectionCard><UnavailableState title="To Do is unavailable" description="We couldn’t safely load your current work reminders or saved views, so no substitute data is shown." /></SectionCard> : <>
       {notifications.length === 0 ? <SectionCard>
-        <EmptyState title="Your inbox is clear" description="There are no current reminders, or you’ve already dismissed the current versions." />
+        <EmptyState title="Your To Do list is clear" description="There are no current reminders, or you’ve already dismissed the current versions." />
       </SectionCard> : <>
         <SectionCard title="Overdue or due today" description={`${urgent.length} ${urgent.length === 1 ? "item requires" : "items require"} attention now.`}>
           {urgent.length ? <NotificationItems items={urgent} /> : <EmptyState title="Nothing urgent" description="No work is overdue or due today." />}
@@ -157,7 +157,7 @@ export default async function NotificationsPage() {
         </div>}
       </DisclosureCard>
 
-      <DisclosureCard title="How Work inbox privacy works" description="What is stored when you dismiss an item">
+      <DisclosureCard title="How To Do items stay private" description="What is stored when you dismiss an item">
         <p className="muted">Items are created from your authorized work when this page opens. Dismissing one stores only a private acknowledgement, not its notification text. A new reminder can appear when the underlying work changes.</p>
       </DisclosureCard>
     </>}

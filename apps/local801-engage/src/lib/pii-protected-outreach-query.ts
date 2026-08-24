@@ -60,6 +60,8 @@ type CandidateRow = {
 type ContactRow = {
   person_id: string;
   contact_method_id: string;
+  contact_type: "work_email" | "personal_email" | "phone";
+  contact_label: "work" | "cell" | "home" | null;
   contact_value_encrypted_payload: string;
   encryption_key_version: string;
   encryption_format_version: number;
@@ -90,6 +92,16 @@ function encrypted(row: Record<string, unknown>, payload: string, key: string, f
 
 function handle(organizationId: string, personId: string) {
   return createHash("sha256").update(`${organizationId}:${personId}`).digest("hex");
+}
+
+function displayName(preferredName: string | null, firstName: string, lastName: string) {
+  const givenName = preferredName?.trim() || firstName.trim();
+  const familyName = lastName.trim();
+  const normalizedGivenName = givenName.toLocaleLowerCase("en-US");
+  const normalizedFamilyName = familyName.toLocaleLowerCase("en-US");
+  return normalizedGivenName === normalizedFamilyName || normalizedGivenName.endsWith(` ${normalizedFamilyName}`)
+    ? givenName
+    : `${givenName} ${familyName}`;
 }
 
 function finiteInteger(value: unknown) {
@@ -322,17 +334,18 @@ export async function getProtectedOutreachQueue(
   const page = candidates.slice(0, normalized.pageSize);
   const pageIds = page.map((item) => item.row.person_id);
   const contacts = pageIds.length ? await query<ContactRow>(`
-    /* pii-protected-outreach:page-work-email */
+    /* pii-protected-outreach:page-contact-options */
     WITH requested AS (
       SELECT value.person_id::uuid AS person_id
       FROM jsonb_to_recordset($3::text::jsonb) AS value(person_id text)
     )
-    SELECT DISTINCT ON (contact.person_id) contact.person_id::text, contact.id::text AS contact_method_id,
+    SELECT DISTINCT ON (contact.person_id, contact.contact_type, contact.contact_label)
+      contact.person_id::text, contact.id::text AS contact_method_id, contact.contact_type, contact.contact_label,
       protected.contact_value_encrypted_payload, protected.encryption_key_version, protected.encryption_format_version
     FROM requested
     JOIN local801.person_contact_methods contact
       ON contact.organization_id = $1::uuid AND contact.person_id = requested.person_id
-      AND contact.contact_type = 'work_email' AND contact.is_primary = true AND contact.archived_at IS NULL
+      AND contact.contact_type IN ('work_email', 'personal_email', 'phone') AND contact.archived_at IS NULL
     JOIN local801.person_contact_method_pii protected
       ON protected.organization_id = contact.organization_id AND protected.contact_method_id = contact.id
     WHERE contact.visibility = 'authorized_directory'
@@ -342,9 +355,16 @@ export async function getProtectedOutreachQueue(
           AND assignment.archived_at IS NULL AND assignment.status = 'open'
           AND (assignment.primary_user_id = $2::uuid OR assignment.backup_user_id = $2::uuid)
       ))
-    ORDER BY contact.person_id, contact.created_at, contact.id
+    ORDER BY contact.person_id, contact.contact_type, contact.contact_label,
+      contact.is_primary DESC, contact.created_at DESC, contact.id DESC
   `, [context.organizationId, context.userId, JSON.stringify(pageIds.map((person_id) => ({ person_id })))]) : [];
-  const contactByPerson = new Map(contacts.map((row) => [row.person_id, row]));
+  const contactsByPerson = new Map<string, Map<string, ContactRow>>();
+  for (const contact of contacts) {
+    const personContacts = contactsByPerson.get(contact.person_id) ?? new Map<string, ContactRow>();
+    const contactKey = contact.contact_type === "phone" ? `${contact.contact_type}:${contact.contact_label ?? ""}` : contact.contact_type;
+    personContacts.set(contactKey, contact);
+    contactsByPerson.set(contact.person_id, personContacts);
+  }
 
   const people = page.map((item) => {
     const row = item.row;
@@ -364,19 +384,26 @@ export async function getProtectedOutreachQueue(
         { organizationId: context.organizationId, entity: "person", recordId: row.person_id, field: "preferred-name" }, config,
       );
     }
-    const contact = contactByPerson.get(row.person_id);
-    const workEmail = contact ? decryptPiiField(
-      encrypted(contact as unknown as Record<string, unknown>, "contact_value_encrypted_payload", "encryption_key_version", "encryption_format_version"),
-      { organizationId: context.organizationId, entity: "person-contact", recordId: contact.contact_method_id, field: "contact-value" }, config,
-    ) : null;
+    const personContacts = contactsByPerson.get(row.person_id);
+    const contactValue = (contactKey: string) => {
+      const contact = personContacts?.get(contactKey);
+      return contact ? decryptPiiField(
+        encrypted(contact as unknown as Record<string, unknown>, "contact_value_encrypted_payload", "encryption_key_version", "encryption_format_version"),
+        { organizationId: context.organizationId, entity: "person-contact", recordId: contact.contact_method_id, field: "contact-value" }, config,
+      ) : null;
+    };
     return {
       handle: handle(context.organizationId, row.person_id),
-      displayName: preferredName?.trim() || `${firstName} ${lastName}`,
+      displayName: displayName(preferredName, firstName, lastName),
       membershipStatus: membership(row.membership_status),
       department: row.department,
       classification: row.classification,
       workLocation: row.work_location,
-      workEmail,
+      workEmail: contactValue("work_email"),
+      homeEmail: contactValue("personal_email"),
+      workPhone: contactValue("phone:work"),
+      cellPhone: contactValue("phone:cell"),
+      homePhone: contactValue("phone:home"),
       assignmentRelationship: relationship(row),
       priority: priority(row.priority_rank),
       latestEngagementAt: normalizeTimestamp(row.latest_engagement_at),

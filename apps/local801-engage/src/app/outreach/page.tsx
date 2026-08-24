@@ -63,6 +63,12 @@ function peopleCountLabel(count: number) {
   return `${count.toLocaleString()} ${count === 1 ? "person" : "people"}`;
 }
 
+function membershipStatusLabel(status: OutreachQueuePage["people"][number]["membershipStatus"]) {
+  if (status === "member") return "Member";
+  if (status === "nonmember") return "Nonmember";
+  return "Unknown";
+}
+
 export default async function OutreachPage({ searchParams }: { searchParams: SearchParams }) {
   const user = await getPreviewUser();
   if (!user) redirect("/sign-in");
@@ -140,18 +146,28 @@ export default async function OutreachPage({ searchParams }: { searchParams: Sea
           {results.people.map((person) => {
             const state = priority(person.priority);
             const employeeHref = fieldMode ? fieldPersonHref(person.handle, canonicalFieldContext) : member360Href(person.handle, currentQueueHref);
+            const contactOptions = [
+              { label: "Cell phone", value: person.cellPhone, href: person.cellPhone ? `tel:${person.cellPhone}` : null },
+              { label: "Home phone", value: person.homePhone, href: person.homePhone ? `tel:${person.homePhone}` : null },
+              { label: "Work phone", value: person.workPhone, href: person.workPhone ? `tel:${person.workPhone}` : null },
+              { label: "Home email", value: person.homeEmail, href: person.homeEmail ? `mailto:${person.homeEmail}` : null },
+              { label: "Work email", value: person.workEmail, href: person.workEmail ? `mailto:${person.workEmail}` : null },
+            ];
             return <article className="section-card outreach-person-card" key={person.handle}>
               <div className="section-heading">
                 <div><h3>{person.displayName}</h3><p>{person.classification || "Classification unavailable"}{person.department ? ` · ${person.department}` : ""}{person.workLocation ? ` · ${person.workLocation}` : ""}</p></div>
                 <StatusBadge tone={state.tone}>{state.label}</StatusBadge>
               </div>
-              <div className="review-summary">
-                <div><strong>Membership</strong><div>{person.membershipStatus}</div></div>
+              <div className="review-summary outreach-person-fields">
+                <div><strong>Membership</strong><div>{membershipStatusLabel(person.membershipStatus)}</div></div>
                 <div><strong>Your role</strong><div>{person.assignmentRelationship === "primary" ? "Primary organizer" : person.assignmentRelationship === "backup" ? "Backup organizer" : "View only"}</div></div>
                 <div><strong>Last conversation</strong><div>{dateTime(person.latestEngagementAt)}{person.latestOutcome ? ` · ${person.latestOutcome}` : ""}</div></div>
                 <div><strong>Follow-up</strong><div>{person.overdueFollowupCount ? `${person.overdueFollowupCount} overdue` : person.openFollowupCount ? `${person.openFollowupCount} open · next ${dateTime(person.nextFollowupAt)}` : "No open follow-up"}</div></div>
                 <div><strong>Action readiness</strong><div>{readiness(person)}</div></div>
-                <div><strong>Work email</strong><div>{person.workEmail ? <a href={`mailto:${person.workEmail}`}>{person.workEmail}</a> : <span className="muted">Not recorded</span>}</div></div>
+                {contactOptions.map((contact) => <div key={contact.label}>
+                  <strong>{contact.label}</strong>
+                  <div>{contact.href ? <a href={contact.href}>{contact.value}</a> : <span className="muted">Not recorded</span>}</div>
+                </div>)}
               </div>
               <div className="page-actions outreach-card-actions"><Link className="button outreach-card-primary-action" href={employeeHref}>{fieldMode ? "Open and record" : "Open outreach record"}</Link></div>
             </article>;

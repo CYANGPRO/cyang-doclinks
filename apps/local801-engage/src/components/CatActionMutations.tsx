@@ -167,13 +167,13 @@ export function CatActionEditForm({
   </form>;
 }
 
-export function CatActionArchiveButton({ actionHandle, actionName }: { actionHandle: string; actionName: string }) {
+export function CatActionDeleteButton({ actionHandle, actionName }: { actionHandle: string; actionName: string }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(null);
 
-  async function archive() {
-    if (!window.confirm(`Archive ${actionName}? It and its tasks will leave the active CAT Action views.`)) return;
+  async function remove() {
+    if (!window.confirm(`Delete “${actionName}”? It and its tasks will be removed from CAT Action views and current work lists. This cannot be undone in CAT, but its audit history will be retained.`)) return;
     setPending(true);
     setFeedback(null);
     try {
@@ -181,13 +181,13 @@ export function CatActionArchiveButton({ actionHandle, actionName }: { actionHan
       router.push("/cat-actions");
       router.refresh();
     } catch (error) {
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "We couldn’t archive the CAT Action." });
+      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "We couldn’t delete the CAT Action." });
       setPending(false);
     }
   }
 
   return <div className="stack">
-    <div className="form-actions compact-actions"><button className="button secondary" type="button" onClick={archive} disabled={pending}>{pending ? "Archiving…" : "Archive CAT Action"}</button></div>
+    <div className="form-actions compact-actions"><button className="button danger" type="button" onClick={remove} disabled={pending}>{pending ? "Deleting…" : "Delete CAT Action"}</button></div>
     <FeedbackMessage feedback={feedback} />
   </div>;
 }

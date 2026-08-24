@@ -141,41 +141,6 @@
   padding: 14px;
 }
 
-.workflow-grid {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
-}
-
-.workflow-card {
-  background: var(--surface-muted);
-  border: 1px solid var(--border-soft);
-  border-left: 4px solid var(--brand-blue);
-  border-radius: var(--radius-sm);
-  display: grid;
-  gap: 8px;
-  min-height: 156px;
-  padding: 16px;
-}
-
-.workflow-card.attention-card {
-  background: var(--warning-soft);
-  border-left-color: var(--warning);
-}
-
-.workflow-card .page-actions {
-  align-self: end;
-  margin-top: 4px;
-}
-
-.action-grid {
-  display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
-}
-
-.action-grid .button {
-  width: 100%;
-}
-
 .full-span {
   grid-column: 1 / -1;
 }
@@ -219,17 +184,13 @@ nav[aria-label="Report views"] .button {
     flex: 1 1 150px;
   }
 
-  .workflow-card {
-    min-height: auto;
-  }
 }
 
 @media (forced-colors: active) {
   .disclosure-card > summary,
   .inline-disclosure-content,
   .compact-list,
-  .review-control,
-  .workflow-card {
+  .review-control {
     border-color: CanvasText;
   }
 }

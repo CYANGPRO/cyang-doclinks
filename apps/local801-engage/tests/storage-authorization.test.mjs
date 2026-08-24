@@ -511,6 +511,7 @@ test("readiness POST origin policy requires an exact Origin header", () => {
 });
 
 test("preview synthetic auth always fails closed in Vercel production", () => {
+  delete process.env.LOCAL801_PRODUCTION_LAUNCH_ENABLED;
   process.env.VERCEL_ENV = "production";
   process.env.NODE_ENV = "production";
   process.env.LOCAL801_PREVIEW_AUTH_ENABLED = "1";
@@ -518,6 +519,7 @@ test("preview synthetic auth always fails closed in Vercel production", () => {
 });
 
 test("preview synthetic auth remains available in Vercel Preview when explicitly enabled", () => {
+  delete process.env.LOCAL801_PRODUCTION_LAUNCH_ENABLED;
   process.env.VERCEL_ENV = "preview";
   process.env.NODE_ENV = "production";
   process.env.LOCAL801_PREVIEW_AUTH_ENABLED = "1";
@@ -525,8 +527,21 @@ test("preview synthetic auth remains available in Vercel Preview when explicitly
 });
 
 test("local development intentionally enables synthetic auth without the Preview flag", () => {
+  delete process.env.LOCAL801_PRODUCTION_LAUNCH_ENABLED;
   delete process.env.VERCEL_ENV;
   process.env.NODE_ENV = "development";
   process.env.LOCAL801_PREVIEW_AUTH_ENABLED = "0";
   assert.equal(previewAuthEnabled(), true);
+});
+
+test("the explicit Production launch flag disables Preview authentication without Vercel metadata", () => {
+  delete process.env.VERCEL_ENV;
+  process.env.NODE_ENV = "production";
+  process.env.LOCAL801_PREVIEW_AUTH_ENABLED = "1";
+  process.env.LOCAL801_PRODUCTION_LAUNCH_ENABLED = "1";
+  try {
+    assert.equal(previewAuthEnabled(), false);
+  } finally {
+    delete process.env.LOCAL801_PRODUCTION_LAUNCH_ENABLED;
+  }
 });

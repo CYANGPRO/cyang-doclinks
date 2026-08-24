@@ -185,7 +185,7 @@ function previewSql() {
       WHERE member.organization_id = $1::uuid AND member.campaign_id = campaign.id
         AND ($4::text IS NULL OR person.membership_status = $4::text)
         AND ($5::text IS NULL OR person.department ILIKE $5::text ESCAPE '\\')
-        AND ($6::text IS NULL OR person.classification ILIKE $6::text ESCAPE '\\')
+        AND ($6::text IS NULL OR lower(btrim(person.classification)) = lower(btrim($6::text)))
         AND ($7::text IS NULL OR person.work_location ILIKE $7::text ESCAPE '\\')
     ), filtered AS (
       SELECT * FROM candidates
@@ -213,7 +213,7 @@ function previewSql() {
 
 function parameters(context: WorkspaceContext, campaignHandle: string, assigneeHandle: string, criteria: CampaignAssignmentCriteria) {
   return [context.organizationId, campaignHandle, assigneeHandle, criteria.membershipStatus,
-    escapeLike(criteria.department), escapeLike(criteria.classification), escapeLike(criteria.workLocation), criteria.workflowState];
+    escapeLike(criteria.department), criteria.classification || null, escapeLike(criteria.workLocation), criteria.workflowState];
 }
 
 async function livePreview(
@@ -359,7 +359,7 @@ export async function applyCampaignBulkAssignment(
         WHERE member.organization_id = $1::uuid AND member.campaign_id = campaign.id AND assignment.id IS NULL
           AND ($4::text IS NULL OR person.membership_status = $4::text)
           AND ($5::text IS NULL OR person.department ILIKE $5::text ESCAPE '\\')
-          AND ($6::text IS NULL OR person.classification ILIKE $6::text ESCAPE '\\')
+          AND ($6::text IS NULL OR lower(btrim(person.classification)) = lower(btrim($6::text)))
           AND ($7::text IS NULL OR person.work_location ILIKE $7::text ESCAPE '\\')
       ), filtered AS (
         SELECT * FROM candidates WHERE $8::text = 'all'

@@ -6,7 +6,7 @@ const blockerLabels: Record<ProductionLaunchBlocker, string> = {
   NOT_VERCEL_PRODUCTION: "This deployment is not the Vercel Production environment.",
   LAUNCH_NOT_APPROVED: "The explicit production launch switch is off.",
   PRODUCTION_AUTH_DISABLED: "Production OIDC authentication is not runtime-enabled.",
-  PREVIEW_AUTH_ENABLED: "Synthetic Preview authentication must be disabled.",
+  PREVIEW_AUTH_ENABLED: "Preview authentication must be disabled.",
   SIGNUP_ENABLED: "Self-service signup must remain disabled.",
   MFA_NOT_ENFORCED: "MFA enforcement is not enabled for every production user.",
   PRODUCTION_ORGANIZATION_INVALID: "The production organization identifier is not approved.",
@@ -34,9 +34,9 @@ const blockerLabels: Record<ProductionLaunchBlocker, string> = {
   PREVIEW_ONLY_DURABLE_IMPORTS_ENABLED: "The Preview-only durable import gate must be off.",
   PROTECTED_DURABLE_IMPORTS_DISABLED: "The protected scanner-backed durable import worker must be enabled.",
   RATE_LIMIT_CONFIG_INVALID: "One or more production request-rate limits are missing or outside the approved safety range.",
-  SYNTHETIC_SEED_ENABLED: "The synthetic seed opt-in must not be enabled in production.",
-  SYNTHETIC_PRODUCTION_PILOT_ENABLED: "Synthetic Production-origin pilot mode must be disabled before real-data launch.",
-  SYNTHETIC_DATA_ONLY_ENABLED: "The synthetic-data-only assertion must be disabled before real-data launch.",
+  SYNTHETIC_SEED_ENABLED: "Test-data seeding must not be enabled in Production.",
+  SYNTHETIC_PRODUCTION_PILOT_ENABLED: "Production pilot mode must be disabled before launch.",
+  SYNTHETIC_DATA_ONLY_ENABLED: "The test-data-only assertion must be disabled before launch.",
 };
 
 export default function SettingsPage() {

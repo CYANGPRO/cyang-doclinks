@@ -201,6 +201,18 @@ export async function listAuditEvents(
 }
 
 export type AuditPage = { events: AuditEventRecord[]; nextCursor: string | null; eventType: string; pageSize: number };
+export const MAX_AUDIT_EXPORT_EVENTS = 5_000;
+
+export class AuditExportLimitError extends Error {
+  constructor() {
+    super(`Audit activity exports are limited to ${MAX_AUDIT_EXPORT_EVENTS.toLocaleString("en-US")} events. Choose an activity filter and try again.`);
+    this.name = "AuditExportLimitError";
+  }
+}
+
+function normalizeAuditEventType(value: unknown) {
+  return typeof value === "string" ? value.trim().slice(0, 80) : "";
+}
 
 function auditCursor(value: unknown) {
   if (typeof value !== "string" || value.length > 500) return null;
@@ -219,7 +231,7 @@ export async function getAuditPage(
   query: DatabaseQuery = queryLocal801,
 ): Promise<AuditPage> {
   requireAuditRead(context);
-  const eventType = typeof input.eventType === "string" ? input.eventType.trim().slice(0, 80) : "";
+  const eventType = normalizeAuditEventType(input.eventType);
   const requested = Number(input.pageSize);
   const pageSize = [25, 50, 100].includes(requested) ? requested : 50;
   const cursor = auditCursor(input.cursor);
@@ -242,5 +254,35 @@ export async function getAuditPage(
     nextCursor: hasNext && last ? Buffer.from(JSON.stringify({ createdAt: normalizeAuditTimestamp(last.created_at), id: last.id })).toString("base64url") : null,
     eventType,
     pageSize,
+  };
+}
+
+export async function getAuditExportEvents(
+  context: AuditReadContext,
+  input: { eventType?: unknown },
+  query: DatabaseQuery = queryLocal801,
+) {
+  requireAuditRead(context);
+  const eventType = normalizeAuditEventType(input.eventType);
+  const rows = await query<AuditDisplayDatabaseRow>(`
+    /* audit:bounded-export */
+    SELECT id, event_type, actor_user_id, subject_type, subject_id, created_at
+    FROM local801.audit_events
+    WHERE organization_id = $1
+      AND ($2::text IS NULL OR event_type = $2::text)
+    ORDER BY created_at DESC, id DESC
+    LIMIT ${MAX_AUDIT_EXPORT_EVENTS + 1}
+  `, [context.organizationId, eventType || null]);
+  if (rows.length > MAX_AUDIT_EXPORT_EVENTS) throw new AuditExportLimitError();
+  return {
+    eventType,
+    events: rows.map((row) => ({
+      id: row.id,
+      event_type: row.event_type,
+      actor_user_id: row.actor_user_id,
+      subject_type: row.subject_type,
+      subject_id: row.subject_id,
+      created_at: normalizeAuditTimestamp(row.created_at),
+    })),
   };
 }

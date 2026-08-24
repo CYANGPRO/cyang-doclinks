@@ -60,6 +60,7 @@ test("workspace context resolves a synthetic Preview role without querying sanit
     {
       id: "preview-membership_data_manager",
       organizationId: "local801-preview",
+      databaseOrganizationId: null,
       email: "membership_manager@example.test",
       role: "membership_data_manager",
       authentication: "preview",
@@ -97,25 +98,22 @@ test("workspace context resolves a synthetic Preview role without querying sanit
 });
 
 test("workspace context binds a Production session to its exact already-validated user id", async () => {
-  let capturedParameters = [];
+  let queryCalls = 0;
   const context = await resolveWorkspaceContext({
     id: userId,
     organizationId: "local801",
+    databaseOrganizationId: organizationId,
     email: "owner@example.test",
     role: "system_owner",
     authentication: "production",
-  }, async (_sql, parameters) => {
-    capturedParameters = parameters;
-    return [{
-      organization_id: organizationId,
-      organization_slug: "local801",
-      user_id: userId,
-      role: "system_owner",
-    }];
+  }, async () => {
+    queryCalls += 1;
+    return [];
   });
   assert.equal(context.userId, userId);
   assert.equal(context.email, "owner@example.test");
-  assert.deepEqual(capturedParameters, ["local801", "system_owner", userId]);
+  assert.equal(context.organizationId, organizationId);
+  assert.equal(queryCalls, 0);
 });
 
 test("workspace context fails closed when organization, user, or role assignment is missing", async () => {
@@ -133,6 +131,7 @@ test("workspace context fails closed when organization, user, or role assignment
         {
           id: "preview-local_admin",
           organizationId: "local801-preview",
+          databaseOrganizationId: null,
           email: "local_admin@example.test",
           role: "local_admin",
           authentication: "preview",
@@ -324,6 +323,25 @@ test("Directory search is parameterized and SQL wildcards are escaped", async ()
   assert.equal(capturedSql.includes(search), false);
   assert.equal(capturedParameters[2], "%Avery\\%\\_\\\\Morgan%");
   assert.match(capturedSql, /ILIKE \$3/);
+});
+
+test("Directory classification filters match the complete classification", async () => {
+  let capturedSql = "";
+  let capturedParameters = [];
+  await getDirectoryPage(
+    workspaceContext("local_admin"),
+    { classification: "  accounting   officer  " },
+    async (sql, parameters) => {
+      capturedSql = sql;
+      capturedParameters = parameters;
+      return [directoryRow()];
+    },
+  );
+
+  assert.match(capturedSql, /lower\(btrim\(person\.classification\)\) = lower\(btrim\(\$9::text\)\)/);
+  assert.doesNotMatch(capturedSql, /person\.classification ILIKE \$9/);
+  assert.equal(capturedParameters[8], "accounting officer");
+  assert.match(capturedSql, /person\.classification ILIKE \$3/);
 });
 
 test("Directory pagination and search inputs are normalized to hard bounds", () => {

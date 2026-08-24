@@ -11,7 +11,7 @@ test("application shell exposes a keyboard skip link and explicit focusable main
   const frame = source("src/components/RouteAwareFrame.tsx");
   assert.match(frame, /className="skip-link" href="#main-content"/);
   assert.match(frame, /<main className="main-shell" id="main-content" tabIndex=\{-1\}>/);
-  assert.match(shell, /Synthetic preview/);
+  assert.match(shell, /Preview environment/);
   assert.match(shell, /<AccountSessionMenu authentication=\{user\.authentication\} roleLabel=\{shell\.roleLabel\} \/>/);
 });
 

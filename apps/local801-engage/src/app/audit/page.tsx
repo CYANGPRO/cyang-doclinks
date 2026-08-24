@@ -15,6 +15,13 @@ function href(eventType: string, pageSize: number, cursor: string | null) {
   return `/audit?${query}`;
 }
 
+function exportHref(eventType: string) {
+  const query = new URLSearchParams();
+  if (eventType) query.set("eventType", eventType);
+  const suffix = query.toString();
+  return `/api/audit/export${suffix ? `?${suffix}` : ""}`;
+}
+
 function displayTimestamp(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Timestamp unavailable";
@@ -51,9 +58,10 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
       eyebrow="Administration"
       title="Audit activity"
       description="See who made important security or workflow changes, when they happened, and what area was affected. Internal IDs and audit payloads stay hidden."
+      actions={<a className="button" href={exportHref(page?.eventType ?? "")}>Download Excel</a>}
     />
 
-    <DisclosureCard title="Filter activity" description="Choose an activity type or show everything." defaultOpen={Boolean(page?.eventType)} className="route-secondary-panel queue-filter-panel">
+    <DisclosureCard title="Filter activity" description="Choose an activity type or show everything. Excel downloads include up to 5,000 matching events and use the selected activity filter." defaultOpen={Boolean(page?.eventType)} className="route-secondary-panel queue-filter-panel">
       <form action="/audit" method="get">
         <FilterBar>
           <div className="field">

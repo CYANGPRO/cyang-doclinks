@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { getEngagementReport, getMembershipReport, getNewHireReport, __testing } from "../src/lib/reports.ts";
+import { reportValueLabel } from "../src/lib/report-labels.ts";
 
 const organizationId = "11111111-1111-4111-8111-111111111111";
 const context = (role = "local_admin") => ({
@@ -180,6 +181,20 @@ test("numeric normalization remains finite", () => {
   assert.equal(__testing.signedCount("-2"), -2);
   assert.equal(__testing.rate(5, 8), 62.5);
   assert.equal(__testing.rate(0, 0), 0);
+});
+
+test("Outreach activity labels use readable spelling and capitalization", () => {
+  assert.equal(reportValueLabel("in_person"), "In person");
+  assert.equal(reportValueLabel("left_message"), "Left message");
+  assert.equal(reportValueLabel("contacted"), "Contacted");
+  assert.equal(reportValueLabel("in_progress"), "In progress");
+  assert.equal(reportValueLabel("  due-today  "), "Due today");
+  assert.equal(reportValueLabel(""), "Unspecified");
+
+  const source = readFileSync(new URL("../src/app/reports/page.tsx", import.meta.url), "utf8");
+  assert.match(source, /Contact methods[\s\S]*reportValueLabel/);
+  assert.match(source, /Contact outcomes[\s\S]*reportValueLabel/);
+  assert.match(source, /statusLabel\(row\.label\)/);
 });
 
 test("Reports page provides real navigation for ready reports and New Hires dashboard content", () => {

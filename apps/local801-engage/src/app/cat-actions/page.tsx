@@ -70,7 +70,7 @@ export default async function CatActionsPage({
       getCatActionManagementOptions(context),
     ]);
   } catch {
-    // Fail closed. No synthetic CAT action data or mutation options are substituted.
+    // Fail closed. No placeholder CAT action data or mutation options are substituted.
   }
 
   return <ProtectedPage permission="manageCatActions"><div className="content route-cat-actions-page queue-first-page">

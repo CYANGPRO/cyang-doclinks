@@ -238,7 +238,7 @@ export async function getDirectoryPage(context: WorkspaceContext, input: Directo
           OR primary_work_email.contact_value ILIKE $3 ESCAPE '\\')
         AND ($7::text IS NULL OR person.membership_status = $7)
         AND ($8::text IS NULL OR person.department ILIKE $8 ESCAPE '\\')
-        AND ($9::text IS NULL OR person.classification ILIKE $9 ESCAPE '\\')
+        AND ($9::text IS NULL OR lower(btrim(person.classification)) = lower(btrim($9::text)))
         AND ($10::text IS NULL OR COALESCE(NULLIF(trim(person.section), ''), person.work_location) ILIKE $10 ESCAPE '\\')
     ), page_rows AS (
       SELECT * FROM filtered_people person
@@ -249,7 +249,7 @@ export async function getDirectoryPage(context: WorkspaceContext, input: Directo
     SELECT page_rows.*, total.total_count FROM total LEFT JOIN page_rows ON true
     ORDER BY page_rows.last_name ${ordering}, page_rows.first_name ${ordering}, page_rows.person_id ${ordering}
   `, [context.organizationId, context.userId, like(normalized.term), cursor?.lastName ?? null, cursor?.firstName ?? null,
-    cursor?.id ?? null, normalized.membershipStatus || null, like(normalized.department), like(normalized.classification), like(normalized.workLocation), normalized.pageSize + 1,
+    cursor?.id ?? null, normalized.membershipStatus || null, like(normalized.department), normalized.classification || null, like(normalized.workLocation), normalized.pageSize + 1,
     organizationWide]);
 
   const total = Number(rows[0]?.total_count ?? 0);

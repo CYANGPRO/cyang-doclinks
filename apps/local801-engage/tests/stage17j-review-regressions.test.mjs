@@ -82,6 +82,18 @@ test("member outreach preserves a validated originating queue", () => {
   assert.match(field, /member360Href\(workspace\.handle, returnHref\)/);
 });
 
+test("contact view shows all phone and email types and uses explicit preference helpers", () => {
+  const contact = source("src/app/outreach/[handle]/contact/page.tsx");
+  for (const label of ["Cell phone", "Home phone", "Work phone", "Home email", "Work email"]) {
+    assert.match(contact, new RegExp(`<strong>${label}<\\/strong>`));
+  }
+  assert.match(contact, /preferredVisiblePhone\(contacts\)/);
+  assert.match(contact, /preferredVisibleEmail\(contacts\)/);
+  assert.match(contact, /telHref\(preferredPhone\)/);
+  assert.match(contact, /smsHref\(preferredPhone\)/);
+  assert.match(contact, /mailto:\$\{preferredEmail\}/);
+});
+
 test("workload reset remounts uncontrolled filters from the URL state", () => {
   const workload = source("src/app/workload/page.tsx");
   assert.match(workload, /key=\{`\$\{selectedSource\}:\$\{selectedWindow\}`\}/);

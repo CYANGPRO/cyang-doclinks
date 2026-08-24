@@ -6,6 +6,7 @@ import {
   OutreachAssignmentError,
   __testing,
   assignOutreachOrganizer,
+  deleteMemberOutreach,
   getOutreachAssignmentOptions,
 } from "../src/lib/outreach-assignment.ts";
 
@@ -128,6 +129,75 @@ test("duplicate active direct assignments fail closed before mutation", async ()
   assert.equal(state.transactions.length, 0);
 });
 
+test("deleting member outreach archives only the active direct assignment and retains history", async () => {
+  const state = dependencies({
+    query: async (sql) => {
+      if (sql.includes("outreach-assignment:resolve-person")) return [{ id: personId }];
+      if (sql.includes("outreach-assignment:current-direct-for-delete")) return [{ id: oldAssignmentId, primary_user_id: assigneeId }];
+      throw new Error(`Unexpected SQL: ${sql}`);
+    },
+  });
+  const result = await deleteMemberOutreach(context(), { personHandle }, state.values);
+  assert.deepEqual(result, { deleted: true });
+  assert.equal(state.transactions.length, 1);
+  assert.equal(state.transactions[0].length, 3);
+  const [lock, archive] = state.transactions[0];
+  assert.match(lock.sql, /pg_advisory_xact_lock/);
+  assert.match(archive.sql, /SET status = 'closed', archived_at = now\(\)/);
+  assert.match(archive.sql, /assignment\.campaign_id IS NULL/);
+  assert.match(archive.sql, /assignment\.assignment_type = 'direct'/);
+  assert.match(archive.sql, /role\.code IN \('system_owner','local_admin','cat_admin','cat_lead'\)/);
+  assert.doesNotMatch(archive.sql, /engagement_events|engagement_followups|outreach_campaign_population/);
+  assert.deepEqual(archive.parameters, [organizationId, oldAssignmentId, userId, "cat_lead", personHandle]);
+  assert.equal(state.audits[0].eventType, "record.archive");
+  assert.equal(state.audits[0].subjectType, "engagement_assignment");
+  assert.deepEqual(state.audits[0].payload, {
+    source: "member_outreach",
+    assignmentType: "direct",
+    removedFromActiveOutreach: true,
+    campaignAssignmentsRetained: true,
+    followupsRetained: true,
+    engagementHistoryRetained: true,
+  });
+});
+
+test("member outreach delete is limited to LCAT and every role above it", async () => {
+  for (const role of ["system_owner", "local_admin", "cat_admin", "cat_lead"]) {
+    const state = dependencies({
+      query: async (sql) => {
+        if (sql.includes("resolve-person")) return [{ id: personId }];
+        if (sql.includes("current-direct-for-delete")) return [{ id: oldAssignmentId }];
+        throw new Error(`Unexpected SQL: ${sql}`);
+      },
+    });
+    await deleteMemberOutreach(context(role), { personHandle }, state.values);
+  }
+  for (const role of ["membership_data_manager", "cat_member", "report_viewer"]) {
+    await assert.rejects(
+      deleteMemberOutreach(context(role), { personHandle }, { query: async () => { throw new Error("SQL must not run"); } }),
+      (error) => error instanceof OutreachAssignmentError && error.code === "FORBIDDEN" && error.status === 403,
+    );
+  }
+});
+
+test("member outreach delete fails closed when no single direct assignment is available", async () => {
+  for (const rows of [[], [{ id: oldAssignmentId }, { id: assignmentId }]]) {
+    const state = dependencies({
+      query: async (sql) => {
+        if (sql.includes("resolve-person")) return [{ id: personId }];
+        if (sql.includes("current-direct-for-delete")) return rows;
+        throw new Error(`Unexpected SQL: ${sql}`);
+      },
+    });
+    await assert.rejects(
+      deleteMemberOutreach(context(), { personHandle }, state.values),
+      (error) => error instanceof OutreachAssignmentError && ["NOT_FOUND", "ASSIGNMENT_CONFLICT"].includes(error.code),
+    );
+    assert.equal(state.transactions.length, 0);
+    assert.equal(state.audits.length, 0);
+  }
+});
+
 test("outreach assignment endpoint and member control retain request-security guardrails", () => {
   const route = readFileSync(new URL("../src/app/api/outreach/[handle]/assignment/route.ts", import.meta.url), "utf8");
   const control = readFileSync(new URL("../src/components/OutreachAssignmentControl.tsx", import.meta.url), "utf8");
@@ -139,9 +209,13 @@ test("outreach assignment endpoint and member control retain request-security gu
   assert.match(route, /enforceWorkspaceRateLimit\(context, "mutation"\)/);
   assert.match(route, /MAX_JSON_BYTES = 2_048/);
   assert.match(control, /method: "POST"/);
+  assert.match(control, /method: "DELETE"/);
+  assert.match(control, /Delete from member outreach/);
+  assert.match(control, /Campaign assignments, follow-ups, conversations, and audit history will be retained/);
   assert.match(control, /Choose an LCAT or CAT/);
   assert.match(control, /router\.refresh\(\)/);
   assert.match(page, /<OutreachAssignmentControl/);
+  assert.match(page, /canDelete=\{workspace\.activeDirectAssignmentCount > 0\}/);
   assert.match(page, /can\(user\.role, "assignOutreach"\)/);
   assert.match(access, /assignOutreach: \["system_owner", "local_admin", "cat_admin", "cat_lead"\]/);
 });

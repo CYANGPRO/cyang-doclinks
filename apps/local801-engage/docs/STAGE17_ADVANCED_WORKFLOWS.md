@@ -286,7 +286,7 @@ Implemented product behavior:
 - the signed-in shell, responsive tables/cards, mobile destination sheet, buttons, notifications panel, disclosures, and Member 360 actions receive task-first responsive treatment while preserving keyboard/focus behavior;
 - Directory, New Hires, Data Imports, Contact Updates, Data Quality, Campaigns, CAT Actions, Documents, Reports, Work Planner, and Team & Access are reorganized so current work or requested upload entry points precede secondary setup;
 - cursor workflows use the shared safe Previous control, disruptive campaign/follow-up/team actions require deliberate confirmation, Member 360 preserves a validated originating Outreach queue, and Field/import detours preserve bounded context;
-- the header notification bell asynchronously reads at most five derived authorized notifications from a private `no-store` endpoint, retains the full Work Inbox, and reuses the Stage 17G acknowledgement mutation rather than creating a notification store;
+- the header notification bell asynchronously reads at most five derived authorized notifications from a private `no-store` endpoint, retains the full To Do page, and reuses the Stage 17G acknowledgement mutation rather than creating a notification store;
 - Contact Updates now compares current and proposed protected values, uses a bounded oldest-first queue, and confirms approval;
 - New Hires adds an explicit inline assignment workflow for an unassigned hire;
 - Data Quality adds explicit inline fixes for individual missing identifiers, missing work email, missing department, missing classification, missing work location, and unresolved membership status.

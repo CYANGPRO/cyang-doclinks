@@ -34,12 +34,13 @@ test("Stage 17J New Hires keeps result controls with results and uses attention-
   assert.doesNotMatch(page, /<StatCard label="Current members"/);
 });
 
-test("Stage 17J New Hires simplifies desktop progress and provides a dedicated mobile list", () => {
+test("Stage 17J New Hires removes progress and action presentation while retaining a dedicated mobile list", () => {
   const page = source("src/app/new-hires/page.tsx");
   const css = source("src/app/stage17.css");
 
-  assert.match(page, /headers=\{\["Employee ID", "Person", "Hire Date", "Job Status", "Classification", "Department \/ Work Location", "Work Email", "Work Phone", "Cell Phone", "Home Phone", "Home Email", "Progress", "Assignment", "Action"\]\}/);
-  assert.match(page, /className="new-hire-progress-badges"/);
+  assert.match(page, /headers=\{\["Person", "Hire Date", "Job Status", "Classification", "Department \/ Work Location", "Work Email", "Work Phone", "Cell Phone", "Home Phone", "Home Email", "Assignment"\]\}/);
+  assert.doesNotMatch(page, /new-hire-progress-badges|new-hire-mobile-progress|new-hire-action-cell|new-hire-member360/);
+  assert.match(page, /className="person-membership-stack"/);
   assert.match(page, /className="new-hire-desktop-results"/);
   assert.match(page, /className="new-hire-mobile-results"/);
   assert.match(page, /className="new-hire-person-row"/);
@@ -57,8 +58,7 @@ test("Stage 17J New Hires keeps protected reads, outreach authorization, and ass
   assert.match(page, /const canOpenEmployee = can\(user\.role, "recordEngagement"\)/);
   assert.match(page, /const canAssignNewHires = can\(user\.role, "assignNewHires"\)/);
   assert.match(page, /href=\{`\/outreach\/\$\{person\.handle\}`\}/);
-  assert.match(page, /aria-label=\{`Open outreach record for \$\{person\.displayName\}`\}/);
-  assert.match(page, /View directory/);
+  assert.doesNotMatch(page, /aria-label=\{`Open outreach record for \$\{person\.displayName\}`\}/);
   assert.match(access, /recordEngagement: \["system_owner", "local_admin", "cat_admin", "cat_lead", "cat_member"\]/);
   assert.doesNotMatch(access, /recordEngagement: \[[^\]]*membership_data_manager/);
   assert.match(access, /assignNewHires: \["system_owner", "local_admin", "membership_data_manager", "cat_admin", "cat_lead"\]/);

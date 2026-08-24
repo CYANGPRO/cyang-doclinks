@@ -1,4 +1,4 @@
-import { archiveCampaign, updateCampaign } from "@/lib/campaign-management";
+import { deleteCampaign, updateCampaign } from "@/lib/campaign-management";
 import {
   authorizeCampaignMutation,
   campaignJson,
@@ -42,7 +42,7 @@ export async function DELETE(request: Request, { params }: RouteContext) {
       params,
       resolveWorkspaceContext(authorized.auth.user),
     ]);
-    const result = await archiveCampaign(context, campaignHandle);
+    const result = await deleteCampaign(context, campaignHandle);
     return campaignJson({ campaign: "ok", ...result });
   } catch (error) {
     return campaignMutationFailure(error);

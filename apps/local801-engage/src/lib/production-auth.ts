@@ -36,6 +36,7 @@ export type ProductionIdentity = {
 
 export type ProductionAuthBinding = {
   organizationSlug: string;
+  organizationId: string;
   userId: string;
   email: string;
   role: Role;
@@ -45,6 +46,7 @@ export type ProductionAuthBinding = {
 
 type BindingRow = {
   organization_slug: string;
+  organization_id: string;
   user_id: string;
   email: string;
   auth_session_version: number | string;
@@ -210,7 +212,8 @@ export async function authorizeProductionIdentity(
   const transaction = dependencies.transaction ?? runLocal801Transaction;
   const rows = await query<BindingRow>(`
     /* production-auth:resolve-active-user */
-    SELECT organization.slug AS organization_slug, app_user.id AS user_id, app_user.email,
+    SELECT organization.slug AS organization_slug, organization.id::text AS organization_id,
+      app_user.id AS user_id, app_user.email,
       app_user.auth_session_version, role.code AS role, identity.provider_subject AS linked_subject,
       EXISTS (
         SELECT 1 FROM local801.user_policy_acknowledgements acknowledgement
@@ -300,6 +303,7 @@ export async function authorizeProductionIdentity(
   await transaction([bindIdentity, markAuthentication]);
   return {
     organizationSlug: row.organization_slug,
+    organizationId: row.organization_id,
     userId: row.user_id,
     email: row.email,
     role,
@@ -319,7 +323,8 @@ export async function resolveProductionSessionBinding(
   if (!session.organizationSlug || !session.userId || !Number.isSafeInteger(session.sessionVersion)) return null;
   const rows = await query<BindingRow>(`
     /* production-auth:validate-session */
-    SELECT organization.slug AS organization_slug, app_user.id AS user_id, app_user.email,
+    SELECT organization.slug AS organization_slug, organization.id::text AS organization_id,
+      app_user.id AS user_id, app_user.email,
       app_user.auth_session_version, role.code AS role, NULL::text AS linked_subject,
       EXISTS (
         SELECT 1 FROM local801.user_policy_acknowledgements acknowledgement
@@ -355,6 +360,7 @@ export async function resolveProductionSessionBinding(
   return role && sessionVersion === session.sessionVersion
     ? {
         organizationSlug: row.organization_slug,
+        organizationId: row.organization_id,
         userId: row.user_id,
         email: row.email,
         role,

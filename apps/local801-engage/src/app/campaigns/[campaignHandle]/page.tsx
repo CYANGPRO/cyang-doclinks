@@ -4,7 +4,7 @@ import { ActionReadinessSummary } from "@/components/ActionReadinessSummary";
 import { CampaignBulkOperations } from "@/components/CampaignBulkOperations";
 import { CampaignCatLinks } from "@/components/CampaignCatLinks";
 import {
-  CampaignArchiveButton,
+  CampaignDeleteButton,
   CampaignAssignmentForm,
   CampaignEditForm,
 } from "@/components/CampaignMutations";
@@ -301,8 +301,7 @@ export default async function CampaignDetailPage({
       <DisclosureCard title="Campaign settings" description={`${dateRange(campaign.startsOn, campaign.endsOn)} · Current status: ${campaign.status}.`} className="route-secondary-panel record-settings-panel">
         {campaign.status === "closed" ? (
           <div className="grid">
-            <p className="muted">This campaign is closed. Its main fields and participant assignments are read-only. Archive it when you no longer want it in the active campaign views.</p>
-            <CampaignArchiveButton campaignHandle={campaign.handle} campaignName={campaign.name} />
+            <p className="muted">This campaign is closed. Its main fields and participant assignments are read-only.</p>
           </div>
         ) : (
           <div className="grid">
@@ -316,6 +315,10 @@ export default async function CampaignDetailPage({
             />
           </div>
         )}
+        <div className="section-separator">
+          <p className="muted">Deletion is available to 801 Administrators, Local Administrators, and System Owners. The campaign leaves operational views while its audit history is retained.</p>
+          <CampaignDeleteButton campaignHandle={campaign.handle} campaignName={campaign.name} />
+        </div>
       </DisclosureCard>
 
       {campaign.status === "draft" ? (

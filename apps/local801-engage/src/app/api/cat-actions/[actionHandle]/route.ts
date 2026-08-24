@@ -1,4 +1,4 @@
-import { archiveCatAction, updateCatAction } from "@/lib/cat-action-management";
+import { deleteCatAction, updateCatAction } from "@/lib/cat-action-management";
 import {
   authorizeCatActionMutation,
   catActionJson,
@@ -41,7 +41,7 @@ export async function DELETE(request: Request, { params }: RouteContext) {
       params,
       resolveWorkspaceContext(authorized.auth.user),
     ]);
-    const result = await archiveCatAction(context, actionHandle);
+    const result = await deleteCatAction(context, actionHandle);
     return catActionJson({ action: "ok", ...result });
   } catch (error) {
     return catActionMutationFailure(error);

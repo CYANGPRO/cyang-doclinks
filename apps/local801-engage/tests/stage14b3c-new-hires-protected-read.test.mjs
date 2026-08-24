@@ -52,7 +52,7 @@ function personHandle() {
 function protectedPerson(keyConfig) {
   const first = envelope("Protected", "person", personId, "first-name", keyConfig);
   const last = envelope("Hire", "person", personId, "last-name", keyConfig);
-  const preferred = envelope("Synthetic New Hire", "person", personId, "preferred-name", keyConfig);
+  const preferred = envelope("Synthetic", "person", personId, "preferred-name", keyConfig);
   return {
     person_id: personId,
     first_name_encrypted_payload: first.encryptedPayload,
@@ -145,7 +145,7 @@ test("New Hires replaces legacy person, contact, and organizer display PII with 
   };
 
   const result = await hydrateNewHireQueueFromProtectedPii(organizationId, legacyPage(), { query, env: environment, keyConfig });
-  assert.equal(result.people[0].displayName, "Synthetic New Hire");
+  assert.equal(result.people[0].displayName, "Synthetic Hire");
   assert.equal(result.people[0].workEmail, "newhire.protected@example.test");
   assert.equal(result.people[0].primaryOrganizers, "Synthetic CAT Lead");
   assert.equal(result.people[0].backupOrganizers, "Synthetic CAT Member");

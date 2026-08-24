@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 import "./stage16.css";
 import "./stage16-components.css";
@@ -47,6 +48,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <NativeRuntime />
         <AppShell>{children}</AppShell>
         <GlobalErrorExperience />
+        <SpeedInsights />
       </body>
     </html>
   );

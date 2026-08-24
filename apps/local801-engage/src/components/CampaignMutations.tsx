@@ -171,13 +171,13 @@ export function CampaignEditForm({
   </form>;
 }
 
-export function CampaignArchiveButton({ campaignHandle, campaignName }: { campaignHandle: string; campaignName: string }) {
+export function CampaignDeleteButton({ campaignHandle, campaignName }: { campaignHandle: string; campaignName: string }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(null);
 
-  async function archive() {
-    if (!window.confirm(`Archive ${campaignName}? It will leave the active campaign views, and its open assignments will no longer appear in current work lists.`)) return;
+  async function remove() {
+    if (!window.confirm(`Delete “${campaignName}”? It will be removed from campaign views and current work lists. This cannot be undone in CAT, but its audit history will be retained.`)) return;
     setPending(true);
     setFeedback(null);
     try {
@@ -185,13 +185,13 @@ export function CampaignArchiveButton({ campaignHandle, campaignName }: { campai
       router.push("/campaigns");
       router.refresh();
     } catch (error) {
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "We couldn’t archive the campaign." });
+      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "We couldn’t delete the campaign." });
       setPending(false);
     }
   }
 
   return <div className="stack">
-    <div className="form-actions compact-actions"><button className="button secondary" type="button" onClick={archive} disabled={pending}>{pending ? "Archiving…" : "Archive campaign"}</button></div>
+    <div className="form-actions compact-actions"><button className="button danger" type="button" onClick={remove} disabled={pending}>{pending ? "Deleting…" : "Delete campaign"}</button></div>
     <FeedbackMessage feedback={feedback} />
   </div>;
 }

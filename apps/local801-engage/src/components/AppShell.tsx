@@ -14,10 +14,6 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
   const shell = shellForRole(user?.role ?? null);
   const groups = user ? navGroupsForRole(user.role) : [];
   const mobile = user ? mobileNavForRole(user.role) : [];
-  const environmentLabel = user?.authentication === "production"
-    ? "Production workspace · Microsoft Entra ID"
-    : "Private preview · synthetic data only";
-  const sessionLabel = user?.authentication === "production" ? "Production session" : "Synthetic preview";
 
   const sidebar = <aside className="sidebar" aria-label="Primary">
         <Link aria-label="Engaging Local 801 home" className="brand" href="/">
@@ -40,7 +36,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
             <Image alt="MAPE" className="topbar-mape-logo" height={771} sizes="48px" src="/brand/mape-logo.png" width={920} />
             <div className="topbar-copy">
               <strong className="topbar-title">Local 801 workspace</strong>
-              <div className="preview-status"><span aria-hidden="true">●</span>{sessionLabel} · {environmentLabel}</div>
+              {user?.authentication === "preview" ? <div className="preview-status"><span aria-hidden="true">●</span>Preview environment</div> : null}
             </div>
           </div>
           {user && shell.roleLabel ? (

@@ -48,7 +48,7 @@ test("generated employee references are permanent and independent of source iden
 test("Directory and New Hires expose the same core employee contact columns", () => {
   const directory = source("src/app/directory/page.tsx");
   const newHires = source("src/app/new-hires/page.tsx");
-  const core = ["Employee ID", "Person", "Hire Date", "Job Status", "Classification", "Department / Work Location", "Work Email", "Work Phone"];
+  const core = ["Person", "Hire Date", "Job Status", "Classification", "Department / Work Location", "Work Email", "Work Phone"];
   for (const label of core) {
     assert.equal(directory.includes(`\"${label}\"`), true, `Directory: ${label}`);
     assert.equal(newHires.includes(`\"${label}\"`), true, `New Hires: ${label}`);
@@ -57,6 +57,9 @@ test("Directory and New Hires expose the same core employee contact columns", ()
   assert.match(directory, /mailto:\$\{person\.workEmail\}/);
   assert.match(newHires, /mailto:\$\{person\.workEmail\}/);
   assert.match(newHires, /daysWithin/);
+  for (const view of [directory, newHires]) {
+    assert.doesNotMatch(view, /Employee ID|person\.employeeReference/);
+  }
 });
 
 test("Membership names the roster location breakdown by its Excel source field", () => {

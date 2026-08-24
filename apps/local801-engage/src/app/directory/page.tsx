@@ -100,12 +100,13 @@ export default async function DirectoryPage({ searchParams }: { searchParams: Se
         </div> : null}
 
         <div className="directory-desktop-results">
-          <DataTable caption="Directory results" headers={canOpenEmployee ? ["Employee ID", "Person", "Hire Date", "Job Status", "Classification", "Department / Work Location", "Work Email", "Work Phone", "Cell Phone", "Home Phone", "Home Email", "Action"] : ["Employee ID", "Person", "Hire Date", "Job Status", "Classification", "Department / Work Location", "Work Email", "Work Phone", "Cell Phone", "Home Phone", "Home Email"]}>
+          <DataTable caption="Directory results" headers={canOpenEmployee ? ["Person", "Hire Date", "Job Status", "Classification", "Department / Work Location", "Work Email", "Work Phone", "Cell Phone", "Home Phone", "Home Email", "Action"] : ["Person", "Hire Date", "Job Status", "Classification", "Department / Work Location", "Work Email", "Work Phone", "Cell Phone", "Home Phone", "Home Email"]}>
             {results.people.map((person) => <tr key={person.handle}>
-              <td><span className="data-mono">{person.employeeReference}</span></td>
               <td>
-                <strong>{canOpenEmployee ? <Link href={`/outreach/${person.handle}`}>{person.firstName} {person.lastName}</Link> : `${person.firstName} ${person.lastName}`}</strong>
-                {person.membershipStatus ? <div><StatusBadge>{membershipStatusLabel(person.membershipStatus)}</StatusBadge></div> : null}
+                <div className="person-membership-stack">
+                  <strong>{canOpenEmployee ? <Link href={`/outreach/${person.handle}`}>{person.firstName} {person.lastName}</Link> : `${person.firstName} ${person.lastName}`}</strong>
+                  {person.membershipStatus ? <StatusBadge>{membershipStatusLabel(person.membershipStatus)}</StatusBadge> : null}
+                </div>
               </td>
               <td>{person.hireDate || <span className="muted">Not recorded</span>}</td>
               <td>{person.jobStatus || <span className="muted">Not recorded</span>}</td>
@@ -127,7 +128,6 @@ export default async function DirectoryPage({ searchParams }: { searchParams: Se
               <h3>{canOpenEmployee ? <Link href={`/outreach/${person.handle}`}>{person.firstName} {person.lastName}</Link> : `${person.firstName} ${person.lastName}`}</h3>
               {person.membershipStatus ? <StatusBadge>{membershipStatusLabel(person.membershipStatus)}</StatusBadge> : null}
             </div>
-            <div className="muted data-mono">{person.employeeReference}</div>
             <div className="directory-person-work">
               <strong>{person.department || "Department not recorded"}</strong>
               <span>{person.classification || "Classification not recorded"}</span>

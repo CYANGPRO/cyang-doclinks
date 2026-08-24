@@ -724,8 +724,6 @@ body {
 
 @media (forced-colors: active) {
   .sidebar { border-right: 1px solid CanvasText; }
-  .brand-mark,
-  .sidebar-mape-logo,
   .priority-index,
   .expandable-chevron,
   .drawer-close { border: 1px solid CanvasText; }

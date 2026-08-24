@@ -157,10 +157,6 @@
 .sign-in-checklist li { align-items: start; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: var(--radius-md); display: grid; gap: 4px; grid-template-columns: minmax(150px, .65fr) minmax(0, 1.35fr); padding: 13px 14px; }
 .sign-in-checklist strong { color: var(--brand-navy-deep); }
 .sign-in-checklist span { color: var(--text-muted); }
-.role-access-list { display: grid; gap: 0; }
-.role-access-list > div { border-top: 1px solid var(--border); display: grid; gap: 8px; grid-template-columns: minmax(180px, .7fr) minmax(0, 1.3fr); padding: 12px 0; }
-.role-access-list > div:first-child { border-top: 0; padding-top: 0; }
-.role-access-list p { color: var(--text-muted); margin: 0; }
 .sign-in-help-list { display: grid; gap: 9px; margin: 0; padding-left: 20px; }
 
 .problem-dialog { background: #fff; border: 0; border-radius: 16px; box-shadow: 0 24px 70px rgb(7 32 58 / 28%); color: var(--text); margin: auto; max-height: min(88vh, 760px); max-width: min(620px, calc(100vw - 28px)); overflow: auto; padding: 0; width: 100%; }
@@ -184,9 +180,43 @@
 .global-error-card h1 { color: var(--brand-navy-deep, #082b49); margin: 6px 0 14px; }
 .global-error-card h2 { font-size: 1rem; margin-top: 24px; }
 
+/* Outreach queue cards keep status and every permitted contact option scannable. */
+.outreach-person-fields,
+.followup-person-fields {
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+}
+
+.outreach-person-fields > div,
+.followup-person-fields > div {
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  min-width: 0;
+  padding: 12px 13px;
+}
+
+.outreach-person-fields > div > strong,
+.followup-person-fields > div > strong {
+  color: var(--brand-navy-deep);
+  display: block;
+  font-size: .84rem;
+  margin-bottom: 5px;
+}
+
+.outreach-person-fields > div > div,
+.followup-person-fields > div > div {
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.outreach-card-actions,
+.followup-card-actions {
+  margin-top: 20px;
+}
+
 @media (max-width: 600px) {
-  .sign-in-checklist li,
-  .role-access-list > div { grid-template-columns: 1fr; }
+  .sign-in-checklist li { grid-template-columns: 1fr; }
   .problem-dialog .page-actions { display: grid; }
   .problem-dialog .button { width: 100%; }
 }

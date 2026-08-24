@@ -146,14 +146,25 @@ function syntheticPreviewUserId(role: PreviewUser["role"]) {
 }
 
 export async function resolveWorkspaceContext(
-  authenticatedUser: Pick<PreviewUser, "id" | "organizationId" | "email" | "role" | "authentication">,
+  authenticatedUser: Pick<PreviewUser, "id" | "organizationId" | "databaseOrganizationId" | "email" | "role" | "authentication">,
   query: DatabaseQuery = queryLocal801,
 ): Promise<WorkspaceContext> {
+  if (authenticatedUser.authentication === "production") {
+    if (!authenticatedUser.databaseOrganizationId
+      || !uuidPattern.test(authenticatedUser.databaseOrganizationId)
+      || !uuidPattern.test(authenticatedUser.id)) invalidWorkspace();
+    return {
+      organizationId: authenticatedUser.databaseOrganizationId,
+      organizationSlug: authenticatedUser.organizationId,
+      userId: authenticatedUser.id,
+      email: authenticatedUser.email,
+      role: authenticatedUser.role,
+    };
+  }
   if (getPiiProtectedReadMode() !== "legacy") {
     return resolveProtectedWorkspaceContext(authenticatedUser, query);
   }
-  const productionIdentity = authenticatedUser.authentication === "production";
-  const expectedUserId = productionIdentity ? authenticatedUser.id : syntheticPreviewUserId(authenticatedUser.role);
+  const expectedUserId = syntheticPreviewUserId(authenticatedUser.role);
   const rows = await query<WorkspaceContextRow>(
     `
       SELECT

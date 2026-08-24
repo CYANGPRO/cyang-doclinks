@@ -139,7 +139,21 @@ async function resolveAuthorizedPerson(context: WorkspaceContext, handleInput: u
   return row.id;
 }
 
-export type VisibleContactActions = { workEmail: string | null; phone: string | null };
+export type VisibleContactActions = {
+  cellPhone: string | null;
+  homePhone: string | null;
+  workPhone: string | null;
+  homeEmail: string | null;
+  workEmail: string | null;
+};
+
+export function preferredVisiblePhone(contacts: VisibleContactActions) {
+  return contacts.cellPhone ?? contacts.homePhone ?? contacts.workPhone;
+}
+
+export function preferredVisibleEmail(contacts: VisibleContactActions) {
+  return contacts.homeEmail ?? contacts.workEmail;
+}
 
 export async function getVisibleContactActions(
   context: WorkspaceContext,
@@ -154,14 +168,14 @@ export async function getVisibleContactActions(
   const personId = await resolveAuthorizedPerson(context, personHandle, query);
   const rows = await query<Record<string, unknown>>(`
     /* contact-correction:visible-contact-actions */
-    SELECT DISTINCT ON (contact.contact_type)
-      contact.id::text AS contact_method_id, contact.contact_type,
+    SELECT DISTINCT ON (contact.contact_type, contact.contact_label)
+      contact.id::text AS contact_method_id, contact.contact_type, contact.contact_label,
       protected.contact_value_encrypted_payload, protected.encryption_key_version, protected.encryption_format_version
     FROM local801.person_contact_methods contact
     JOIN local801.person_contact_method_pii protected
       ON protected.organization_id = contact.organization_id AND protected.contact_method_id = contact.id
     WHERE contact.organization_id = $1::uuid AND contact.person_id = $2::uuid
-      AND contact.contact_type IN ('work_email','phone') AND contact.is_primary = true AND contact.archived_at IS NULL
+      AND contact.contact_type IN ('work_email','personal_email','phone') AND contact.archived_at IS NULL
       AND (
         contact.visibility = 'authorized_directory'
         OR (contact.visibility = 'assigned_only' AND EXISTS (
@@ -171,18 +185,24 @@ export async function getVisibleContactActions(
             AND (assignment.primary_user_id = $3::uuid OR assignment.backup_user_id = $3::uuid)
         ))
       )
-    ORDER BY contact.contact_type, contact.created_at, contact.id
+    ORDER BY contact.contact_type, contact.contact_label, contact.is_primary DESC, contact.created_at DESC, contact.id DESC
   `, [context.organizationId, personId, context.userId]);
 
+  let cellPhone: string | null = null;
+  let homePhone: string | null = null;
+  let workPhone: string | null = null;
+  let homeEmail: string | null = null;
   let workEmail: string | null = null;
-  let phone: string | null = null;
   for (const row of rows) {
     const id = String(row.contact_method_id);
     const value = decryptPiiField(encrypted(row), { organizationId: context.organizationId, entity: "person-contact", recordId: id, field: "contact-value" }, config);
     if (row.contact_type === "work_email") workEmail = value;
-    if (row.contact_type === "phone") phone = value;
+    if (row.contact_type === "personal_email" && (row.contact_label === "home" || row.contact_label === null)) homeEmail = value;
+    if (row.contact_type === "phone" && row.contact_label === "cell") cellPhone = value;
+    if (row.contact_type === "phone" && row.contact_label === "home") homePhone = value;
+    if (row.contact_type === "phone" && (row.contact_label === "work" || row.contact_label === null)) workPhone = value;
   }
-  return { workEmail, phone };
+  return { cellPhone, homePhone, workPhone, homeEmail, workEmail };
 }
 
 export async function submitContactCorrection(
