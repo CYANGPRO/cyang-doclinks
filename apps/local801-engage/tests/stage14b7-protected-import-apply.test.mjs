@@ -142,17 +142,24 @@ test("identifier and primary work-email application reuses matching protected in
   assert.match(PROTECTED_IMPORT_APPLY_SQL, /AS contact_item\(item\)/);
   assert.match(PROTECTED_IMPORT_APPLY_SQL, /contact_item\.item ->> 'contactMethodId'/);
   assert.match(PROTECTED_IMPORT_APPLY_SQL, /contact_item\.item ->> 'contactType'/);
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /NULLIF\(contact_item\.item ->> 'contactLabel', ''\) AS contact_label/);
   assert.doesNotMatch(PROTECTED_IMPORT_APPLY_SQL, /jsonb_array_elements\(mutation\.contact_protected_json\) item/);
   assert.match(PROTECTED_IMPORT_APPLY_SQL, /resolved_identifiers AS MATERIALIZED/);
   assert.match(PROTECTED_IMPORT_APPLY_SQL, /existing_index\.index_hash = candidate\.index_hash/);
   assert.match(PROTECTED_IMPORT_APPLY_SQL, /existing_person_id IS DISTINCT FROM target_person_id/);
   assert.match(PROTECTED_IMPORT_APPLY_SQL, /resolved_contacts AS MATERIALIZED/);
   assert.match(PROTECTED_IMPORT_APPLY_SQL, /contact\.archived_at IS NULL/);
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /contact\.contact_label IS NOT DISTINCT FROM candidate\.contact_label/);
   assert.match(PROTECTED_IMPORT_APPLY_SQL, /archived_primary_contacts AS/);
   assert.match(PROTECTED_IMPORT_APPLY_SQL, /promoted_existing_contacts AS/);
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /candidate\.source_file_id, candidate\.contact_label\s+FROM resolved_contacts candidate/);
   assert.match(PROTECTED_IMPORT_APPLY_SQL, /counts\.contact_candidate_count = counts\.contact_applied_count/);
   assert.match(PROTECTED_IMPORT_APPLY_SQL, /counts\.inserted_contact_count = counts\.inserted_contact_pii_count/);
   assert.match(PROTECTED_IMPORT_APPLY_SQL, /counts\.inserted_contact_count = counts\.inserted_contact_index_count/);
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /count\(DISTINCT contact_index\.entity_id\)::int/);
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /FROM upserted_contact_indexes contact_index/);
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /JOIN inserted_contacts inserted_contact ON inserted_contact\.id = contact_index\.entity_id/);
+  assert.doesNotMatch(PROTECTED_IMPORT_APPLY_SQL, /FROM inserted_contact_indexes/);
 });
 
 test("contact reconciliation mismatches fail the application-level atomic guard", () => {

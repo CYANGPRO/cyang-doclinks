@@ -583,6 +583,7 @@ export const PROTECTED_IMPORT_APPLY_SQL = `
     SELECT mutation.target_person_id, batch.source_file_id,
       (contact_item.item ->> 'contactMethodId')::uuid AS staged_id,
       contact_item.item ->> 'contactType' AS contact_type,
+      NULLIF(contact_item.item ->> 'contactLabel', '') AS contact_label,
       contact_item.item ->> 'encryptedPayload' AS encrypted_payload,
       contact_item.item ->> 'encryptionKeyVersion' AS encryption_key_version,
       (contact_item.item ->> 'encryptionFormatVersion')::integer AS encryption_format_version,
@@ -648,7 +649,7 @@ export const PROTECTED_IMPORT_APPLY_SQL = `
       CASE WHEN candidate.contact_type IN ('work_email','personal_email')
         THEN 'protected-' || candidate.staged_id::text || '@invalid.local'
         ELSE 'protected:' || candidate.staged_id::text END, candidate.is_primary,
-      candidate.visibility, now(), candidate.source_file_id
+      candidate.visibility, now(), candidate.source_file_id, candidate.contact_label
     FROM resolved_contacts candidate
     CROSS JOIN (SELECT count(*) FROM archived_primary_contacts) archive_barrier
     CROSS JOIN (SELECT count(*) FROM promoted_existing_contacts) promote_barrier
@@ -688,7 +689,7 @@ export const PROTECTED_IMPORT_APPLY_SQL = `
     )
     ON CONFLICT (organization_id, entity_type, entity_id, index_domain, index_key_version)
       DO UPDATE SET index_hash = excluded.index_hash
-    RETURNING id
+    RETURNING entity_id
   ), membership_event_rows AS MATERIALIZED (
     SELECT mutation.target_person_id,
       CASE
@@ -771,7 +772,10 @@ export const PROTECTED_IMPORT_APPLY_SQL = `
         + (SELECT count(*)::int FROM inserted_contacts)) AS contact_applied_count,
       (SELECT count(*)::int FROM inserted_contacts) AS inserted_contact_count,
       (SELECT count(*)::int FROM inserted_contact_pii) AS inserted_contact_pii_count,
-      (SELECT count(*)::int FROM inserted_contact_indexes) AS inserted_contact_index_count,
+      (SELECT count(DISTINCT contact_index.entity_id)::int
+        FROM upserted_contact_indexes contact_index
+        JOIN inserted_contacts inserted_contact ON inserted_contact.id = contact_index.entity_id
+      ) AS inserted_contact_index_count,
       (SELECT count(*)::int FROM inserted_snapshot) AS snapshot_count,
       (SELECT count(*)::int FROM inserted_snapshot_rows) AS snapshot_row_count
   ), write_guard AS MATERIALIZED (
