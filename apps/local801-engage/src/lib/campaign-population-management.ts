@@ -122,11 +122,11 @@ export async function getCampaignPopulationCandidates(
       WHERE campaign.organization_id = $1::uuid
         AND campaign.archived_at IS NULL
         AND campaign.status = 'draft'
-        AND encode(digest('campaign:' || campaign.organization_id::text || ':' || campaign.id::text, 'sha256'), 'hex') = $2::text
+        AND encode(public.digest('campaign:' || campaign.organization_id::text || ':' || campaign.id::text, 'sha256'), 'hex') = $2::text
       LIMIT 1
     )
     SELECT
-      encode(digest($1::text || ':' || person.id::text, 'sha256'), 'hex') AS person_handle,
+      encode(public.digest($1::text || ':' || person.id::text, 'sha256'), 'hex') AS person_handle,
       person.preferred_name,
       person.first_name,
       person.last_name,
@@ -196,8 +196,8 @@ async function resolveAddTarget(
     WHERE campaign.organization_id = $1::uuid
       AND campaign.archived_at IS NULL
       AND campaign.status = 'draft'
-      AND encode(digest('campaign:' || campaign.organization_id::text || ':' || campaign.id::text, 'sha256'), 'hex') = $2::text
-      AND encode(digest($1::text || ':' || person.id::text, 'sha256'), 'hex') = $3::text
+      AND encode(public.digest('campaign:' || campaign.organization_id::text || ':' || campaign.id::text, 'sha256'), 'hex') = $2::text
+      AND encode(public.digest($1::text || ':' || person.id::text, 'sha256'), 'hex') = $3::text
     LIMIT 1
   `, [context.organizationId, campaignHandle, personHandle]);
   if (!row) {
@@ -248,8 +248,8 @@ async function resolveRemoveTarget(
     WHERE campaign.organization_id = $1::uuid
       AND campaign.archived_at IS NULL
       AND campaign.status = 'draft'
-      AND encode(digest('campaign:' || campaign.organization_id::text || ':' || campaign.id::text, 'sha256'), 'hex') = $2::text
-      AND encode(digest($1::text || ':' || person.id::text, 'sha256'), 'hex') = $3::text
+      AND encode(public.digest('campaign:' || campaign.organization_id::text || ':' || campaign.id::text, 'sha256'), 'hex') = $2::text
+      AND encode(public.digest($1::text || ':' || person.id::text, 'sha256'), 'hex') = $3::text
     LIMIT 1
   `, [context.organizationId, campaignHandle, personHandle]);
   if (!row) {

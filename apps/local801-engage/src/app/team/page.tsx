@@ -5,7 +5,8 @@ import { ProvisionTeamMemberForm, TeamMemberControls } from "@/components/TeamAc
 import { can, roleLabels } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
 import { hydrateTeamAccessPageFromProtectedPii, isPiiProtectedReadEnabled } from "@/lib/pii-protected-read";
-import { getTeamAccessPage } from "@/lib/team-access";
+import { getTeamAccessPage, teamReadSafeCode } from "@/lib/team-access";
+import { writeSecuritySignal } from "@/lib/security-signal";
 import { resolveWorkspaceContext, type WorkspaceContext } from "@/lib/workspace-context";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +14,15 @@ export const dynamic = "force-dynamic";
 function displayTimestamp(value: string | null) {
   if (!value) return "Not yet";
   return value.replace("T", " ").replace(/\.\d{3}Z$/, " UTC");
+}
+
+function reportTeamReadFailure(operation: "context" | "list" | "protected_pii", error: unknown) {
+  writeSecuritySignal("error", "authorization.denied", {
+    component: "team_access",
+    operation,
+    outcome: "error",
+    safeCode: teamReadSafeCode(error),
+  });
 }
 
 export default async function TeamPage() {
@@ -25,11 +35,24 @@ export default async function TeamPage() {
   let protectedReadEnabled = false;
   try {
     context = await resolveWorkspaceContext(user);
-    const legacyPage = await getTeamAccessPage(context);
-    page = await hydrateTeamAccessPageFromProtectedPii(context.organizationId, legacyPage);
-    protectedReadEnabled = isPiiProtectedReadEnabled();
-  } catch {
-    // The administration surface fails closed and does not expose database/auth/PII internals.
+  } catch (error) {
+    reportTeamReadFailure("context", error);
+  }
+  if (context) {
+    try {
+      page = await getTeamAccessPage(context);
+    } catch (error) {
+      reportTeamReadFailure("list", error);
+    }
+  }
+  if (context && page) {
+    try {
+      page = await hydrateTeamAccessPageFromProtectedPii(context.organizationId, page);
+      protectedReadEnabled = isPiiProtectedReadEnabled();
+    } catch (error) {
+      page = null;
+      reportTeamReadFailure("protected_pii", error);
+    }
   }
 
   return (

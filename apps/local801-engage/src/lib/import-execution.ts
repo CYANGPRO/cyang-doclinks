@@ -65,7 +65,7 @@ export const IMPORT_EXECUTION_SQL = `
   ${IMPORT_REVIEW_TOKEN_CTE},
   set_hashes AS (
     SELECT category, count(*)::int AS set_count,
-      encode(digest(COALESCE(string_agg(canonical_token, ':' ORDER BY canonical_token), ''), 'sha256'), 'hex') AS set_hash
+      encode(public.digest(COALESCE(string_agg(canonical_token, ':' ORDER BY canonical_token), ''), 'sha256'), 'hex') AS set_hash
     FROM review_tokens
     WHERE category IN ('proposed_new', 'existing_with_changes')
     GROUP BY category
@@ -78,13 +78,13 @@ export const IMPORT_EXECUTION_SQL = `
       count(*) FILTER (WHERE category = 'proposed_new')::int AS proposed_new,
       count(*) FILTER (WHERE category = 'needs_attention')::int AS needs_attention,
       count(*) FILTER (WHERE category = 'rejected')::int AS rejected,
-      COALESCE((SELECT set_hash FROM set_hashes WHERE category = 'proposed_new'), encode(digest('', 'sha256'), 'hex')) AS proposed_new_set_hash,
-      COALESCE((SELECT set_hash FROM set_hashes WHERE category = 'existing_with_changes'), encode(digest('', 'sha256'), 'hex')) AS existing_changes_set_hash
+      COALESCE((SELECT set_hash FROM set_hashes WHERE category = 'proposed_new'), encode(public.digest('', 'sha256'), 'hex')) AS proposed_new_set_hash,
+      COALESCE((SELECT set_hash FROM set_hashes WHERE category = 'existing_with_changes'), encode(public.digest('', 'sha256'), 'hex')) AS existing_changes_set_hash
     FROM categorized
   ),
   row_fingerprint AS (
-    SELECT encode(digest(COALESCE(string_agg(
-      encode(digest(concat_ws(chr(31), file.sha256, sheet.sheet_name, row.source_row_number::text, row.row_hash), 'sha256'), 'hex'),
+    SELECT encode(public.digest(COALESCE(string_agg(
+      encode(public.digest(concat_ws(chr(31), file.sha256, sheet.sheet_name, row.source_row_number::text, row.row_hash), 'sha256'), 'hex'),
       ':' ORDER BY file.sha256, sheet.sheet_name, row.source_row_number, row.id
     ), ''), 'sha256'), 'hex') AS row_set_hash
     FROM local801.import_batches batch
@@ -197,7 +197,7 @@ export const IMPORT_EXECUTION_SQL = `
   ),
   fingerprint_value AS (
     SELECT normalized.*,
-      encode(digest(
+      encode(public.digest(
         '{"batchId":' || to_json(normalized.id::text)::text
         || ',"counts":[' || normalized.fingerprint_total::text
           || ',' || normalized.unchanged_existing::text

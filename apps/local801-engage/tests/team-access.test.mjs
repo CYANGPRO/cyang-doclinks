@@ -8,6 +8,7 @@ import {
   provisionTeamMember,
   revokeTeamMemberSessions,
   setTeamMemberActive,
+  teamReadSafeCode,
   TeamAccessError,
 } from "../src/lib/team-access.ts";
 
@@ -34,6 +35,14 @@ function deps(overrides = {}) {
   };
 }
 
+test("Team read diagnostics expose only allowlisted non-PII failure codes", () => {
+  assert.equal(teamReadSafeCode({ name: "PiiProtectionError", code: "AUTHENTICATION_FAILED", email: "hidden@example.test" }), "AUTHENTICATION_FAILED");
+  assert.equal(teamReadSafeCode({ name: "WorkspaceContextError" }), "WORKSPACE_CONTEXT_UNAVAILABLE");
+  assert.equal(teamReadSafeCode({ code: "42P01", detail: "hidden@example.test" }), "DATABASE_42P01");
+  assert.equal(teamReadSafeCode({ code: "hidden@example.test" }), "TEAM_ACCESS_UNAVAILABLE");
+  assert.equal(teamReadSafeCode(new Error("hidden@example.test")), "TEAM_ACCESS_UNAVAILABLE");
+});
+
 test("Team page exposes opaque handles and bounded authorization metadata, not provider subjects or session versions", async () => {
   let sqlText = "";
   const page = await getTeamAccessPage(context(), async (sql, parameters) => {
@@ -55,7 +64,7 @@ test("Team page exposes opaque handles and bounded authorization metadata, not p
   assert.equal(page.members[0].active, true);
   assert.equal(page.members[0].identityLinked, false);
   assert.equal("userId" in page.members[0], false);
-  assert.match(sqlText, /digest\('user:' \|\| \$1::text/);
+  assert.match(sqlText, /public\.digest\('user:' \|\| \$1::text/);
   assert.match(sqlText, /LIMIT 500/);
   assert.doesNotMatch(sqlText, /provider_subject|auth_session_version/);
 });
@@ -180,6 +189,8 @@ test("Team APIs are same-origin, bounded, production-capable, and server-authori
   assert.match(updateRoute, /setTeamMemberActive/);
   assert.match(updateRoute, /revokeTeamMemberSessions/);
   assert.match(page, /Identity and MFA are supplied by the configured production OIDC provider/);
+  assert.match(page, /writeSecuritySignal\("error", "authorization\.denied"/);
+  assert.match(page, /reportTeamReadFailure\("protected_pii", error\)/);
   assert.match(page, /System Owner required/);
   assert.match(controls, /Revoke all sessions/);
 });

@@ -152,7 +152,7 @@ async function resolvePersonId(context: WorkspaceContext, personHandleInput: unk
     FROM local801.people person
     WHERE person.organization_id = $1::uuid
       AND person.archived_at IS NULL
-      AND encode(digest($1::text || ':' || person.id::text, 'sha256'), 'hex') = $3::text
+      AND encode(public.digest($1::text || ':' || person.id::text, 'sha256'), 'hex') = $3::text
       AND (
         $4::text IN ('system_owner','local_admin','cat_admin')
         OR EXISTS (
@@ -190,7 +190,7 @@ async function resolveAssignment(
       AND assignment.person_id = $2::uuid
       AND assignment.archived_at IS NULL
       AND assignment.status = 'open'
-      AND encode(digest('assignment:' || $1::text || ':' || assignment.id::text, 'sha256'), 'hex') = $4::text
+      AND encode(public.digest('assignment:' || $1::text || ':' || assignment.id::text, 'sha256'), 'hex') = $4::text
       AND (
         $5::text IN ('system_owner','local_admin','cat_admin')
         OR assignment.primary_user_id = $3::uuid
@@ -219,7 +219,7 @@ async function resolveAssigneeId(
     WHERE app_user.organization_id = $1::uuid
       AND app_user.deactivated_at IS NULL
       AND role.code IN ('system_owner','local_admin','cat_admin','cat_lead','cat_member')
-      AND encode(digest('user:' || $1::text || ':' || app_user.id::text, 'sha256'), 'hex') = $3::text
+      AND encode(public.digest('user:' || $1::text || ':' || app_user.id::text, 'sha256'), 'hex') = $3::text
       AND ($4::text <> 'cat_member' OR app_user.id = $2::uuid)
     LIMIT 1
   `, [context.organizationId, context.userId, assigneeHandle, context.role]);
@@ -242,7 +242,7 @@ async function resolveEngagementEventId(
     WHERE event.organization_id = $1::uuid
       AND event.person_id = $2::uuid
       AND event.voided_at IS NULL
-      AND encode(digest('engagement:' || $1::text || ':' || event.id::text, 'sha256'), 'hex') = $3::text
+      AND encode(public.digest('engagement:' || $1::text || ':' || event.id::text, 'sha256'), 'hex') = $3::text
     LIMIT 1
   `, [context.organizationId, personId, handle]);
   if (!row?.id) throw new EngagementWriteError("INVALID_ENGAGEMENT", "Engagement context is no longer available.", 409);
@@ -582,7 +582,7 @@ export async function completeOutreachFollowup(
       AND item.person_id = $2::uuid
       AND item.status = 'open'
       AND item.completed_at IS NULL
-      AND encode(digest('followup:' || $1::text || ':' || item.id::text, 'sha256'), 'hex') = $3::text
+      AND encode(public.digest('followup:' || $1::text || ':' || item.id::text, 'sha256'), 'hex') = $3::text
     LIMIT 1
   `, [context.organizationId, personId, followupHandle]);
   if (!followup?.id) throw new EngagementWriteError("FOLLOWUP_NOT_FOUND", "Follow-up is no longer open.", 409);

@@ -414,7 +414,7 @@ export async function getOutreachQueue(
         END AS priority_rank,
         COALESCE(extract(epoch FROM next_followup_at), extract(epoch FROM assignment_due_at), 32503680000)::double precision AS sort_due,
         (-COALESCE(extract(epoch FROM latest_engagement_at), 0))::double precision AS sort_engagement,
-        encode(digest($1::text || ':' || person_id::text, 'sha256'), 'hex') AS person_handle
+        encode(public.digest($1::text || ':' || person_id::text, 'sha256'), 'hex') AS person_handle
       FROM signals
     ), focused AS (
       SELECT *
@@ -505,7 +505,7 @@ export async function getOutreachWorkspace(
     /* outreach:employee-workspace */
     SELECT
       person.id AS person_id,
-      encode(digest($1::text || ':' || person.id::text, 'sha256'), 'hex') AS person_handle,
+      encode(public.digest($1::text || ':' || person.id::text, 'sha256'), 'hex') AS person_handle,
       person.preferred_name,
       person.first_name,
       person.last_name,
@@ -564,7 +564,7 @@ export async function getOutreachWorkspace(
     ) assignments ON true
     WHERE person.organization_id = $1::uuid
       AND person.archived_at IS NULL
-      AND encode(digest($1::text || ':' || person.id::text, 'sha256'), 'hex') = $3::text
+      AND encode(public.digest($1::text || ':' || person.id::text, 'sha256'), 'hex') = $3::text
       AND (
         $4::boolean
         OR EXISTS (

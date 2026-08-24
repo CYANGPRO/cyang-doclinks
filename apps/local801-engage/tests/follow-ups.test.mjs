@@ -26,8 +26,8 @@ test("administrators can select all authorized follow-ups", () => {
 });
 
 test("employee and follow-up database UUIDs are converted to opaque handles", () => {
-  assert.match(service, /digest\(\$1::text \|\| ':' \|\| followup\.person_id::text, 'sha256'\)/);
-  assert.match(service, /digest\('followup:' \|\| \$1::text \|\| ':' \|\| followup\.id::text, 'sha256'\)/);
+  assert.match(service, /public\.digest\(\$1::text \|\| ':' \|\| followup\.person_id::text, 'sha256'\)/);
+  assert.match(service, /public\.digest\('followup:' \|\| \$1::text \|\| ':' \|\| followup\.id::text, 'sha256'\)/);
   assert.doesNotMatch(page, /person_id|followup_id|assignment_id|engagement_event_id/);
 });
 

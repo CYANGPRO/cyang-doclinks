@@ -143,7 +143,7 @@ export async function ensureImportProcessingJob(
       SELECT claimed.organization_id, batch.uploaded_by, 'import.processing_started',
         'import_batch', claimed.import_batch_id,
         jsonb_build_object('processingVersion', $3), prior.event_hash,
-        encode(digest(concat_ws('|', claimed.organization_id::text,
+        encode(public.digest(concat_ws('|', claimed.organization_id::text,
           claimed.import_batch_id::text, 'import.processing_started', $3), 'sha256'), 'hex')
       FROM claimed
       JOIN local801.import_batches batch
@@ -534,7 +534,7 @@ export async function completeImportProcessing(
         (organization_id, actor_user_id, event_type, subject_type, subject_id, payload, previous_hash, event_hash)
       SELECT completed_batch.organization_id, completed_batch.uploaded_by, 'import.processing_ready',
         'import_batch', completed_batch.id, jsonb_build_object('processingVersion', $3), prior.event_hash,
-        encode(digest(concat_ws('|', completed_batch.organization_id::text,
+        encode(public.digest(concat_ws('|', completed_batch.organization_id::text,
           completed_batch.id::text, 'import.processing_ready', $3), 'sha256'), 'hex')
       FROM completed_batch LEFT JOIN prior ON true RETURNING id
     )
@@ -580,7 +580,7 @@ export async function failImportProcessing(
         (organization_id, actor_user_id, event_type, subject_type, subject_id, payload, previous_hash, event_hash)
       SELECT failed_batch.organization_id, failed_batch.uploaded_by, 'import.processing_failed',
         'import_batch', failed_batch.id, jsonb_build_object('safeErrorCode', $5), prior.event_hash,
-        encode(digest(concat_ws('|', failed_batch.organization_id::text,
+        encode(public.digest(concat_ws('|', failed_batch.organization_id::text,
           failed_batch.id::text, 'import.processing_failed', $5), 'sha256'), 'hex')
       FROM failed_batch LEFT JOIN prior ON true RETURNING id
     ) SELECT failed_batch.id FROM failed_batch JOIN audited ON true

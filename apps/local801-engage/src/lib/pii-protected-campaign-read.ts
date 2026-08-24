@@ -175,7 +175,7 @@ export async function hydrateCampaignDetailFromProtectedPii(
         WHERE campaign.organization_id = $1::uuid
           AND campaign.archived_at IS NULL
           AND campaign.status <> 'archived'
-          AND encode(digest('campaign:' || campaign.organization_id::text || ':' || campaign.id::text, 'sha256'), 'hex') = $2::text
+          AND encode(public.digest('campaign:' || campaign.organization_id::text || ':' || campaign.id::text, 'sha256'), 'hex') = $2::text
         LIMIT 1
       ), latest AS (
         SELECT DISTINCT ON (assignment.person_id)

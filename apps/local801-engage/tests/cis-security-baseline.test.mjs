@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
+
+const libDirectory = fileURLToPath(new URL("../src/lib/", import.meta.url));
 
 test("secure configuration explicitly disables production browser source maps", async () => {
   const source = await readFile(new URL("../next.config.ts", import.meta.url), "utf8");
@@ -39,4 +43,13 @@ test("audit migration prevents update and delete while retaining organization sc
   assert.match(source, /before update or delete on local801\.audit_events/i);
   assert.match(source, /raise exception/i);
   assert.match(source, /organization_id/i);
+});
+
+test("runtime SQL schema-qualifies pgcrypto digest for the restricted application role", async () => {
+  const files = await readdir(libDirectory, { recursive: true, withFileTypes: true });
+  const typescriptFiles = files.filter((entry) => entry.isFile() && entry.name.endsWith(".ts"));
+  for (const entry of typescriptFiles) {
+    const source = await readFile(join(entry.parentPath, entry.name), "utf8");
+    assert.doesNotMatch(source, /(?<![.\w])digest\(/, `${entry.name} contains an unqualified pgcrypto digest call`);
+  }
 });

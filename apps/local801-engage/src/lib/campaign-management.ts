@@ -185,7 +185,7 @@ async function resolveCampaign(context: WorkspaceContext, campaignHandleInput: u
     WHERE campaign.organization_id = $1::uuid
       AND campaign.archived_at IS NULL
       AND campaign.status <> 'archived'
-      AND encode(digest('campaign:' || campaign.organization_id::text || ':' || campaign.id::text, 'sha256'), 'hex') = $2::text
+      AND encode(public.digest('campaign:' || campaign.organization_id::text || ':' || campaign.id::text, 'sha256'), 'hex') = $2::text
     LIMIT 1
   `, [context.organizationId, handle]);
   if (!row) throw new CampaignMutationError("CAMPAIGN_NOT_FOUND", "The campaign is no longer available.", 409);
@@ -227,8 +227,8 @@ async function resolveParticipant(
     WHERE campaign.organization_id = $1::uuid
       AND campaign.archived_at IS NULL
       AND campaign.status <> 'archived'
-      AND encode(digest('campaign:' || campaign.organization_id::text || ':' || campaign.id::text, 'sha256'), 'hex') = $2::text
-      AND encode(digest($1::text || ':' || person.id::text, 'sha256'), 'hex') = $3::text
+      AND encode(public.digest('campaign:' || campaign.organization_id::text || ':' || campaign.id::text, 'sha256'), 'hex') = $2::text
+      AND encode(public.digest($1::text || ':' || person.id::text, 'sha256'), 'hex') = $3::text
     LIMIT 1
   `, [context.organizationId, campaignHandle, personHandle]);
   if (!row) throw new CampaignMutationError("PARTICIPANT_NOT_FOUND", "The campaign participant is no longer available.", 409);
@@ -243,7 +243,7 @@ async function resolveAssignee(context: WorkspaceContext, assigneeHandleInput: u
     FROM local801.users candidate
     WHERE candidate.organization_id = $1::uuid
       AND candidate.deactivated_at IS NULL
-      AND encode(digest('user:' || $1::text || ':' || candidate.id::text, 'sha256'), 'hex') = $2::text
+      AND encode(public.digest('user:' || $1::text || ':' || candidate.id::text, 'sha256'), 'hex') = $2::text
       AND EXISTS (
         SELECT 1
         FROM local801.workspace_user_roles user_role
@@ -267,7 +267,7 @@ export async function getCampaignManagementOptions(
   const rows = await query<AssigneeOptionRow>(`
     /* campaign-management:assignee-options */
     SELECT
-      encode(digest('user:' || $1::text || ':' || app_user.id::text, 'sha256'), 'hex') AS handle,
+      encode(public.digest('user:' || $1::text || ':' || app_user.id::text, 'sha256'), 'hex') AS handle,
       app_user.display_name,
       string_agg(DISTINCT role.code, ', ' ORDER BY role.code) AS role_codes
     FROM local801.users app_user

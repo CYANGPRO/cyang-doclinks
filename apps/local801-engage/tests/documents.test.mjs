@@ -70,7 +70,7 @@ test("document metadata query is tenant scoped, visibility scoped, and returns o
   assert.match(sqlText, /document\.visibility = ANY\(\$2::text\[\]\)/);
   assert.match(sqlText, /document\.archived_at IS NULL/);
   assert.match(sqlText, /creator\.organization_id = document\.organization_id/);
-  assert.match(sqlText, /digest\(document\.organization_id::text \|\| ':' \|\| document\.id::text, 'sha256'\)/);
+  assert.match(sqlText, /public\.digest\(document\.organization_id::text \|\| ':' \|\| document\.id::text, 'sha256'\)/);
   assert.doesNotMatch(sqlText, /storage_key|encryption_key_version|storage_cleanup_pending_at/);
   assert.equal(result.documents.length, 1);
   assert.equal(result.documents[0].downloadHandle, handle);
@@ -115,7 +115,7 @@ test("document download handle resolution is tenant and visibility scoped and do
   assert.match(sqlText, /document\.organization_id = \$1::uuid/);
   assert.match(sqlText, /document\.visibility = ANY\(\$2::text\[\]\)/);
   assert.match(sqlText, /document\.archived_at IS NULL/);
-  assert.match(sqlText, /digest\(document\.organization_id::text \|\| ':' \|\| document\.id::text, 'sha256'\)/);
+  assert.match(sqlText, /public\.digest\(document\.organization_id::text \|\| ':' \|\| document\.id::text, 'sha256'\)/);
   assert.match(sqlText, /= \$3::text/);
 });
 

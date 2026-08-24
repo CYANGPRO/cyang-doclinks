@@ -10,6 +10,13 @@ const HANDLE_RE = /^[0-9a-f]{64}$/i;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const assignableRoles: Role[] = ["system_owner", "local_admin", "membership_data_manager", "cat_admin", "cat_lead", "cat_member", "report_viewer"];
 const lowerRoles: Role[] = ["membership_data_manager", "cat_admin", "cat_lead", "cat_member", "report_viewer"];
+const safeTeamReadCodes = new Set([
+  "ACTIVE_KEY_INVALID", "AUTHENTICATION_FAILED", "BACKFILL_GATE_ON", "BACKFILL_INCOMPLETE",
+  "COMPANION_MISSING", "CUTOVER_ALREADY_STARTED", "CUTOVER_INCOMPLETE", "DUAL_WRITE_OFF",
+  "DUAL_WRITE_ON", "DUPLICATE_COMPANION", "ENVELOPE_INVALID", "INVALID_CONTEXT", "INVALID_KEY",
+  "KEY_NOT_FOUND", "KEYRING_INVALID", "KEYRING_MISSING", "KEY_VERSION_INVALID", "NOT_PREVIEW",
+  "PREVIEW_BOUND_EXCEEDED", "STATE_MISSING", "WRITE_MODE_INVALID",
+]);
 
 export type TeamMember = {
   handle: string;
@@ -55,6 +62,17 @@ export class TeamAccessError extends Error {
     this.code = code;
     this.status = status;
   }
+}
+
+/** Returns only an allowlisted diagnostic code; never an error message or database value. */
+export function teamReadSafeCode(error: unknown) {
+  if (!error || typeof error !== "object") return "TEAM_ACCESS_UNAVAILABLE";
+  const source = error as Record<string, unknown>;
+  if (source.name === "WorkspaceContextError") return "WORKSPACE_CONTEXT_UNAVAILABLE";
+  const code = typeof source.code === "string" ? source.code : "";
+  if (safeTeamReadCodes.has(code)) return code;
+  if (/^[0-9A-Z]{5}$/.test(code)) return `DATABASE_${code}`;
+  return "TEAM_ACCESS_UNAVAILABLE";
 }
 
 function asRole(value: string): Role | null {
@@ -118,7 +136,7 @@ async function resolveTarget(context: WorkspaceContext, handleInput: unknown, qu
     JOIN local801.workspace_roles role
       ON role.id = user_role.role_id AND role.organization_id = app_user.organization_id
     WHERE app_user.organization_id = $1::uuid
-      AND encode(digest('user:' || $1::text || ':' || app_user.id::text, 'sha256'), 'hex') = $2::text
+      AND encode(public.digest('user:' || $1::text || ':' || app_user.id::text, 'sha256'), 'hex') = $2::text
     LIMIT 1
   `, [context.organizationId, handle]);
   if (!row || !asRole(row.role)) throw new TeamAccessError("USER_NOT_FOUND", "The team member is no longer available.", 409);
@@ -148,7 +166,7 @@ export async function getTeamAccessPage(context: WorkspaceContext, query: Databa
   requireManager(context);
   const rows = await query<TeamRow>(`
     /* team-access:list */
-    SELECT encode(digest('user:' || $1::text || ':' || app_user.id::text, 'sha256'), 'hex') AS handle,
+    SELECT encode(public.digest('user:' || $1::text || ':' || app_user.id::text, 'sha256'), 'hex') AS handle,
       app_user.display_name, app_user.email, role.code AS role, app_user.deactivated_at,
       app_user.invited_at, app_user.last_authenticated_at, app_user.last_mfa_at,
       EXISTS (

@@ -247,7 +247,7 @@ export async function getFollowupQueue(
         assignee.display_name AS assigned_to_name,
         CASE
           WHEN assignee.id IS NULL THEN NULL
-          ELSE encode(digest('user:' || $1::text || ':' || assignee.id::text, 'sha256'), 'hex')
+          ELSE encode(public.digest('user:' || $1::text || ':' || assignee.id::text, 'sha256'), 'hex')
         END AS assigned_to_handle,
         edit_options.assignee_options,
         campaign.name AS campaign_name,
@@ -268,8 +268,8 @@ export async function getFollowupQueue(
             THEN -extract(epoch FROM followup.completed_at)::double precision
           ELSE extract(epoch FROM followup.due_at)::double precision
         END AS sort_time,
-        encode(digest($1::text || ':' || followup.person_id::text, 'sha256'), 'hex') AS employee_handle,
-        encode(digest('followup:' || $1::text || ':' || followup.id::text, 'sha256'), 'hex') AS followup_handle
+        encode(public.digest($1::text || ':' || followup.person_id::text, 'sha256'), 'hex') AS employee_handle,
+        encode(public.digest('followup:' || $1::text || ':' || followup.id::text, 'sha256'), 'hex') AS followup_handle
       FROM local801.engagement_followups followup
       JOIN local801.people person
         ON person.id = followup.person_id
@@ -283,7 +283,7 @@ export async function getFollowupQueue(
         SELECT COALESCE(
           jsonb_agg(
             jsonb_build_object(
-              'handle', encode(digest('user:' || $1::text || ':' || candidate.id::text, 'sha256'), 'hex'),
+              'handle', encode(public.digest('user:' || $1::text || ':' || candidate.id::text, 'sha256'), 'hex'),
               'label', candidate.display_name
             )
             ORDER BY candidate.display_name, candidate.id

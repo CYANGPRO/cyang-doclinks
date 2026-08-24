@@ -23,7 +23,7 @@ test("employee action person scope is hardened to open assignments", () => {
 });
 
 test("browser-facing employee identifiers are opaque SHA-256 handles", () => {
-  assert.match(service, /encode\(digest\(\$1::text \|\| ':' \|\| person_id::text, 'sha256'\), 'hex'\) AS person_handle/);
+  assert.match(service, /encode\(public\.digest\(\$1::text \|\| ':' \|\| person_id::text, 'sha256'\), 'hex'\) AS person_handle/);
   assert.match(service, /const HANDLE_RE = \/\^\[0-9a-f\]\{64\}\$\/i/);
   assert.match(queuePage, /href=\{`\/outreach\/\$\{person\.handle\}`\}/);
 });

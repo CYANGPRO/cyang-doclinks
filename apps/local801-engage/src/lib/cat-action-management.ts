@@ -142,7 +142,7 @@ async function resolveAction(context: WorkspaceContext, actionHandleInput: unkno
     WHERE action.organization_id = $1::uuid
       AND action.archived_at IS NULL
       AND action.status <> 'archived'
-      AND encode(digest('cat-action:' || action.organization_id::text || ':' || action.id::text, 'sha256'), 'hex') = $2::text
+      AND encode(public.digest('cat-action:' || action.organization_id::text || ':' || action.id::text, 'sha256'), 'hex') = $2::text
     LIMIT 1
   `, [context.organizationId, handle]);
   if (!row) throw new CatActionMutationError("ACTION_NOT_FOUND", "The CAT action is no longer available.", 409);
@@ -169,8 +169,8 @@ async function resolveTask(
     WHERE task.organization_id = $1::uuid
       AND action.archived_at IS NULL
       AND action.status <> 'archived'
-      AND encode(digest('cat-action:' || action.organization_id::text || ':' || action.id::text, 'sha256'), 'hex') = $2::text
-      AND encode(digest('cat-action-task:' || task.organization_id::text || ':' || task.id::text, 'sha256'), 'hex') = $3::text
+      AND encode(public.digest('cat-action:' || action.organization_id::text || ':' || action.id::text, 'sha256'), 'hex') = $2::text
+      AND encode(public.digest('cat-action-task:' || task.organization_id::text || ':' || task.id::text, 'sha256'), 'hex') = $3::text
     LIMIT 1
   `, [context.organizationId, actionHandle, taskHandle]);
   if (!row) throw new CatActionMutationError("TASK_NOT_FOUND", "The CAT task is no longer available.", 409);
@@ -184,7 +184,7 @@ async function resolveCycle(context: WorkspaceContext, cycleHandleInput: unknown
     SELECT cycle.id
     FROM local801.contract_cycles cycle
     WHERE cycle.organization_id = $1::uuid
-      AND encode(digest('contract-cycle:' || cycle.organization_id::text || ':' || cycle.id::text, 'sha256'), 'hex') = $2::text
+      AND encode(public.digest('contract-cycle:' || cycle.organization_id::text || ':' || cycle.id::text, 'sha256'), 'hex') = $2::text
     LIMIT 1
   `, [context.organizationId, handle]);
   if (!row) throw new CatActionMutationError("INVALID_CYCLE", "The selected contract cycle is not available.", 400);
@@ -199,7 +199,7 @@ async function resolveAssignee(context: WorkspaceContext, assigneeHandleInput: u
     FROM local801.users candidate
     WHERE candidate.organization_id = $1::uuid
       AND candidate.deactivated_at IS NULL
-      AND encode(digest('user:' || $1::text || ':' || candidate.id::text, 'sha256'), 'hex') = $2::text
+      AND encode(public.digest('user:' || $1::text || ':' || candidate.id::text, 'sha256'), 'hex') = $2::text
       AND EXISTS (
         SELECT 1
         FROM local801.workspace_user_roles user_role
@@ -246,7 +246,7 @@ export async function getCatActionManagementOptions(
     query<CycleOptionRow>(`
       /* cat-action-management:cycle-options */
       SELECT
-        encode(digest('contract-cycle:' || cycle.organization_id::text || ':' || cycle.id::text, 'sha256'), 'hex') AS handle,
+        encode(public.digest('contract-cycle:' || cycle.organization_id::text || ':' || cycle.id::text, 'sha256'), 'hex') AS handle,
         cycle.name,
         cycle.status,
         cycle.starts_on,
@@ -259,7 +259,7 @@ export async function getCatActionManagementOptions(
     query<AssigneeOptionRow>(`
       /* cat-action-management:assignee-options */
       SELECT
-        encode(digest('user:' || $1::text || ':' || app_user.id::text, 'sha256'), 'hex') AS handle,
+        encode(public.digest('user:' || $1::text || ':' || app_user.id::text, 'sha256'), 'hex') AS handle,
         app_user.display_name,
         string_agg(DISTINCT role.code, ', ' ORDER BY role.code) AS role_codes
       FROM local801.users app_user

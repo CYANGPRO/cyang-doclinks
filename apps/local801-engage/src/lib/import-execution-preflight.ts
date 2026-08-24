@@ -145,8 +145,8 @@ const metaQueryBase = `
     LEFT JOIN local801.import_files file
       ON file.organization_id = $1::uuid AND file.import_batch_id = batch.id
   ), row_fingerprint AS (
-    SELECT encode(digest(COALESCE(string_agg(
-      encode(digest(concat_ws(chr(31), file.sha256, sheet.sheet_name, row.source_row_number::text, row.row_hash), 'sha256'), 'hex'),
+    SELECT encode(public.digest(COALESCE(string_agg(
+      encode(public.digest(concat_ws(chr(31), file.sha256, sheet.sheet_name, row.source_row_number::text, row.row_hash), 'sha256'), 'hex'),
       ':' ORDER BY file.sha256, sheet.sheet_name, row.source_row_number, row.id
     ), ''), 'sha256'), 'hex') AS row_set_hash
     FROM selected_batch batch

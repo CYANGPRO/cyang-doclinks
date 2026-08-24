@@ -149,7 +149,7 @@ export async function getProtectedImportReviewSummary(
   requireBatchId(batchId);
   const [row] = await query<SummaryRow>(`WITH ${PROTECTED_IMPORT_REVIEW_CLASSIFICATION_CTE}, ${IMPORT_REVIEW_TOKEN_CTE}, set_hashes AS (
     SELECT category, count(*)::int AS set_count,
-      encode(digest(COALESCE(string_agg(canonical_token, ':' ORDER BY canonical_token), ''), 'sha256'), 'hex') AS set_hash
+      encode(public.digest(COALESCE(string_agg(canonical_token, ':' ORDER BY canonical_token), ''), 'sha256'), 'hex') AS set_hash
     FROM review_tokens WHERE category IN ('proposed_new', 'existing_with_changes') GROUP BY category
   ), aggregate AS (
     SELECT count(*) FILTER (WHERE category = 'unchanged_existing') AS unchanged_existing,
@@ -157,8 +157,8 @@ export async function getProtectedImportReviewSummary(
       count(*) FILTER (WHERE category = 'proposed_new') AS proposed_new,
       count(*) FILTER (WHERE category = 'needs_attention') AS needs_attention,
       count(*) FILTER (WHERE category = 'rejected') AS rejected,
-      COALESCE((SELECT set_hash FROM set_hashes WHERE category = 'proposed_new'), encode(digest('', 'sha256'), 'hex')) AS eligible_new_set_hash,
-      COALESCE((SELECT set_hash FROM set_hashes WHERE category = 'existing_with_changes'), encode(digest('', 'sha256'), 'hex')) AS existing_changes_set_hash
+      COALESCE((SELECT set_hash FROM set_hashes WHERE category = 'proposed_new'), encode(public.digest('', 'sha256'), 'hex')) AS eligible_new_set_hash,
+      COALESCE((SELECT set_hash FROM set_hashes WHERE category = 'existing_with_changes'), encode(public.digest('', 'sha256'), 'hex')) AS existing_changes_set_hash
     FROM categorized
   ), previous_snapshot AS (
     SELECT snapshot.id, snapshot.snapshot_date
@@ -328,7 +328,7 @@ export async function setProtectedImportReviewDecision(
   const selected = decisionCategory(type);
   const mutation: DatabaseStatement = {
     sql: `WITH ${PROTECTED_IMPORT_REVIEW_CLASSIFICATION_CTE}, ${IMPORT_REVIEW_TOKEN_CTE}, current_set AS (
-      SELECT encode(digest(COALESCE(string_agg(canonical_token, ':' ORDER BY canonical_token), ''), 'sha256'), 'hex') AS set_hash,
+      SELECT encode(public.digest(COALESCE(string_agg(canonical_token, ':' ORDER BY canonical_token), ''), 'sha256'), 'hex') AS set_hash,
         count(*)::int AS set_count
       FROM review_tokens WHERE category = $3
     ), saved AS (

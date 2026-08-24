@@ -172,7 +172,7 @@ export async function getCampaignsPage(
       GROUP BY organization_id, campaign_id
     ), base AS (
       SELECT
-        encode(digest('campaign:' || campaign.organization_id::text || ':' || campaign.id::text, 'sha256'), 'hex') AS campaign_handle,
+        encode(public.digest('campaign:' || campaign.organization_id::text || ':' || campaign.id::text, 'sha256'), 'hex') AS campaign_handle,
         campaign.name,
         campaign.status,
         campaign.starts_on,
@@ -225,13 +225,13 @@ export async function getCampaignDetail(
     /* campaigns:detail-summary */
     WITH selected AS (
       SELECT campaign.id,
-        encode(digest('campaign:' || campaign.organization_id::text || ':' || campaign.id::text, 'sha256'), 'hex') AS campaign_handle,
+        encode(public.digest('campaign:' || campaign.organization_id::text || ':' || campaign.id::text, 'sha256'), 'hex') AS campaign_handle,
         campaign.name, campaign.status, campaign.starts_on, campaign.ends_on, campaign.launched_at, campaign.created_at
       FROM local801.outreach_campaigns campaign
       WHERE campaign.organization_id = $1::uuid
         AND campaign.archived_at IS NULL
         AND campaign.status <> 'archived'
-        AND encode(digest('campaign:' || campaign.organization_id::text || ':' || campaign.id::text, 'sha256'), 'hex') = $2::text
+        AND encode(public.digest('campaign:' || campaign.organization_id::text || ':' || campaign.id::text, 'sha256'), 'hex') = $2::text
       LIMIT 1
     ), population_count AS (
       SELECT count(*)::int AS value
@@ -295,7 +295,7 @@ export async function getCampaignPopulationPage(
       WHERE campaign.organization_id = $1::uuid
         AND campaign.archived_at IS NULL
         AND campaign.status <> 'archived'
-        AND encode(digest('campaign:' || campaign.organization_id::text || ':' || campaign.id::text, 'sha256'), 'hex') = $2::text
+        AND encode(public.digest('campaign:' || campaign.organization_id::text || ':' || campaign.id::text, 'sha256'), 'hex') = $2::text
       LIMIT 1
     ), latest_assignments AS (
       SELECT DISTINCT ON (assignment.person_id)
@@ -310,7 +310,7 @@ export async function getCampaignPopulationPage(
       ORDER BY assignment.person_id, assignment.created_at DESC, assignment.id DESC
     ), population AS (
       SELECT
-        encode(digest($1::text || ':' || person.id::text, 'sha256'), 'hex') AS person_handle,
+        encode(public.digest($1::text || ':' || person.id::text, 'sha256'), 'hex') AS person_handle,
         person.first_name,
         person.last_name,
         person.department,

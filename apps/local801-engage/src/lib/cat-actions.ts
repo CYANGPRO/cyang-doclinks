@@ -348,7 +348,7 @@ export async function getCatActionsPage(
       GROUP BY task.cat_action_id
     ), base AS (
       SELECT
-        encode(digest('cat-action:' || action.organization_id::text || ':' || action.id::text, 'sha256'), 'hex') AS action_handle,
+        encode(public.digest('cat-action:' || action.organization_id::text || ':' || action.id::text, 'sha256'), 'hex') AS action_handle,
         action.name,
         action.status,
         CASE action.status WHEN 'active' THEN 0 WHEN 'draft' THEN 1 WHEN 'closed' THEN 2 ELSE 9 END AS status_rank,
@@ -446,7 +446,7 @@ export async function getCatActionDetail(
       GROUP BY task.cat_action_id
     )
     SELECT
-      encode(digest('cat-action:' || action.organization_id::text || ':' || action.id::text, 'sha256'), 'hex') AS action_handle,
+      encode(public.digest('cat-action:' || action.organization_id::text || ':' || action.id::text, 'sha256'), 'hex') AS action_handle,
       action.name,
       action.status,
       action.created_at,
@@ -468,7 +468,7 @@ export async function getCatActionDetail(
     WHERE action.organization_id = $1::uuid
       AND action.archived_at IS NULL
       AND action.status <> 'archived'
-      AND encode(digest('cat-action:' || action.organization_id::text || ':' || action.id::text, 'sha256'), 'hex') = $2::text
+      AND encode(public.digest('cat-action:' || action.organization_id::text || ':' || action.id::text, 'sha256'), 'hex') = $2::text
     LIMIT 1
   `, [context.organizationId, handle]);
   const row = rows[0];
@@ -511,7 +511,7 @@ export async function getCatActionTasksPage(
     /* cat-actions:task-keyset */
     WITH base AS (
       SELECT
-        encode(digest('cat-action-task:' || task.organization_id::text || ':' || task.id::text, 'sha256'), 'hex') AS task_handle,
+        encode(public.digest('cat-action-task:' || task.organization_id::text || ':' || task.id::text, 'sha256'), 'hex') AS task_handle,
         task.title,
         task.status,
         assignee.display_name AS assignee_name,
@@ -528,7 +528,7 @@ export async function getCatActionTasksPage(
       WHERE task.organization_id = $1::uuid
         AND action.archived_at IS NULL
         AND action.status <> 'archived'
-        AND encode(digest('cat-action:' || action.organization_id::text || ':' || action.id::text, 'sha256'), 'hex') = $2::text
+        AND encode(public.digest('cat-action:' || action.organization_id::text || ':' || action.id::text, 'sha256'), 'hex') = $2::text
         AND ($3::text IS NULL OR task.status = $3::text)
         AND ($4::text IS NULL OR task.title ILIKE $4 ESCAPE '\\' OR assignee.display_name ILIKE $4 ESCAPE '\\')
     ), stats AS (

@@ -170,7 +170,7 @@ export async function hydrateNewHireQueueFromProtectedPii(
         last_name_encrypted_payload, last_name_encryption_key_version, last_name_encryption_format_version,
         preferred_name_encrypted_payload, preferred_name_encryption_key_version, preferred_name_encryption_format_version
       FROM local801.person_pii protected
-      JOIN requested ON requested.handle = encode(digest($1::text || ':' || protected.person_id::text, 'sha256'), 'hex')
+      JOIN requested ON requested.handle = encode(public.digest($1::text || ':' || protected.person_id::text, 'sha256'), 'hex')
       WHERE protected.organization_id = $1::uuid
       ORDER BY protected.person_id
       LIMIT ${PREVIEW_ROW_LIMIT + 1}
@@ -184,7 +184,7 @@ export async function hydrateNewHireQueueFromProtectedPii(
         contact.person_id::text, contact.id::text AS contact_method_id, contact.contact_type, contact.contact_label,
         protected.contact_value_encrypted_payload, protected.encryption_key_version, protected.encryption_format_version
       FROM local801.person_contact_methods contact
-      JOIN requested ON requested.handle = encode(digest($1::text || ':' || contact.person_id::text, 'sha256'), 'hex')
+      JOIN requested ON requested.handle = encode(public.digest($1::text || ':' || contact.person_id::text, 'sha256'), 'hex')
       JOIN local801.person_contact_method_pii protected
         ON protected.organization_id = contact.organization_id
        AND protected.contact_method_id = contact.id
@@ -208,7 +208,7 @@ export async function hydrateNewHireQueueFromProtectedPii(
         protected.display_name_encryption_key_version,
         protected.display_name_encryption_format_version
       FROM local801.engagement_assignments assignment
-      JOIN requested ON requested.handle = encode(digest($1::text || ':' || assignment.person_id::text, 'sha256'), 'hex')
+      JOIN requested ON requested.handle = encode(public.digest($1::text || ':' || assignment.person_id::text, 'sha256'), 'hex')
       JOIN local801.users app_user
         ON app_user.organization_id = $1::uuid
        AND app_user.id = assignment.primary_user_id
@@ -227,7 +227,7 @@ export async function hydrateNewHireQueueFromProtectedPii(
         protected.display_name_encryption_key_version,
         protected.display_name_encryption_format_version
       FROM local801.engagement_assignments assignment
-      JOIN requested ON requested.handle = encode(digest($1::text || ':' || assignment.person_id::text, 'sha256'), 'hex')
+      JOIN requested ON requested.handle = encode(public.digest($1::text || ':' || assignment.person_id::text, 'sha256'), 'hex')
       JOIN local801.users app_user
         ON app_user.organization_id = $1::uuid
        AND app_user.id = assignment.backup_user_id

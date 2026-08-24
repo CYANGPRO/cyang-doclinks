@@ -119,7 +119,7 @@ test("CAT action portfolio is organization scoped, excludes archived records, om
   assert.match(sqlText, /action\.organization_id = \$1::uuid/);
   assert.match(sqlText, /action\.archived_at IS NULL/);
   assert.match(sqlText, /action\.status <> 'archived'/);
-  assert.match(sqlText, /digest\('cat-action:'/);
+  assert.match(sqlText, /public\.digest\('cat-action:'/);
   assert.match(sqlText, /LIMIT \$7::integer/);
   assert.doesNotMatch(sqlText, /OFFSET/i);
   assert.doesNotMatch(sqlText, /cat_action_strategy|strategy_hash/i);
@@ -160,7 +160,7 @@ test("CAT action detail resolves only an opaque organization-scoped handle and n
   });
   assert.deepEqual(parameters, [organizationId, actionHandle]);
   assert.match(sqlText, /action\.organization_id = \$1::uuid/);
-  assert.match(sqlText, /digest\('cat-action:'/);
+  assert.match(sqlText, /public\.digest\('cat-action:'/);
   assert.doesNotMatch(sqlText, /cat_action_strategy|strategy_hash/i);
 
   let calls = 0;
@@ -199,7 +199,7 @@ test("CAT action task detail exposes only opaque task handles and display labels
   assert.equal(parameters[3], "%Task\\%\\_%");
   assert.equal(parameters[6], 26);
   assert.match(sqlText, /task\.organization_id = \$1::uuid/);
-  assert.match(sqlText, /digest\('cat-action-task:'/);
+  assert.match(sqlText, /public\.digest\('cat-action-task:'/);
   assert.match(sqlText, /created_at < \$5::timestamptz/);
   assert.match(sqlText, /LIMIT \$7::integer/);
   assert.doesNotMatch(sqlText, /OFFSET/i);

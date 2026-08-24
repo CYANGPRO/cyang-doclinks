@@ -163,7 +163,7 @@ test("large campaign populations stay aggregate-first, opaque, and detail-bounde
   assert.match(aggregateSql, /population_counts AS/);
   assert.match(aggregateSql, /count\(DISTINCT person_id\).*assigned_count/);
   assert.match(aggregateSql, /campaign\.organization_id = \$1/);
-  assert.match(aggregateSql, /digest\('campaign:'/);
+  assert.match(aggregateSql, /public\.digest\('campaign:'/);
 
   const population = Array.from({ length: 20_000 }, (_, index) => ({
     person_handle: opaqueHandle(index + 1),
@@ -189,7 +189,7 @@ test("large campaign populations stay aggregate-first, opaque, and detail-bounde
   assert.match(detail.people[0].personHandle, /^[0-9a-f]{64}$/);
   assert.match(detailSql, /member\.organization_id = \$1/);
   assert.match(detailSql, /person_handle > \$5::text/);
-  assert.match(detailSql, /digest\(\$1::text \|\| ':' \|\| person\.id::text/);
+  assert.match(detailSql, /public\.digest\(\$1::text \|\| ':' \|\| person\.id::text/);
   assert.doesNotMatch(detailSql, /OFFSET/i);
   assert.doesNotMatch(detailSql, /disabled_at/);
 });

@@ -140,11 +140,11 @@ export async function getDocumentsPage(
         COALESCE(creator.display_name, 'System') AS uploader_name,
         document.created_at,
         encode(
-          digest(document.organization_id::text || ':' || document.id::text, 'sha256'),
+          public.digest(document.organization_id::text || ':' || document.id::text, 'sha256'),
           'hex'
         ) AS download_handle,
         encode(
-          digest(document.organization_id::text || ':' || document.id::text, 'sha256'),
+          public.digest(document.organization_id::text || ':' || document.id::text, 'sha256'),
           'hex'
         ) AS cursor_token
       FROM local801.documents document
@@ -205,7 +205,7 @@ export async function resolveDocumentDownloadId(
       AND document.archived_at IS NULL
       AND document.visibility = ANY($2::text[])
       AND encode(
-        digest(document.organization_id::text || ':' || document.id::text, 'sha256'),
+        public.digest(document.organization_id::text || ':' || document.id::text, 'sha256'),
         'hex'
       ) = $3::text
     LIMIT 1

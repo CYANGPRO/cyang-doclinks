@@ -109,11 +109,11 @@ export async function hydrateCatActionDetailFromProtectedPii(
         WHERE action.organization_id = $1::uuid
           AND action.archived_at IS NULL
           AND action.status <> 'archived'
-          AND encode(digest('cat-action:' || action.organization_id::text || ':' || action.id::text, 'sha256'), 'hex') = $2::text
+          AND encode(public.digest('cat-action:' || action.organization_id::text || ':' || action.id::text, 'sha256'), 'hex') = $2::text
         LIMIT 1
       )
       SELECT
-        encode(digest('cat-action-task:' || task.organization_id::text || ':' || task.id::text, 'sha256'), 'hex') AS task_handle,
+        encode(public.digest('cat-action-task:' || task.organization_id::text || ':' || task.id::text, 'sha256'), 'hex') AS task_handle,
         task.assigned_to::text AS user_id
       FROM local801.cat_action_tasks task
       JOIN selected_action action ON action.id = task.cat_action_id

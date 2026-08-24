@@ -192,8 +192,8 @@ async function lockMutations(query: DatabaseQuery, actor: ImportReviewActor, exe
 
 async function rowSetHash(query: DatabaseQuery, actor: ImportReviewActor, batchId: string) {
   const [row] = await query<RowFingerprint>(`
-    SELECT encode(digest(COALESCE(string_agg(
-      encode(digest(concat_ws(chr(31), file.sha256, sheet.sheet_name, import_row.source_row_number::text, import_row.row_hash), 'sha256'), 'hex'),
+    SELECT encode(public.digest(COALESCE(string_agg(
+      encode(public.digest(concat_ws(chr(31), file.sha256, sheet.sheet_name, import_row.source_row_number::text, import_row.row_hash), 'sha256'), 'hex'),
       ':' ORDER BY file.sha256, sheet.sheet_name, import_row.source_row_number, import_row.id
     ), ''), 'sha256'), 'hex') AS row_set_hash
     FROM local801.import_files file

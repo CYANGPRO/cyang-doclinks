@@ -87,8 +87,8 @@ async function resolveOpenFollowup(
     WHERE item.organization_id = $1::uuid
       AND item.status = 'open'
       AND item.completed_at IS NULL
-      AND encode(digest($1::text || ':' || person.id::text, 'sha256'), 'hex') = $3::text
-      AND encode(digest('followup:' || $1::text || ':' || item.id::text, 'sha256'), 'hex') = $4::text
+      AND encode(public.digest($1::text || ':' || person.id::text, 'sha256'), 'hex') = $3::text
+      AND encode(public.digest('followup:' || $1::text || ':' || item.id::text, 'sha256'), 'hex') = $4::text
       AND (
         $5::text IN ('system_owner','local_admin','cat_admin')
         OR (
@@ -128,7 +128,7 @@ async function resolveReassignmentTarget(
     FROM local801.users candidate
     WHERE candidate.organization_id = $1::uuid
       AND candidate.deactivated_at IS NULL
-      AND encode(digest('user:' || $1::text || ':' || candidate.id::text, 'sha256'), 'hex') = $3::text
+      AND encode(public.digest('user:' || $1::text || ':' || candidate.id::text, 'sha256'), 'hex') = $3::text
       AND EXISTS (
         SELECT 1
         FROM local801.workspace_user_roles user_role

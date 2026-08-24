@@ -152,7 +152,7 @@ test("completed follow-ups are excluded from mutation at resolve and atomic upda
 
 test("queue supplies role-scoped opaque organizer options without exposing user UUIDs", () => {
   assert.match(queueService, /AS assigned_to_handle/);
-  assert.match(queueService, /jsonb_build_object\([\s\S]*'handle'[\s\S]*digest\('user:'/);
+  assert.match(queueService, /jsonb_build_object\([\s\S]*'handle'[\s\S]*public\.digest\('user:'/);
   assert.match(queueService, /\$4::text = 'cat_lead'[\s\S]*target_assignment\.status = 'open'/);
   assert.match(queueService, /\$4::text = 'cat_member' AND app_user\.id = \$2::uuid/);
   assert.doesNotMatch(page, /assignedToId|personId|followupId|userId/);

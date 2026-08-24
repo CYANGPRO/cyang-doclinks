@@ -72,7 +72,7 @@ test("campaign detail resolves an opaque handle inside organization scope", asyn
   assert.equal(detail?.name, "Campaign Detail");
   assert.deepEqual(parameters, [organizationId, campaignHandle]);
   assert.match(sqlText, /campaign\.organization_id = \$1::uuid/);
-  assert.match(sqlText, /encode\(digest\('campaign:'/);
+  assert.match(sqlText, /encode\(public\.digest\('campaign:'/);
   assert.match(sqlText, /= \$2::text/);
   assert.match(sqlText, /campaign\.archived_at IS NULL/);
   assert.match(sqlText, /count\(DISTINCT assignment\.person_id\)/);
@@ -131,7 +131,7 @@ test("campaign participant detail uses opaque employee handles and bounded keyse
   assert.equal(parameters.at(-1), 101);
   assert.match(sqlText, /member\.organization_id = \$1::uuid/);
   assert.match(sqlText, /person_handle > \$5::text/);
-  assert.match(sqlText, /digest\(\$1::text \|\| ':' \|\| person\.id::text/);
+  assert.match(sqlText, /public\.digest\(\$1::text \|\| ':' \|\| person\.id::text/);
   assert.doesNotMatch(sqlText, /OFFSET/i);
 
   const cursor = JSON.parse(Buffer.from(detail.nextCursor, "base64url").toString("utf8"));
