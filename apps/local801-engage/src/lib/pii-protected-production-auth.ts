@@ -518,7 +518,13 @@ export async function authorizeProtectedProductionIdentity(
   // An established, encrypted provider-subject binding is the authoritative account selector.
   // Resolve it before any bootstrap fallback so a provisioned owner does not depend on the
   // one-time production-initialization marker or a mutable email claim on later sign-ins.
-  const boundAccount = await resolveUserByProtectedSubject(organization, identity, query);
+  let boundAccount;
+  try {
+    boundAccount = await resolveUserByProtectedSubject(organization, identity, query);
+  } catch (error) {
+    if (error instanceof ProtectedAuthError) throw error;
+    authError("PROTECTED_PII_INVALID", "The protected subject binding could not be validated.");
+  }
   if (boundAccount) {
     await transaction(authenticationStatements(
       organization.id,
@@ -537,32 +543,54 @@ export async function authorizeProtectedProductionIdentity(
   // The bootstrap identity is authorized by the immutable Entra object ID and is resolved
   // through the recorded initial-system-owner relationship. Its mutable email claim never
   // selects or authorizes a database account.
-  const account = identity.bootstrapObjectMatched
-    ? await resolveBootstrapOwner(organization, query)
-    : await resolveUserByProtectedEmail(organization, identity, query);
-  const linked = await resolveIdentityBindings(
-    organization.id,
-    account.row.user_id,
-    identity,
-    query,
-    identity.bootstrapObjectMatched,
-  );
+  let account;
+  try {
+    account = identity.bootstrapObjectMatched
+      ? await resolveBootstrapOwner(organization, query)
+      : await resolveUserByProtectedEmail(organization, identity, query);
+  } catch (error) {
+    if (error instanceof ProtectedAuthError) throw error;
+    if (identity.bootstrapObjectMatched) {
+      authError("BOOTSTRAP_OWNER_RECORD_INVALID", "The protected bootstrap-owner record could not be validated.");
+    }
+    authError("PROTECTED_PII_INVALID", "The protected account record could not be validated.");
+  }
+  let linked;
+  try {
+    linked = await resolveIdentityBindings(
+      organization.id,
+      account.row.user_id,
+      identity,
+      query,
+      identity.bootstrapObjectMatched,
+    );
+  } catch (error) {
+    if (error instanceof ProtectedAuthError) throw error;
+    if (identity.bootstrapObjectMatched) {
+      authError("BOOTSTRAP_IDENTITY_RECORD_INVALID", "The protected bootstrap identity record could not be validated.");
+    }
+    authError("PROTECTED_PII_INVALID", "The protected identity record could not be validated.");
+  }
   if (linked.existing && linked.requiresRebind) {
-    await transaction([
-      ...rebindIdentityStatements(
-        organization.id,
-        account.row.user_id,
-        identity,
-        linked.existing.auth_identity_id,
-        linked.subjectIndex,
-      ),
-      ...authenticationStatements(
-        organization.id,
-        account.row.user_id,
-        account.sessionVersion,
-        linked.existing.auth_identity_id,
-      ),
-    ]);
+    try {
+      await transaction([
+        ...rebindIdentityStatements(
+          organization.id,
+          account.row.user_id,
+          identity,
+          linked.existing.auth_identity_id,
+          linked.subjectIndex,
+        ),
+        ...authenticationStatements(
+          organization.id,
+          account.row.user_id,
+          account.sessionVersion,
+          linked.existing.auth_identity_id,
+        ),
+      ]);
+    } catch {
+      authError("BOOTSTRAP_REBIND_FAILED", "The protected bootstrap identity rebind did not commit.");
+    }
   } else if (linked.existing) {
     await transaction(authenticationStatements(organization.id, account.row.user_id, account.sessionVersion, linked.existing.auth_identity_id));
   } else {
