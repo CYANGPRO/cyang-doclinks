@@ -73,6 +73,25 @@ test("invalid direct PII stays encrypted but is marked invalid instead of enteri
   assert.equal(JSON.stringify(plan).includes("not-an-email"), false);
 });
 
+test("legacy personal-email imports are canonicalized and never remain in plaintext staging data", () => {
+  const personalEmail = "synthetic.home@example.test";
+  const plan = buildSyntheticPiiBackfillPlan({
+    users: [], authIdentities: [], people: [], identifiers: [], contacts: [], corrections: [], importFiles: [], pushSubscriptions: [],
+    importRows: [{
+      id: rowId,
+      organization_id: organizationId,
+      normalized_json: { personal_email: personalEmail, department: "Synthetic Department" },
+    }],
+  }, config());
+  const row = plan.importRows[0];
+  assert.equal(row.fieldSetVersion, 5);
+  assert.equal((row.presenceMask & 64) !== 0, true);
+  assert.equal((row.validityMask & 64) !== 0, true);
+  assert.equal(plan.exactIndexes.filter((item) => item.domain === "contact:personal-email").length, 1);
+  assert.equal(JSON.stringify(plan).includes(personalEmail), false);
+  assert.equal(JSON.stringify(row).includes("personal_email"), false);
+});
+
 test("protected import classifier never reads direct PII from normalized_json and uses keyed integrity", () => {
   for (const field of ["first_name", "last_name", "preferred_name", "work_email", "personal_email", "home_email", "work_phone", "cell_phone", "home_phone", "employee_identifier", "member_identifier"]) {
     assert.doesNotMatch(PROTECTED_IMPORT_REVIEW_CLASSIFICATION_CTE, new RegExp(`normalized_json\\s*->>\\s*['\"]${field}['\"]`, "i"));
@@ -101,6 +120,14 @@ test("protected review service does not select direct import PII from normalized
   }
   assert.match(source, /NULL::text AS first_name/);
   assert.match(source, /pii_exact_indexes/);
+});
+
+test("protected review hydration accepts the complete encrypted roster field set", async () => {
+  const source = await readFile(new URL("../src/lib/pii-protected-import-read.ts", import.meta.url), "utf8");
+  for (const field of ["home_email", "work_phone", "cell_phone", "home_phone"]) {
+    assert.match(source, new RegExp(`"${field}"`));
+  }
+  assert.match(source, /personal_email: bundle\.home_email \?\? bundle\.personal_email \?\? null/);
 });
 
 test("migration 0014 adds field masks and blind-index uniqueness without removing legacy columns", async () => {

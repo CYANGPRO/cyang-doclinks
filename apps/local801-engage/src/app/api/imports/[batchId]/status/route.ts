@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 const noStore = { "Cache-Control": "no-store, max-age=0" };
 
 export async function GET(_request: Request, { params }: { params: Promise<{ batchId: string }> }) {
-  const auth = await requirePreviewUser("manageImports");
+  const auth = await requirePreviewUser("manageImports", { skipRateLimit: true });
   if (!auth.ok) return auth.response;
   try {
     const [{ batchId }, context] = await Promise.all([params, resolveWorkspaceContext(auth.user)]);

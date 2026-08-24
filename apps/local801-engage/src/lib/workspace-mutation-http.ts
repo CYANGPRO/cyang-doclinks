@@ -19,7 +19,7 @@ export async function authorizeWorkspaceMutation(request: Request, permission: P
   if (!hasExactSameOrigin(request)) {
     return { response: workspaceJson({ error: "FORBIDDEN_ORIGIN", message: "This request must come from the signed-in application." }, 403) } as const;
   }
-  const auth = await requirePreviewUser(permission);
+  const auth = await requirePreviewUser(permission, { skipRateLimit: true });
   if (!auth.ok) {
     auth.response.headers.set("Cache-Control", cacheControl);
     return { response: auth.response } as const;

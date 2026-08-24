@@ -22,6 +22,7 @@ export const DIRECT_IMPORT_PII_FIELDS = Object.freeze([
   "employee_identifier",
   "member_identifier",
   "home_email",
+  "personal_email",
   "work_phone",
   "cell_phone",
   "home_phone",
@@ -183,7 +184,12 @@ function directImportPii(value: Record<string, unknown>) {
   const result: Record<string, string> = {};
   for (const key of DIRECT_IMPORT_PII_FIELDS) {
     const raw = value[key];
-    if (typeof raw === "string" && raw.trim() !== "") result[key] = raw;
+    if (typeof raw !== "string" || raw.trim() === "") continue;
+    if (key === "personal_email") {
+      if (!result.home_email) result.home_email = raw;
+      continue;
+    }
+    result[key] = raw;
   }
   return result;
 }

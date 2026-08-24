@@ -23,7 +23,10 @@ const DIRECT_IMPORT_PII_FIELDS = new Set([
   "last_name",
   "preferred_name",
   "work_email",
+  "home_email",
   "work_phone",
+  "cell_phone",
+  "home_phone",
   "personal_email",
   "employee_identifier",
   "member_identifier",
@@ -345,7 +348,7 @@ export async function hydrateImportReviewDetailFromProtectedPii(
         last_name: bundle.last_name ?? null,
         work_email: bundle.work_email ?? null,
         work_phone: bundle.work_phone ?? null,
-        personal_email: bundle.personal_email ?? null,
+        personal_email: bundle.home_email ?? bundle.personal_email ?? null,
       };
     }),
   };

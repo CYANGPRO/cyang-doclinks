@@ -32,5 +32,12 @@ test("processing UI polls the lightweight endpoint without overlapping full page
   assert.match(page, /ImportProcessingRefresh active=\{processingActive\} batchId=\{batchId\}/);
   assert.match(page, /getImportExecutionPreflight\(actor, batchId, undefined, loadedSummary\)/);
   assert.match(route, /getImportProcessingStatus/);
+  assert.match(route, /requirePreviewUser\("manageImports", \{ skipRateLimit: true \}\)/);
   assert.match(route, /Cache-Control.*no-store/);
+});
+
+test("status polling cannot consume the import mutation limiter or double-count protected mutations", async () => {
+  const workspaceMutation = await readFile(new URL("../src/lib/workspace-mutation-http.ts", import.meta.url), "utf8");
+  assert.match(workspaceMutation, /requirePreviewUser\(permission, \{ skipRateLimit: true \}\)/);
+  assert.match(workspaceMutation, /enforceWorkspaceRateLimit\(context, rateLimitScope\)/);
 });
