@@ -206,11 +206,12 @@ test("Stage 13 migration adds identity binding and revocable session version wit
 });
 
 test("production NextAuth route and server authorization keep Preview cookies separate and JWT PII-free", async () => {
-  const [options, route, authz, signIn, example, authTypes] = await Promise.all([
+  const [options, route, authz, signIn, signInButton, example, authTypes] = await Promise.all([
     readFile(new URL("../src/lib/auth-options.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/app/api/auth/[...nextauth]/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/lib/authz.server.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/app/sign-in/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/components/ProductionSignInButton.tsx", import.meta.url), "utf8"),
     readFile(new URL("../.env.example", import.meta.url), "utf8"),
     readFile(new URL("../src/types/next-auth.d.ts", import.meta.url), "utf8"),
   ]);
@@ -226,7 +227,7 @@ test("production NextAuth route and server authorization keep Preview cookies se
   assert.match(options, /delete token\.email/);
   assert.match(options, /session\.user = undefined/);
   assert.doesNotMatch(authTypes, /email:/);
-  assert.match(route, /getProductionAuthConfig\(\)\.enabled/);
+  assert.match(route, /productionAuthRuntimeEnabled\(\)/);
   assert.match(authz, /if \(previewAuthEnabled\(\)\) return getSyntheticPreviewUser\(\)/);
   assert.match(authz, /getServerSession\(authOptions\)/);
   assert.match(authz, /resolveProductionSessionBinding/);
@@ -234,7 +235,13 @@ test("production NextAuth route and server authorization keep Preview cookies se
   assert.match(authz, /productionAuthRuntimeEnabled\(\)/);
   assert.doesNotMatch(authz, /process\.env\.LOCAL801_PRODUCTION_AUTH_ENABLED === "1"/);
   assert.match(signIn, /Preview role cookies are test state and are never accepted as production authentication/);
+  assert.match(signIn, /production\.enabled && productionRuntime/);
+  assert.match(signIn, /Production access is currently closed/);
+  assert.match(signIn, /authenticationErrors\[code\] \?\? authenticationErrors\.Default/);
   assert.match(signIn, /ProductionSignInButton/);
+  assert.match(signInButton, /getProviders\(\)/);
+  assert.match(signInButton, /if \(!providers\?\.\[providerId\]\)/);
+  assert.match(signInButton, /role="alert"/);
   assert.match(example, /LOCAL801_PRODUCTION_AUTH_ENABLED=0/);
   assert.match(example, /LOCAL801_OIDC_MFA_CLAIM=amr/);
   assert.match(example, /LOCAL801_OIDC_MFA_VALUE=mfa/);
