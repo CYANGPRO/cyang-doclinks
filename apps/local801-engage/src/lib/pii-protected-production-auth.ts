@@ -204,7 +204,7 @@ async function resolveBootstrapOwner(
   organization: OrganizationRow,
   query: DatabaseQuery,
 ) {
-  const rows = await query<UserRow>(`
+  let rows = await query<UserRow>(`
     /* production-auth:protected-bootstrap-owner */
     SELECT organization.slug AS organization_slug, organization.id::text AS organization_id,
       app_user.id::text AS user_id, app_user.auth_session_version, role.code AS role,
@@ -226,6 +226,30 @@ async function resolveBootstrapOwner(
     WHERE organization.id = $1::uuid
     LIMIT 2
   `, [organization.id]);
+  if (rows.length === 0) {
+    // Compatibility path for an already-provisioned deployment that predates the guarded
+    // production-initialization marker. It remains fail-closed unless exactly one active
+    // system owner exists in the configured organization.
+    rows = await query<UserRow>(`
+      /* production-auth:protected-legacy-bootstrap-owner */
+      SELECT organization.slug AS organization_slug, organization.id::text AS organization_id,
+        app_user.id::text AS user_id, app_user.auth_session_version, role.code AS role,
+        protected.email_encrypted_payload, protected.email_encryption_key_version,
+        protected.email_encryption_format_version
+      FROM local801.organizations organization
+      JOIN local801.users app_user
+        ON app_user.organization_id = organization.id AND app_user.deactivated_at IS NULL
+      JOIN local801.user_pii protected
+        ON protected.organization_id = organization.id AND protected.user_id = app_user.id
+      JOIN local801.workspace_user_roles user_role ON user_role.user_id = app_user.id
+      JOIN local801.workspace_roles role
+        ON role.id = user_role.role_id
+        AND role.organization_id = organization.id
+        AND role.code = 'system_owner'
+      WHERE organization.id = $1::uuid AND organization.archived_at IS NULL
+      LIMIT 2
+    `, [organization.id]);
+  }
   if (rows.length !== 1) authError("BOOTSTRAP_OWNER_NOT_PROVISIONED", "The initial Local 801 system owner is not uniquely provisioned.");
   const row = rows[0];
   const account = protectedUserAccount(organization, row);
@@ -240,6 +264,7 @@ async function resolveIdentityBindings(
   userId: string,
   identity: ProductionIdentity,
   query: DatabaseQuery,
+  allowBootstrapRebind = false,
 ) {
   const keyConfig = getPiiKeyConfiguration();
   const domain = subjectDomain(identity.providerId);
@@ -286,6 +311,7 @@ async function resolveIdentityBindings(
     LIMIT 2
   `, [organizationId, userId, identity.providerId]);
   if (byUser.length > 1) authError("IDENTITY_MISMATCH", "The Local 801 account has multiple provider bindings.");
+  let requiresRebind = false;
   if (byUser[0]) {
     const storedSubject = decryptPiiField(
       encrypted(
@@ -296,11 +322,37 @@ async function resolveIdentityBindings(
       { organizationId, entity: "auth-identity", recordId: byUser[0].auth_identity_id, field: "provider-subject" },
       keyConfig,
     );
-    if (storedSubject !== identity.subject || !bySubject[0] || bySubject[0].auth_identity_id !== byUser[0].auth_identity_id) {
+    const storedSubjectMatches = normalizePiiIdentifier(storedSubject) === normalizePiiIdentifier(identity.subject);
+    const indexedSubjectMatches = bySubject[0]?.auth_identity_id === byUser[0].auth_identity_id;
+    if (!storedSubjectMatches || !indexedSubjectMatches) {
+      if (allowBootstrapRebind && !bySubject[0]) requiresRebind = true;
+      else {
       authError("IDENTITY_MISMATCH", "This Local 801 account is already linked to a different identity-provider subject.");
+      }
     }
   }
-  return { existing: byUser[0] ?? null, subjectIndex, keyConfig };
+  return { existing: byUser[0] ?? null, requiresRebind, subjectIndex, keyConfig };
+}
+
+function protectedIdentityValues(
+  organizationId: string,
+  identityId: string,
+  identity: ProductionIdentity,
+) {
+  const keyConfig = getPiiKeyConfiguration();
+  return {
+    subject: encryptPiiField(identity.subject, {
+      organizationId, entity: "auth-identity", recordId: identityId, field: "provider-subject",
+    }, keyConfig),
+    linkedEmail: encryptPiiField(identity.email, {
+      organizationId, entity: "auth-identity", recordId: identityId, field: "linked-email",
+    }, keyConfig),
+    linkedEmailIndex: createPiiBlindIndex(
+      normalizePiiEmail(identity.email),
+      { organizationId, domain: "auth:linked-email" },
+      keyConfig,
+    ),
+  };
 }
 
 function newIdentityStatements(
@@ -310,10 +362,7 @@ function newIdentityStatements(
   identityId: string,
   subjectIndex: ReturnType<typeof createPiiBlindIndex>,
 ) {
-  const keyConfig = getPiiKeyConfiguration();
-  const subject = encryptPiiField(identity.subject, { organizationId, entity: "auth-identity", recordId: identityId, field: "provider-subject" }, keyConfig);
-  const linkedEmail = encryptPiiField(identity.email, { organizationId, entity: "auth-identity", recordId: identityId, field: "linked-email" }, keyConfig);
-  const linkedEmailIndex = createPiiBlindIndex(normalizePiiEmail(identity.email), { organizationId, domain: "auth:linked-email" }, keyConfig);
+  const { subject, linkedEmail, linkedEmailIndex } = protectedIdentityValues(organizationId, identityId, identity);
   const placeholderSubject = `protected:${identityId}`;
   const placeholderEmail = `protected-${identityId}@invalid.local`;
   return [
@@ -350,6 +399,74 @@ function newIdentityStatements(
       `,
       parameters: [
         organizationId, identityId, subjectDomain(identity.providerId), subjectIndex.blindIndexKeyVersion, subjectIndex.blindIndex,
+        linkedEmailIndex.blindIndexKeyVersion, linkedEmailIndex.blindIndex,
+      ],
+    },
+  ] satisfies DatabaseStatement[];
+}
+
+function rebindIdentityStatements(
+  organizationId: string,
+  userId: string,
+  identity: ProductionIdentity,
+  identityId: string,
+  subjectIndex: ReturnType<typeof createPiiBlindIndex>,
+) {
+  const { subject, linkedEmail, linkedEmailIndex } = protectedIdentityValues(organizationId, identityId, identity);
+  return [
+    {
+      sql: `
+        /* production-auth:protected-bootstrap-rebind-delete-indexes */
+        DELETE FROM local801.pii_exact_indexes
+        WHERE organization_id = $1::uuid
+          AND entity_type = 'auth_identity'
+          AND entity_id = $2::uuid
+          AND index_domain IN ($3::text, 'auth:linked-email')
+      `,
+      parameters: [organizationId, identityId, subjectDomain(identity.providerId)],
+    },
+    {
+      sql: `
+        /* production-auth:protected-bootstrap-rebind-identity */
+        WITH updated AS (
+          UPDATE local801.auth_identity_pii protected
+          SET provider_subject_encrypted_payload = $5::text,
+            provider_subject_encryption_key_version = $6::text,
+            provider_subject_encryption_format_version = $7::integer,
+            linked_email_encrypted_payload = $8::text,
+            linked_email_encryption_key_version = $9::text,
+            linked_email_encryption_format_version = $10::integer,
+            updated_at = now()
+          FROM local801.auth_identities auth_identity
+          WHERE protected.organization_id = $1::uuid
+            AND protected.auth_identity_id = $2::uuid
+            AND auth_identity.organization_id = protected.organization_id
+            AND auth_identity.id = protected.auth_identity_id
+            AND auth_identity.user_id = $3::uuid
+            AND auth_identity.provider_id = $4::text
+          RETURNING protected.auth_identity_id
+        )
+        SELECT CASE WHEN count(*) = 1 THEN true ELSE 1 / count(*)::integer = 1 END AS identity_rebound
+        FROM updated
+      `,
+      parameters: [
+        organizationId, identityId, userId, identity.providerId,
+        subject.encryptedPayload, subject.encryptionKeyVersion, subject.encryptionFormatVersion,
+        linkedEmail.encryptedPayload, linkedEmail.encryptionKeyVersion, linkedEmail.encryptionFormatVersion,
+      ],
+    },
+    {
+      sql: `
+        /* production-auth:protected-bootstrap-rebind-indexes */
+        INSERT INTO local801.pii_exact_indexes
+          (organization_id, entity_type, entity_id, index_domain, index_key_version, index_hash)
+        VALUES
+          ($1::uuid, 'auth_identity', $2::uuid, $3::text, $4::text, $5::text),
+          ($1::uuid, 'auth_identity', $2::uuid, 'auth:linked-email', $6::text, $7::text)
+      `,
+      parameters: [
+        organizationId, identityId, subjectDomain(identity.providerId),
+        subjectIndex.blindIndexKeyVersion, subjectIndex.blindIndex,
         linkedEmailIndex.blindIndexKeyVersion, linkedEmailIndex.blindIndex,
       ],
     },
@@ -423,8 +540,30 @@ export async function authorizeProtectedProductionIdentity(
   const account = identity.bootstrapObjectMatched
     ? await resolveBootstrapOwner(organization, query)
     : await resolveUserByProtectedEmail(organization, identity, query);
-  const linked = await resolveIdentityBindings(organization.id, account.row.user_id, identity, query);
-  if (linked.existing) {
+  const linked = await resolveIdentityBindings(
+    organization.id,
+    account.row.user_id,
+    identity,
+    query,
+    identity.bootstrapObjectMatched,
+  );
+  if (linked.existing && linked.requiresRebind) {
+    await transaction([
+      ...rebindIdentityStatements(
+        organization.id,
+        account.row.user_id,
+        identity,
+        linked.existing.auth_identity_id,
+        linked.subjectIndex,
+      ),
+      ...authenticationStatements(
+        organization.id,
+        account.row.user_id,
+        account.sessionVersion,
+        linked.existing.auth_identity_id,
+      ),
+    ]);
+  } else if (linked.existing) {
     await transaction(authenticationStatements(organization.id, account.row.user_id, account.sessionVersion, linked.existing.auth_identity_id));
   } else {
     const identityId = randomUUID();

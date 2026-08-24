@@ -111,6 +111,93 @@ test("an established protected subject binding is resolved before the bootstrap 
   }
 });
 
+test("the configured bootstrap object can atomically rebind one legacy active system owner", async () => {
+  const previous = Object.fromEntries(Object.keys(protectedPiiEnv()).map((key) => [key, process.env[key]]));
+  Object.assign(process.env, protectedPiiEnv());
+  try {
+    const keyConfig = getPiiKeyConfiguration();
+    const email = "owner@example.test";
+    const currentSubject = "current-entra-subject";
+    const staleSubject = "stale-entra-subject";
+    const protectedEmail = encryptPiiField(email, {
+      organizationId, entity: "user", recordId: userId, field: "email",
+    }, keyConfig);
+    const protectedStaleSubject = encryptPiiField(staleSubject, {
+      organizationId, entity: "auth-identity", recordId: authIdentityId, field: "provider-subject",
+    }, keyConfig);
+    const userRow = {
+      organization_slug: "local801",
+      organization_id: organizationId,
+      user_id: userId,
+      auth_session_version: 4,
+      role: "system_owner",
+      email_encrypted_payload: protectedEmail.encryptedPayload,
+      email_encryption_key_version: protectedEmail.encryptionKeyVersion,
+      email_encryption_format_version: protectedEmail.encryptionFormatVersion,
+    };
+    const queries = [];
+    const transactions = [];
+    const binding = await authorizeProtectedProductionIdentity({
+      providerId: "local801-oidc",
+      subject: currentSubject,
+      objectId: "834e272c-3b2b-40ae-92e6-017803ce3525",
+      email,
+      emailVerified: false,
+      bootstrapObjectMatched: true,
+      mfaVerified: true,
+    }, {
+      enabled: true,
+      organizationSlug: "local801",
+      providerId: "local801-oidc",
+      providerName: "Microsoft Entra ID",
+      wellKnown: "https://login.microsoftonline.com/example/v2.0/.well-known/openid-configuration",
+      clientId: "client",
+      clientSecret: "secret",
+      bootstrapObjectId: "834e272c-3b2b-40ae-92e6-017803ce3525",
+      mfaClaim: "amr",
+      mfaValue: "mfa",
+    }, {
+      query: async (sql) => {
+        queries.push(sql);
+        if (sql.includes("protected-organization")) return [{ id: organizationId, slug: "local801" }];
+        if (sql.includes("protected-bound-subject")) return [];
+        if (sql.includes("protected-bootstrap-owner")) return [];
+        if (sql.includes("protected-legacy-bootstrap-owner")) return [userRow];
+        if (sql.includes("protected-subject-lookup")) return [];
+        if (sql.includes("protected-user-identity")) return [{
+          auth_identity_id: authIdentityId,
+          user_id: userId,
+          provider_subject_encrypted_payload: protectedStaleSubject.encryptedPayload,
+          provider_subject_encryption_key_version: protectedStaleSubject.encryptionKeyVersion,
+          provider_subject_encryption_format_version: protectedStaleSubject.encryptionFormatVersion,
+        }];
+        throw new Error(`Unexpected query: ${sql}`);
+      },
+      transaction: async (statements) => transactions.push(statements),
+    });
+    assert.deepEqual(binding, {
+      organizationSlug: "local801",
+      userId,
+      email,
+      role: "system_owner",
+      sessionVersion: 4,
+    });
+    assert.match(queries.join("\n"), /protected-legacy-bootstrap-owner/);
+    assert.equal(transactions.length, 1);
+    assert.equal(transactions[0].length, 5);
+    assert.match(transactions[0][0].sql, /protected-bootstrap-rebind-delete-indexes/);
+    assert.match(transactions[0][1].sql, /protected-bootstrap-rebind-identity/);
+    assert.match(transactions[0][2].sql, /protected-bootstrap-rebind-indexes/);
+    assert.doesNotMatch(transactions.map((statements) => statements.map((statement) => statement.sql).join("\n")).join("\n"),
+      /INSERT INTO local801\.auth_identities/);
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
 test("new protected OIDC links place only non-PII placeholders in legacy identity columns", async () => {
   const source = await readFile(protectedAuthUrl, "utf8");
   assert.match(source, /placeholderSubject = `protected:\$\{identityId\}`/);
