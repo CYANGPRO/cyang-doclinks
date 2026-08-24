@@ -22,6 +22,9 @@ export const canonicalRosterColumns = [
   "work_email",
   "work_phone",
   "personal_email",
+  "home_email",
+  "cell_phone",
+  "home_phone",
   "first_name",
   "preferred_name",
   "last_name",
@@ -50,8 +53,12 @@ export const knownColumnAliases: Record<string, (typeof canonicalRosterColumns)[
   "work email": "work_email",
   "state email": "work_email",
   "work phone": "work_phone",
-  "home email": "personal_email",
+  "business phone": "work_phone",
+  "home email": "home_email",
   "personal email": "personal_email",
+  "cell phone": "cell_phone",
+  "mobile phone": "cell_phone",
+  "home phone": "home_phone",
   firstname: "first_name",
   "first name": "first_name",
   "preferred first name": "preferred_name",
@@ -77,6 +84,8 @@ export const knownColumnAliases: Record<string, (typeof canonicalRosterColumns)[
   "classification name": "classification",
   "hire date": "hire_date",
   "mape hire date": "hire_date",
+  "job status": "job_status",
+  "employment status": "job_status",
 };
 
 const authoritativeIdentifierColumns: Array<(typeof canonicalRosterColumns)[number]> = [
@@ -299,6 +308,8 @@ export function normalizeImportRow(headers: string[], cells: string[]) {
         : value;
   });
   if (!values.first_name && values.preferred_name) values.first_name = values.preferred_name;
+  if (!values.home_email && values.personal_email) values.home_email = values.personal_email;
+  if (!values.personal_email && values.home_email) values.personal_email = values.home_email;
   // Local 801 uses Section Name as the operational work-location grouping.
   // Preserve section as its own field and make it authoritative for work_location.
   if (values.section) values.work_location = values.section;

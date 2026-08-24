@@ -75,12 +75,12 @@ function baseDataset(): Omit<PiiBackfillSourceDataset, "users" | "importFiles" |
 function envelope(row: EligibleRow): Pick<EncryptedPiiField, "encryptedPayload" | "encryptionKeyVersion" | "encryptionFormatVersion"> {
   const fieldSetVersion = Number(row.direct_pii_field_set_version);
   if (typeof row.direct_pii_encrypted_payload !== "string" || typeof row.encryption_key_version !== "string"
-    || Number(row.encryption_format_version) !== 1 || ![2, 3, 4].includes(fieldSetVersion)) {
+    || Number(row.encryption_format_version) !== 1 || ![2, 3, 4, 5].includes(fieldSetVersion)) {
     throw new Error("Protected import execution requires a valid direct-PII companion.");
   }
   const presence = Number(row.direct_pii_presence_mask);
   const validity = Number(row.direct_pii_validity_mask);
-  const maxMask = fieldSetVersion === 2 ? 63 : 1023;
+  const maxMask = fieldSetVersion === 2 ? 63 : fieldSetVersion === 3 ? 127 : fieldSetVersion === 4 ? 255 : 1023;
   if (!Number.isInteger(presence) || !Number.isInteger(validity) || presence < 0 || presence > maxMask
     || validity < 0 || validity > maxMask || (validity & presence) !== validity) {
     throw new Error("Protected import execution requires valid direct-PII field metadata.");
@@ -151,10 +151,11 @@ function prepareTargetMutation(
     contactSources.push({ id, organization_id: organizationId, contact_type: "work_email", contact_value: bundle.work_email });
     contactLinks.push({ id, contact_type: "work_email", contact_label: "work", value: bundle.work_email, specific_domain: null });
   }
-  if (bundle.home_email) {
+  const homeEmail = bundle.home_email ?? bundle.personal_email;
+  if (homeEmail) {
     const id = randomUUID();
-    contactSources.push({ id, organization_id: organizationId, contact_type: "personal_email", contact_value: bundle.home_email });
-    contactLinks.push({ id, contact_type: "personal_email", contact_label: "home", value: bundle.home_email, specific_domain: null });
+    contactSources.push({ id, organization_id: organizationId, contact_type: "personal_email", contact_value: homeEmail });
+    contactLinks.push({ id, contact_type: "personal_email", contact_label: "home", value: homeEmail, specific_domain: null });
   }
   for (const [field, label] of [["work_phone", "work"], ["cell_phone", "cell"], ["home_phone", "home"]] as const) {
     const value = bundle[field];
@@ -182,12 +183,14 @@ function prepareTargetMutation(
     personId: targetPersonId,
     identifierType: identifierLinks[index].identifier_type,
   }));
+  const preferredPhoneLabel = (["cell", "home", "work"] as const)
+    .find((label) => contactLinks.some((contact) => contact.contact_type === "phone" && contact.contact_label === label));
   const contacts = plan.contacts.map((item, index) => ({
     ...item as unknown as Record<string, unknown>,
     personId: targetPersonId,
     contactType: contactLinks[index].contact_type,
     contactLabel: contactLinks[index].contact_label,
-    isPrimary: true,
+    isPrimary: contactLinks[index].contact_type !== "phone" || contactLinks[index].contact_label === preferredPhoneLabel,
     visibility: "authorized_directory",
   }));
   const supplementalContactIndexes = contactLinks.flatMap((contact) => {

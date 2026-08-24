@@ -252,7 +252,7 @@ export const PROTECTED_IMPORT_REVIEW_CLASSIFICATION_CTE = `
         WHEN facts.row_state = 'rejected' THEN 'rejected'
         WHEN facts.error_count > 0 OR facts.person_count > 1
           OR (facts.person_count = 1 AND NOT facts.existing_person_active) THEN 'needs_attention'
-        WHEN facts.row_hash IS NULL OR facts.direct_pii_field_set_version NOT IN (2, 3, 4)
+        WHEN facts.row_hash IS NULL OR facts.direct_pii_field_set_version NOT IN (2, 3, 4, 5)
           OR facts.direct_pii_presence_mask IS NULL
           OR facts.direct_pii_validity_mask IS NULL THEN 'needs_attention'
         WHEN (facts.direct_pii_presence_mask & facts.direct_pii_validity_mask) <> facts.direct_pii_presence_mask THEN 'needs_attention'

@@ -131,8 +131,8 @@ test("prepared target mutation contains no raw direct PII and uses ciphertext bo
   assert.match(String(prepared.person_protected_json.firstNameEncryptedPayload), /^p1\./);
   assert.equal(prepared.exact_indexes_json.length >= 5, true);
   assert.equal(prepared.contact_protected_json.length, 5);
-  assert.deepEqual(prepared.contact_protected_json.map((contact) => [contact.contactType, contact.contactLabel]), [
-    ["work_email", "work"], ["personal_email", "home"], ["phone", "work"], ["phone", "cell"], ["phone", "home"],
+  assert.deepEqual(prepared.contact_protected_json.map((contact) => [contact.contactType, contact.contactLabel, contact.isPrimary]), [
+    ["work_email", "work", true], ["personal_email", "home", true], ["phone", "work", false], ["phone", "cell", true], ["phone", "home", false],
   ]);
   const domains = new Set(prepared.exact_indexes_json.map((index) => index.domain));
   for (const domain of ["contact:work-phone", "contact:cell-phone", "contact:home-phone"]) assert.equal(domains.has(domain), true, domain);

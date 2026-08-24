@@ -55,6 +55,9 @@ test("maps the supported Local 801 workbook header profiles", () => {
     "Office Name",
     "MAPE Hire Date",
     "Home Email",
+    "Cell Phone",
+    "Home Phone",
+    "Job Status",
   ]);
   assert.deepEqual(mapped.map((row) => row.mappedTo), [
     "local",
@@ -66,8 +69,27 @@ test("maps the supported Local 801 workbook header profiles", () => {
     "work_location",
     "work_location",
     "hire_date",
-    "personal_email",
+    "home_email",
+    "cell_phone",
+    "home_phone",
+    "job_status",
   ]);
+});
+
+test("normalizes every employment and contact field used by the directory", () => {
+  const normalized = imports.normalizeImportRow(
+    ["Home Email", "Cell Phone", "Home Phone", "Work Phone", "MAPE Hire Date", "Job Status"],
+    ["member@example.test", "651-555-0101", "651-555-0102", "651-555-0103", "8/4/2026", "Active"],
+  );
+  assert.deepEqual(normalized, {
+    home_email: "member@example.test",
+    cell_phone: "651-555-0101",
+    home_phone: "651-555-0102",
+    work_phone: "651-555-0103",
+    hire_date: "2026-08-04",
+    job_status: "Active",
+    personal_email: "member@example.test",
+  });
 });
 
 test("maps and canonicalizes membership status from every supported Local 801 workbook profile", () => {

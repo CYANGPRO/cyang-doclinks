@@ -587,7 +587,18 @@ export const PROTECTED_IMPORT_APPLY_SQL = `
       contact_item.item ->> 'encryptedPayload' AS encrypted_payload,
       contact_item.item ->> 'encryptionKeyVersion' AS encryption_key_version,
       (contact_item.item ->> 'encryptionFormatVersion')::integer AS encryption_format_version,
-      COALESCE((contact_item.item ->> 'isPrimary')::boolean, true) AS is_primary,
+      CASE
+        WHEN contact_item.item ->> 'contactType' = 'phone' THEN
+          contact_item.item ->> 'contactLabel' = (
+            SELECT preferred.item ->> 'contactLabel'
+            FROM jsonb_array_elements(mutation.contact_protected_json) AS preferred(item)
+            WHERE preferred.item ->> 'contactType' = 'phone'
+            ORDER BY CASE preferred.item ->> 'contactLabel'
+              WHEN 'cell' THEN 1 WHEN 'home' THEN 2 WHEN 'work' THEN 3 ELSE 4 END
+            LIMIT 1
+          )
+        ELSE COALESCE((contact_item.item ->> 'isPrimary')::boolean, true)
+      END AS is_primary,
       COALESCE(NULLIF(contact_item.item ->> 'visibility',''), 'authorized_directory') AS visibility,
       exact.item ->> 'domain' AS index_domain,
       exact.item ->> 'keyVersion' AS index_key_version,
@@ -617,7 +628,8 @@ export const PROTECTED_IMPORT_APPLY_SQL = `
         AND existing_index.index_hash = candidate.index_hash
       WHERE contact.organization_id = $1::uuid AND contact.person_id = candidate.target_person_id
         AND contact.contact_type = candidate.contact_type
-        AND contact.contact_label IS NOT DISTINCT FROM candidate.contact_label
+        AND (candidate.contact_type IN ('work_email','personal_email')
+          OR contact.contact_label IS NOT DISTINCT FROM candidate.contact_label)
         AND contact.archived_at IS NULL
       ORDER BY contact.is_primary DESC, contact.created_at, contact.id
       LIMIT 1
@@ -628,14 +640,24 @@ export const PROTECTED_IMPORT_APPLY_SQL = `
     FROM resolved_contacts candidate
     WHERE contact.organization_id = $1::uuid AND contact.person_id = candidate.target_person_id
       AND contact.contact_type = candidate.contact_type
-      AND contact.contact_label IS NOT DISTINCT FROM candidate.contact_label
-      AND candidate.is_primary = true
-      AND contact.is_primary = true AND contact.archived_at IS NULL
+      AND contact.archived_at IS NULL
       AND contact.id IS DISTINCT FROM candidate.existing_id
+      AND (
+        (candidate.is_primary = true AND contact.is_primary = true)
+        OR (
+          candidate.existing_id IS NULL
+          AND (candidate.contact_type IN ('work_email','personal_email')
+            OR contact.contact_label IS NOT DISTINCT FROM candidate.contact_label)
+        )
+      )
     RETURNING contact.id
   ), promoted_existing_contacts AS (
     UPDATE local801.person_contact_methods contact
-    SET is_primary = true, verified_at = COALESCE(contact.verified_at, now())
+    SET is_primary = candidate.is_primary,
+      contact_label = candidate.contact_label,
+      visibility = candidate.visibility,
+      source_import_file_id = candidate.source_file_id,
+      verified_at = COALESCE(contact.verified_at, now())
     FROM resolved_contacts candidate
     CROSS JOIN (SELECT count(*) FROM archived_primary_contacts) archive_barrier
     WHERE candidate.existing_id IS NOT NULL AND contact.organization_id = $1::uuid AND contact.id = candidate.existing_id

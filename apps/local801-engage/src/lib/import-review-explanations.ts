@@ -67,7 +67,7 @@ const PROTECTED_EXPLANATION_SELECT = `
       CASE WHEN categorized.error_count > 0 THEN 'One or more blocking validation errors are attached to this row.' END,
       CASE WHEN categorized.person_count > 1 THEN 'More than one existing person matches the authoritative identity evidence.' END,
       CASE WHEN categorized.person_count = 1 AND NOT categorized.existing_person_active THEN 'The exact identity match points to an inactive person record.' END,
-      CASE WHEN categorized.row_hash IS NULL OR categorized.direct_pii_field_set_version NOT IN (2, 3, 4)
+      CASE WHEN categorized.row_hash IS NULL OR categorized.direct_pii_field_set_version NOT IN (2, 3, 4, 5)
         OR categorized.direct_pii_presence_mask IS NULL OR categorized.direct_pii_validity_mask IS NULL
         THEN 'Protected identity metadata is incomplete for this row.' END,
       CASE WHEN categorized.direct_pii_presence_mask IS NOT NULL AND categorized.direct_pii_validity_mask IS NOT NULL

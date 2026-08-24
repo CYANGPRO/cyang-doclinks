@@ -102,14 +102,14 @@ function reviewEnvelope(row: ProtectedImportReviewRow): Pick<EncryptedPiiField, 
     typeof row.direct_pii_encrypted_payload !== "string"
     || typeof row.encryption_key_version !== "string"
     || Number(row.encryption_format_version) !== 1
-    || ![1, 2, 3, 4].includes(fieldSetVersion)
+    || ![1, 2, 3, 4, 5].includes(fieldSetVersion)
   ) {
     blocked("ENVELOPE_INVALID", "An import-row protected PII companion has an invalid or unsupported envelope.");
   }
   if (fieldSetVersion >= 2) {
     const presence = Number(row.direct_pii_presence_mask);
     const validity = Number(row.direct_pii_validity_mask);
-    const maximumMask = fieldSetVersion === 4 ? 255 : fieldSetVersion === 3 ? 127 : 63;
+    const maximumMask = fieldSetVersion === 5 ? 1023 : fieldSetVersion === 4 ? 255 : fieldSetVersion === 3 ? 127 : 63;
     if (!Number.isInteger(presence) || presence < 0 || presence > maximumMask
       || !Number.isInteger(validity) || validity < 0 || validity > maximumMask
       || (validity & presence) !== validity) {

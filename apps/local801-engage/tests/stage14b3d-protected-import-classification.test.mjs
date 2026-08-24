@@ -17,7 +17,7 @@ function config() {
   });
 }
 
-test("protected import planner emits v4 field metadata and destination-compatible blind indexes", () => {
+test("protected import planner emits complete v5 field metadata and destination-compatible blind indexes", () => {
   const plan = buildSyntheticPiiBackfillPlan({
     users: [], authIdentities: [], people: [], identifiers: [], contacts: [], corrections: [], importFiles: [], pushSubscriptions: [],
     importRows: [{
@@ -26,19 +26,25 @@ test("protected import planner emits v4 field metadata and destination-compatibl
       normalized_json: {
         first_name: "Synthetic",
         last_name: "Person",
+        preferred_name: "Syn",
         work_email: "synthetic.person@example.test",
         employee_identifier: "EMPL-100",
+        member_identifier: "MEM-100",
+        home_email: "synthetic.home@example.test",
+        work_phone: "651-555-0100",
+        cell_phone: "651-555-0101",
+        home_phone: "651-555-0102",
         department: "Health Licensing",
       },
     }],
   }, config());
   const row = plan.importRows[0];
-  assert.equal(row.fieldSetVersion, 4);
-  assert.equal(row.presenceMask, 1 | 2 | 8 | 16);
+  assert.equal(row.fieldSetVersion, 5);
+  assert.equal(row.presenceMask, 1023);
   assert.equal(row.validityMask, row.presenceMask);
   assert.match(row.integrityHash, /^[0-9a-f]{64}$/);
   const domains = new Set(plan.exactIndexes.map((item) => item.domain));
-  for (const domain of ["person:first-name", "person:last-name", "contact:work-email", "identifier:employee-identifier"]) {
+  for (const domain of ["person:first-name", "person:last-name", "contact:work-email", "contact:personal-email", "contact:phone", "identifier:employee-identifier", "identifier:member-identifier"]) {
     assert.equal(domains.has(domain), true, domain);
   }
 });
@@ -60,7 +66,7 @@ test("invalid direct PII stays encrypted but is marked invalid instead of enteri
 });
 
 test("protected import classifier never reads direct PII from normalized_json and uses keyed integrity", () => {
-  for (const field of ["first_name", "last_name", "preferred_name", "work_email", "personal_email", "employee_identifier", "member_identifier"]) {
+  for (const field of ["first_name", "last_name", "preferred_name", "work_email", "personal_email", "home_email", "work_phone", "cell_phone", "home_phone", "employee_identifier", "member_identifier"]) {
     assert.doesNotMatch(PROTECTED_IMPORT_REVIEW_CLASSIFICATION_CTE, new RegExp(`normalized_json\\s*->>\\s*['\"]${field}['\"]`, "i"));
   }
   assert.match(PROTECTED_IMPORT_REVIEW_CLASSIFICATION_CTE, /protected\.row_integrity_hash AS row_hash/);

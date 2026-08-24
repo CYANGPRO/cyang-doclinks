@@ -49,7 +49,7 @@ function missingIdentifierStatement(statement: DatabaseStatement): DatabaseState
       WHERE row.organization_id = $1 AND file.import_batch_id = $2
         AND (
           protected.import_row_id IS NULL
-          OR protected.direct_pii_field_set_version NOT IN (2, 3, 4)
+          OR protected.direct_pii_field_set_version NOT IN (2, 3, 4, 5)
           OR protected.direct_pii_presence_mask IS NULL
           OR protected.direct_pii_validity_mask IS NULL
           OR (protected.direct_pii_presence_mask & ${AUTHORITATIVE_PRESENCE_MASK}) = 0
