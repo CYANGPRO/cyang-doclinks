@@ -22,6 +22,9 @@ const contactId = "55555555-5555-4555-8555-555555555555";
 const personHandle = createHash("sha256").update(`${organizationId}:${personId}`).digest("hex");
 const requestHandle = createHash("sha256").update(`contact-correction:${organizationId}:${requestId}`).digest("hex");
 const revision = "f".repeat(64);
+const queueRevision = createHash("sha256")
+  .update(`contact-correction-revision:v1:${organizationId}:${requestId}:${contactId}:51269`)
+  .digest("hex");
 const key = (byte) => Buffer.alloc(32, byte).toString("base64");
 
 function environment(overrides = {}) {
@@ -239,7 +242,7 @@ test("authorized review hydrates current and proposed values only after protecte
           preferred_name_encryption_key_version: null,
           preferred_name_encryption_format_version: null,
           contact_method_id: contactId,
-          revision,
+          current_contact_version: "51269",
           current_contact_value_encrypted_payload: current.encryptedPayload,
           current_contact_encryption_key_version: current.encryptionKeyVersion,
           current_contact_encryption_format_version: 1,
@@ -253,7 +256,7 @@ test("authorized review hydrates current and proposed values only after protecte
   assert.deepEqual(page, {
     items: [{
       handle: requestHandle,
-      revision,
+      revision: queueRevision,
       personHandle,
       displayName: "Synthetic Member",
       field: "work_email",
@@ -364,7 +367,8 @@ test("Stage 17I routes and migration retain bounded request, authorization, no-s
   assert.match(integrityMigration, /expected_contact_revision/);
   assert.match(integrityMigration, /lock_data_quality_correction_target/);
   const service = readFileSync(new URL("../src/lib/contact-corrections.ts", import.meta.url), "utf8");
-  assert.match(service, /current_contact\.contact_method_id::uuid/);
+  assert.match(service, /contact-correction-revision:v1:/);
+  assert.match(service, /current_contact\.current_contact_version/);
 });
 
 test("database decision conflicts become controlled stale or uniqueness responses", async () => {

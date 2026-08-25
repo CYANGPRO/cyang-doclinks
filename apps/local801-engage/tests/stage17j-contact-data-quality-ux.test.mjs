@@ -171,7 +171,8 @@ test("Contact Updates compares current and proposed protected values and confirm
   assert.match(page, /revision=\{item\.revision\}/);
   assert.match(service, /LEFT JOIN LATERAL/);
   assert.match(service, /current_contact_value_encrypted_payload/);
-  assert.match(service, /contact_correction_revision/);
+  assert.match(service, /contact-correction-revision:v1:/);
+  assert.match(service, /current_contact\.current_contact_version/);
   assert.match(service, /expectedRevision/);
   assert.match(service, /entity: "person-contact"/);
   assert.match(service, /rows\.slice\(0, REVIEW_LIMIT\)/);

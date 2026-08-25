@@ -38,6 +38,14 @@ function opaque(kind: string, organizationId: string, id: string) {
   return createHash("sha256").update(`${kind}:${organizationId}:${id}`).digest("hex");
 }
 
+function contactCorrectionRevision(organizationId: string, requestId: string, contactId: unknown, contactVersion: unknown) {
+  const stableContactId = typeof contactId === "string" ? contactId : "none";
+  const stableContactVersion = typeof contactVersion === "string" ? contactVersion : "none";
+  return createHash("sha256")
+    .update(`contact-correction-revision:v1:${organizationId}:${requestId}:${stableContactId}:${stableContactVersion}`)
+    .digest("hex");
+}
+
 function requireHandle(value: unknown, label: string) {
   if (typeof value !== "string" || !HANDLE_RE.test(value)) throw new ContactCorrectionError("INVALID_HANDLE", `${label} is unavailable.`, 400);
   return value.toLowerCase();
@@ -295,9 +303,7 @@ export async function listContactCorrectionsForReview(
       person.preferred_name_encrypted_payload, person.preferred_name_encryption_key_version, person.preferred_name_encryption_format_version,
       current_contact.contact_method_id, current_contact.current_contact_value_encrypted_payload,
       current_contact.current_contact_encryption_key_version, current_contact.current_contact_encryption_format_version,
-      local801.contact_correction_revision(
-        request.organization_id, request.id, current_contact.contact_method_id::uuid, current_contact.current_contact_version
-      ) AS revision
+      current_contact.current_contact_version
     FROM local801.contact_correction_requests request
     JOIN local801.people active_person
       ON active_person.organization_id = request.organization_id
@@ -340,7 +346,10 @@ export async function listContactCorrectionsForReview(
     }
     return {
       handle: opaque("contact-correction", context.organizationId, requestId),
-      revision: requireHandle(row.revision, "Contact revision"),
+      // Generate the same concurrency token as the database approval function.
+      // Keeping this deterministic hash in application code avoids a deployed
+      // driver overload-resolution failure while approval remains database-verified.
+      revision: contactCorrectionRevision(context.organizationId, requestId, row.contact_method_id, row.current_contact_version),
       personHandle: createHash("sha256").update(`${context.organizationId}:${personId}`).digest("hex"),
       displayName: decryptPersonName(row, context.organizationId, personId, config),
       field: requireField(row.field_name), currentValue, proposedValue,
