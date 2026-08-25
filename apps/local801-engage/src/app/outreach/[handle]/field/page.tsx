@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { AlertBanner, PageHeader, SectionCard, StatusBadge, UnavailableState } from "@/components/DesignSystem";
+import { AlertBanner, MembershipStatusDisplay, PageHeader, SectionCard, StatusBadge, UnavailableState } from "@/components/DesignSystem";
 import { EngagementRecorder } from "@/components/EngagementRecorder";
 import { FieldConnectionStatus } from "@/components/FieldConnectionStatus";
 import { ProtectedPage } from "@/components/ProtectedPage";
@@ -92,7 +92,7 @@ export default async function FieldOutreachPersonPage({ params, searchParams }: 
       This page needs a network connection. Member details, form entries, notes, and responses are not saved for offline use. Your list refreshes when you return to it.
     </AlertBanner>
 
-    <SectionCard className="member360-field-summary" title="Contact and assignment details" description={`Membership status: ${workspace.membershipStatus}`} badge={protectedReadEnabled ? <StatusBadge tone="info">Protected PII</StatusBadge> : null}>
+    <SectionCard className="member360-field-summary" title="Contact and assignment details" description={<MembershipStatusDisplay status={workspace.membershipStatus} />} badge={protectedReadEnabled ? <StatusBadge tone="info">Protected PII</StatusBadge> : null}>
       <div className="review-summary">
         <div><strong>Classification</strong><div>{workspace.classification || "Not recorded"}</div></div>
         <div><strong>Department</strong><div>{workspace.department || "Not recorded"}</div></div>

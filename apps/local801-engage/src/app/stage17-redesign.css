@@ -289,6 +289,21 @@ body {
 
 .status-badge,
 .badge { font-size: .67rem; min-height: 25px; padding: 5px 8px; }
+.membership-status-display {
+  align-items: center;
+  color: var(--brand-navy-deep);
+  display: inline-flex;
+  flex-wrap: wrap;
+  font-size: .84rem;
+  font-weight: 750;
+  gap: 8px;
+}
+.membership-status-display .status-badge {
+  box-shadow: 0 1px 2px rgb(8 36 56 / 8%);
+  font-size: .78rem;
+  min-height: 30px;
+  padding: 7px 11px;
+}
 
 .filter-bar {
   background: #f4f7f9;

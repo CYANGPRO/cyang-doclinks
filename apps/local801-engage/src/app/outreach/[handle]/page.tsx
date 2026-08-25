@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { DataTable, DisclosureCard, EmptyState, PageHeader, SectionCard, StatCard, StatusBadge, UnavailableState } from "@/components/DesignSystem";
+import { DataTable, DisclosureCard, EmptyState, MembershipStatusDisplay, PageHeader, SectionCard, StatCard, StatusBadge, UnavailableState } from "@/components/DesignSystem";
 import { EngagementRecorder } from "@/components/EngagementRecorder";
 import { FollowupCompleteButton } from "@/components/FollowupCompleteButton";
 import { OutreachAssignmentControl } from "@/components/OutreachAssignmentControl";
@@ -162,7 +162,7 @@ export default async function OutreachEmployeePage({ params, searchParams }: { p
       <Link className="button secondary member360-mobile-return-action" href={returnHref}>{returnLabel}</Link>
     </nav>
 
-    <SectionCard className="member360-summary" title="Membership and assignment details" description={`Membership status: ${workspace.membershipStatus}`} badge={protectedReadEnabled ? <StatusBadge tone="info">Protected PII</StatusBadge> : null}>
+    <SectionCard className="member360-summary" title="Membership and assignment details" description={<MembershipStatusDisplay status={workspace.membershipStatus} />} badge={protectedReadEnabled ? <StatusBadge tone="info">Protected PII</StatusBadge> : null}>
       <div className="review-summary">
         <div><strong>Department</strong><div>{workspace.department || "Not recorded"}{workspace.section ? ` · ${workspace.section}` : ""}</div></div>
         <div><strong>Classification</strong><div>{workspace.classification || "Not recorded"}</div></div>

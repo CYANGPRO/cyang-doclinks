@@ -63,3 +63,14 @@ test("outreach record derives completeness only after protected hydration and ke
   assert.match(source, /does not reuse them as a commitment to different work/);
   assert.match(source, /approved roster or import correction process/);
 });
+
+test("outreach records emphasize a consistently capitalized membership status", () => {
+  const designSystem = readFileSync(new URL("../src/components/DesignSystem.tsx", import.meta.url), "utf8");
+  const standardView = readFileSync(new URL("../src/app/outreach/[handle]/page.tsx", import.meta.url), "utf8");
+  const fieldView = readFileSync(new URL("../src/app/outreach/[handle]/field/page.tsx", import.meta.url), "utf8");
+
+  assert.match(designSystem, /status === "member" \? "Member"/);
+  assert.match(designSystem, /className="membership-status-display"/);
+  assert.match(standardView, /<MembershipStatusDisplay status=\{workspace\.membershipStatus\} \/>/);
+  assert.match(fieldView, /<MembershipStatusDisplay status=\{workspace\.membershipStatus\} \/>/);
+});

@@ -23,7 +23,7 @@ export function PageHeader({ eyebrow, title, description, actions }: {
 
 export function SectionCard({ title, description, badge, children, className = "", id }: {
   title?: string;
-  description?: string;
+  description?: ReactNode;
   badge?: ReactNode;
   children: ReactNode;
   className?: string;
@@ -87,6 +87,13 @@ export type StatusTone = "neutral" | "info" | "ready" | "pending" | "warning" | 
 
 export function StatusBadge({ children, tone = "neutral" }: { children: ReactNode; tone?: StatusTone }) {
   return <span className={`status-badge status-${tone}`}><span aria-hidden="true">●</span>{children}</span>;
+}
+
+export function MembershipStatusDisplay({ status }: { status: "member" | "nonmember" | "unknown" }) {
+  const label = status === "member" ? "Member" : status === "nonmember" ? "Nonmember" : "Unknown";
+  const tone: StatusTone = status === "member" ? "info" : status === "unknown" ? "warning" : "neutral";
+
+  return <span className="membership-status-display"><span>Membership status:</span><StatusBadge tone={tone}>{label}</StatusBadge></span>;
 }
 
 function State({ title, description, tone, action }: {
