@@ -8,12 +8,14 @@ import { NotificationBell } from "@/components/NotificationBell";
 import { RouteAwareFrame } from "@/components/RouteAwareFrame";
 import { AccountSessionMenu } from "@/components/AccountSessionMenu";
 import { NativeNotificationRouter } from "@/components/NativeNotificationRouter";
+import { UtilityFooter } from "@/components/UtilityFooter";
 
 export async function AppShell({ children }: { children: React.ReactNode }) {
   const user = await getPreviewUser();
   const shell = shellForRole(user?.role ?? null);
   const groups = user ? navGroupsForRole(user.role) : [];
   const mobile = user ? mobileNavForRole(user.role) : [];
+  const footer = <UtilityFooter signedIn={Boolean(user)} />;
 
   const sidebar = <aside className="sidebar" aria-label="Primary">
         <Link aria-label="Engaging Local 801 home" className="brand" href="/">
@@ -50,6 +52,6 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
 
   return <>
     {user && can(user.role, "viewPersonalWorkspace") ? <NativeNotificationRouter /> : null}
-    <RouteAwareFrame sidebar={sidebar} topbar={topbar} mobile={user ? <MobileNavigation all={groups} previewAuth={user.authentication === "preview"} primary={mobile} /> : null}>{children}</RouteAwareFrame>
+    <RouteAwareFrame footer={footer} sidebar={sidebar} topbar={topbar} mobile={user ? <MobileNavigation all={groups} previewAuth={user.authentication === "preview"} primary={mobile} /> : null}>{children}</RouteAwareFrame>
   </>;
 }

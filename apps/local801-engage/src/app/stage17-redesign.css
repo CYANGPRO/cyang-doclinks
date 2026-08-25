@@ -129,7 +129,28 @@ body {
 .sidebar-utility-links a { color: var(--brand-blue); font-weight: 700; }
 .sidebar-utility-links a:hover { color: var(--brand-blue-hover); }
 
-.main-shell { background: transparent; padding-bottom: 32px; }
+.main-shell { background: transparent; display: flex; flex-direction: column; padding-bottom: 0; }
+.route-body { flex: 1 0 auto; min-width: 0; width: 100%; }
+.utility-footer {
+  border-top: 1px solid var(--border);
+  color: var(--text-subtle);
+  flex: 0 0 auto;
+  padding: 18px 26px 22px;
+}
+.utility-footer-inner {
+  align-items: flex-start;
+  display: flex;
+  gap: 18px 28px;
+  justify-content: space-between;
+  margin: 0 auto;
+  max-width: var(--content-wide);
+  width: 100%;
+}
+.utility-footer-copy { display: grid; font-size: .76rem; gap: 3px; line-height: 1.45; }
+.utility-footer-copy strong { color: var(--text-muted); font-size: .79rem; }
+.utility-footer-nav { display: flex; flex-wrap: wrap; font-size: .76rem; gap: 8px 18px; justify-content: flex-end; }
+.utility-footer-nav a { color: var(--text-muted); font-weight: 700; text-decoration: none; }
+.utility-footer-nav a:hover { color: var(--brand-blue); text-decoration: underline; }
 .topbar {
   backdrop-filter: blur(14px);
   background: rgb(255 255 255 / 90%);
@@ -501,11 +522,12 @@ body {
   background:
     linear-gradient(135deg, rgb(13 48 72 / 97%), rgb(20 93 150 / 94%)),
     var(--brand-navy);
-  display: grid;
+  display: flex;
+  flex-direction: column;
   min-height: 100vh;
   padding: 32px;
-  place-items: center;
 }
+.isolated-route .route-body { align-items: center; display: flex; justify-content: center; padding-block: 24px; }
 .isolated-route .content { padding: 0; }
 .isolated-route .sign-in-content {
   background: var(--background);
@@ -513,7 +535,13 @@ body {
   box-shadow: 0 30px 80px rgb(0 0 0 / 26%);
   max-width: 980px;
   padding: 34px;
+  width: 100%;
 }
+.isolated-route .utility-footer { border-color: rgb(255 255 255 / 22%); color: rgb(255 255 255 / 76%); padding-inline: 0; width: 100%; }
+.isolated-route .utility-footer-inner { max-width: 980px; }
+.isolated-route .utility-footer-copy strong,
+.isolated-route .utility-footer-nav a { color: #fff; }
+.isolated-route .utility-footer-nav a:hover { color: #fff; }
 .sign-in-brand {
   align-items: center;
   color: var(--brand-navy-deep);
@@ -558,6 +586,9 @@ body {
   .topbar { min-height: 62px; padding: 8px 14px; }
   .topbar-mape-logo { display: block; }
   .content { padding: 24px 16px 42px; }
+  .utility-footer { padding: 18px 16px calc(22px + env(safe-area-inset-bottom)); }
+  .utility-footer-inner { display: grid; }
+  .utility-footer-nav { justify-content: flex-start; }
   .dashboard-layout { grid-template-columns: 1fr; }
   .priority-panel { order: 1; }
   .snapshot-panel { order: 2; }
