@@ -227,7 +227,11 @@ function decryptDisplayName(row: QualityFactsRow, organizationId: string, config
       { organizationId, entity: "person", recordId: row.person_id, field: "preferred-name" }, config,
     );
   }
-  return preferredName?.trim() || `${firstName} ${lastName}`.trim();
+  const fullName = `${firstName} ${lastName}`.trim();
+  const preferred = preferredName?.trim();
+  return preferred && preferred.toLocaleLowerCase("en-US") !== firstName.trim().toLocaleLowerCase("en-US")
+    ? `${fullName} (${preferred})`
+    : fullName;
 }
 
 export async function getDataQualitySummary(

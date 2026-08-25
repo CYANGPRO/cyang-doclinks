@@ -12,6 +12,7 @@ export type Role = keyof typeof roleLabels;
 
 export const permissions = {
   manageUsers: ["system_owner", "local_admin"],
+  deleteEmployees: ["system_owner", "local_admin"],
   manageImports: ["system_owner", "local_admin", "membership_data_manager"],
   approveImports: ["system_owner", "local_admin", "membership_data_manager"],
   assignNewHires: ["system_owner", "local_admin", "membership_data_manager", "cat_admin", "cat_lead"],

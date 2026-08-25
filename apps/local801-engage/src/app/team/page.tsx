@@ -14,6 +14,7 @@ export const dynamic = "force-dynamic";
 
 const permissionLabels: Record<Permission, string> = {
   manageUsers: "Manage Team & Access",
+  deleteEmployees: "Remove employee records from active CAT views",
   manageImports: "Manage membership and imports",
   approveImports: "Approve import review",
   assignNewHires: "Assign new hires to CAT organizers",

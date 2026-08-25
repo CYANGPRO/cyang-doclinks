@@ -47,7 +47,7 @@ test("dense operational tables keep no more than six decision-focused columns", 
   const catActions = source("src/app/cat-actions/page.tsx");
   const documents = source("src/app/documents/page.tsx");
 
-  assert.match(directory, /headers=\{\["Person", "Hire Date", "Work", "Contact"\]\}/);
+  assert.match(directory, /canDeleteEmployee \? \["Person", "Hire Date", "Work", "Contact", "Actions"\] : \["Person", "Hire Date", "Work", "Contact"\]/);
   assert.doesNotMatch(directory, /directory-action-cell|directory-member360-button/);
   assert.match(newHires, /\["Person", "Hire Date", "Work", "Contact", "Assignment"\]/);
   assert.match(campaigns, /\["Campaign", "Status", "Dates", "Population", "Contacted", "Completed"\]/);

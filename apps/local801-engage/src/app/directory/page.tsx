@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { AppliedFilterSummary, DataTable, DisclosureCard, EmptyState, FilterBar, PageHeader, Pagination, SectionCard, StatusBadge, UnavailableState } from "@/components/DesignSystem";
 import { ProtectedPage } from "@/components/ProtectedPage";
 import { QueueDensity } from "@/components/QueueDensity";
+import { EmployeeDeleteControl } from "@/components/EmployeeDeleteControl";
 import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
 import { formatCatDate } from "@/lib/date-format";
@@ -33,6 +34,7 @@ export default async function DirectoryPage({ searchParams }: { searchParams: Se
   if (!user) redirect("/sign-in");
   if (!can(user.role, "viewDirectory")) redirect("/unauthorized");
   const canOpenEmployee = can(user.role, "recordEngagement");
+  const canDeleteEmployee = can(user.role, "deleteEmployees");
   const parameters = await searchParams;
   let results = emptyResults(); let unavailable = false; let protectedReadEnabled = false;
   try {
@@ -111,7 +113,7 @@ export default async function DirectoryPage({ searchParams }: { searchParams: Se
         </div> : null}
 
         <div className="directory-desktop-results">
-          <DataTable caption="Directory results" headers={["Person", "Hire Date", "Work", "Contact"]}>
+          <DataTable caption="Directory results" headers={canDeleteEmployee ? ["Person", "Hire Date", "Work", "Contact", "Actions"] : ["Person", "Hire Date", "Work", "Contact"]}>
             {results.people.map((person) => <tr key={person.handle}>
               <td>
                 <div className="person-membership-stack">
@@ -129,6 +131,7 @@ export default async function DirectoryPage({ searchParams }: { searchParams: Se
                 <div>{person.workEmail ? <a href={`mailto:${person.workEmail}`}>{person.workEmail}</a> : <span className="muted">Work email not recorded</span>}</div>
                 <div>{person.workPhone ? <a href={`tel:${person.workPhone}`}>{person.workPhone}</a> : <span className="muted">Work phone not recorded</span>}</div>
               </td>
+              {canDeleteEmployee ? <td><EmployeeDeleteControl displayName={`${person.firstName} ${person.lastName}`} personHandle={person.handle} /></td> : null}
             </tr>)}
           </DataTable>
         </div>
@@ -149,6 +152,7 @@ export default async function DirectoryPage({ searchParams }: { searchParams: Se
               <span>{person.workPhone ? <a href={`tel:${person.workPhone}`}>{person.workPhone}</a> : <span className="muted">Work phone not recorded</span>}</span>
             </div>
             {canOpenEmployee ? <Link className="directory-member360-link" href={`/outreach/${person.handle}`}>Outreach record <span aria-hidden="true">→</span></Link> : null}
+            {canDeleteEmployee ? <EmployeeDeleteControl displayName={`${person.firstName} ${person.lastName}`} personHandle={person.handle} /> : null}
           </article>)}
         </div></QueueDensity>
 

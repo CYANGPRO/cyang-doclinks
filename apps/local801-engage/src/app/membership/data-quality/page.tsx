@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { DataQualityFixControls } from "@/components/DataQualityFixControls";
+import { ImportDataIssueControls } from "@/components/ImportDataIssueControls";
 import { AppliedFilterSummary, DataTable, DisclosureCard, EmptyState, FilterBar, PageHeader, Pagination, SectionCard, StatusBadge, UnavailableState } from "@/components/DesignSystem";
 import { ProtectedPage } from "@/components/ProtectedPage";
 import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
 import { formatCatDate } from "@/lib/date-format";
 import { DATA_QUALITY_ISSUES, getDataQualityQueue, type DataQualityIssueCode, type DataQualityIssueFilter, type DataQualityQueuePage, type DataQualitySummary } from "@/lib/data-quality";
+import { getImportDataIssues, type ImportDataIssue } from "@/lib/import-data-issues";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
@@ -67,10 +69,24 @@ export default async function MembershipDataQualityPage({ searchParams }: { sear
   const parameters = await searchParams;
   const hasCursor = typeof parameters.cursor === "string" && parameters.cursor.length > 0;
   let results: DataQualityQueuePage | null = null;
+  let importIssues: ImportDataIssue[] = [];
+  let importBatchId: string | null = null;
+  let moreImportIssues = false;
   let unavailable = false;
+  let importIssuesUnavailable = false;
   try {
     const context = await resolveWorkspaceContext(user);
-    results = await getDataQualityQueue(context, { issue: parameters.issue, pageSize: parameters.limit, cursor: parameters.cursor });
+    const [recordResult, importResult] = await Promise.allSettled([
+      getDataQualityQueue(context, { issue: parameters.issue, pageSize: parameters.limit, cursor: parameters.cursor }),
+      getImportDataIssues(context),
+    ]);
+    if (recordResult.status === "fulfilled") results = recordResult.value;
+    else unavailable = true;
+    if (importResult.status === "fulfilled") {
+      importIssues = importResult.value.issues;
+      importBatchId = importResult.value.batchId;
+      moreImportIssues = importResult.value.hasMore;
+    } else importIssuesUnavailable = true;
   } catch (error) {
     const source = error && typeof error === "object" ? error as Record<string, unknown> : {};
     console.error("[local801-data-quality-safe-failure]", JSON.stringify({
@@ -80,12 +96,33 @@ export default async function MembershipDataQualityPage({ searchParams }: { sear
       table: typeof source.table === "string" ? source.table : undefined,
     }));
     unavailable = true;
+    importIssuesUnavailable = true;
   }
 
   return <ProtectedPage permission="manageImports"><div className="content membership-data-quality-page">
     <PageHeader eyebrow="Members" title="Data quality" description="Find member records with clear gaps that need review. Fix individual records here, or use Data Imports for bulk and roster-source corrections." actions={<Link className="button secondary data-quality-header-action" href="/imports">Open data imports</Link>} />
 
-    {unavailable || !results ? <UnavailableState title="Data quality unavailable" description="We couldn’t safely load the protected records that need review, so no issue details are shown." /> : <>
+    <SectionCard className="import-data-issues-section" title="Import rows needing a decision" description="Review possible employee matches, attach a row, create a new employee on approval, or remove the row from this import." badge={<StatusBadge tone="info">Protected PII</StatusBadge>}>
+      {importIssuesUnavailable ? <UnavailableState title="Import issues unavailable" description="We couldn’t safely load protected import rows or possible employee matches." />
+        : importIssues.length === 0 ? <EmptyState title="No import decisions waiting" description="The latest reviewed import has no unresolved or proposed-new rows requiring an individual decision." />
+          : <>
+            <p className="muted import-data-issues-intro">An exact active work-email match always wins and cannot be overridden. When there is no exact work-email match, CAT ranks a short list using full names and workplace details. An administrator must confirm every attachment.</p>
+            <div className="import-data-issue-list">
+              {importIssues.map((issue) => <article className="import-data-issue-card" key={issue.rowId}>
+                <div className="import-data-issue-heading">
+                  <div><h3>{issue.displayName}</h3><p>{issue.sheetName} · source row {issue.sourceRowNumber.toLocaleString()} · {[issue.department, issue.classification, issue.workLocation].filter(Boolean).join(" · ") || "Work details unavailable"}</p></div>
+                  <StatusBadge tone={issue.category === "rejected" ? "danger" : issue.category === "needs_attention" ? "warning" : "pending"}>{issue.category === "proposed_new" ? "Proposed new" : issue.category === "needs_attention" ? "Needs attention" : "Rejected row"}</StatusBadge>
+                </div>
+                {issue.errorMessages.length ? <ul className="import-data-issue-errors">{issue.errorMessages.map((message, index) => <li key={`${issue.rowId}-${index}`}>{message}</li>)}</ul> : null}
+                <ImportDataIssueControls issue={issue} />
+              </article>)}
+            </div>
+            {moreImportIssues ? <p className="muted">Showing the first 50 decisions. Resolve or remove rows, then refresh to continue.</p> : null}
+            {importBatchId ? <div className="import-data-issues-footer"><Link className="button secondary" href={`/imports/${importBatchId}`}>Open full import review</Link></div> : null}
+          </>}
+    </SectionCard>
+
+    {unavailable || !results ? <UnavailableState title="Current-record issues unavailable" description="We couldn’t safely load protected employee records with data gaps." /> : <>
       <nav className="data-quality-summary" aria-label="Data quality issue views">
         <Link aria-current={results.issue === "all" ? "page" : undefined} className={`data-quality-summary-card${results.issue === "all" ? " active" : ""}`} href={filterHref("all", results.pageSize)}>
           <span>People needing review</span><strong>{results.summary.flaggedPeople.toLocaleString()}</strong><small>One person can have more than one issue.</small>
@@ -109,7 +146,7 @@ export default async function MembershipDataQualityPage({ searchParams }: { sear
             <button className="button" type="submit">Apply filter</button>
           </FilterBar>
         </form>
-        <p className="muted data-quality-method-note">These flags come only from information already on file and the latest approved roster. The app does not use fuzzy name matching, hidden rankings, or guesses about whether someone left.</p>
+        <p className="muted data-quality-method-note">Current-record flags come only from information already on file and the latest approved roster. Possible-match scores appear only for import-row review, show their reasons, and never make an automatic attachment.</p>
       </DisclosureCard>
 
       <SectionCard className="data-quality-review-queue" title="Records matching this data issue" description={results.people.length ? `${peopleLabel(issueCount(results.summary, results.issue))} ${issueCount(results.summary, results.issue) === 1 ? "needs" : "need"} review.` : "No active records match the selected issue."} badge={<StatusBadge tone="info">Protected PII</StatusBadge>}>

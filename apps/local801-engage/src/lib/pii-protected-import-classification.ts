@@ -14,6 +14,7 @@ export const PROTECTED_IMPORT_REVIEW_CLASSIFICATION_CTE = `
     SELECT row.id AS import_row_id, protected.row_integrity_hash AS row_hash,
       row.source_row_number, row.state AS row_state,
       row.normalized_json, sheet.sheet_name, file.sha256 AS source_file_sha256,
+      resolution.resolution_type, resolution.person_id AS resolution_person_id,
       protected.direct_pii_field_set_version,
       protected.direct_pii_presence_mask,
       protected.direct_pii_validity_mask
@@ -26,12 +27,20 @@ export const PROTECTED_IMPORT_REVIEW_CLASSIFICATION_CTE = `
       ON row.import_sheet_id = sheet.id AND row.organization_id = sheet.organization_id
     LEFT JOIN local801.import_row_pii protected
       ON protected.organization_id = row.organization_id AND protected.import_row_id = row.id
+    LEFT JOIN local801.import_row_resolutions resolution
+      ON resolution.organization_id = row.organization_id
+      AND resolution.import_batch_id = batch.id
+      AND resolution.import_row_id = row.id
     WHERE batch.organization_id = $1 AND batch.id = $2
+      AND row.state <> 'excluded'
   ),
   batch_errors AS (
     SELECT error.import_row_id
     FROM local801.import_errors error
     WHERE error.organization_id = $1 AND error.import_batch_id = $2 AND error.severity = 'error'
+      AND (error.import_row_id IS NULL OR EXISTS (
+        SELECT 1 FROM batch_rows included WHERE included.import_row_id = error.import_row_id
+      ))
   ),
   row_error_counts AS (
     SELECT error.import_row_id, count(*)::int AS error_count
@@ -164,13 +173,44 @@ export const PROTECTED_IMPORT_REVIEW_CLASSIFICATION_CTE = `
     FROM live_evidence
     GROUP BY import_row_id
   ),
+  work_email_matches AS (
+    SELECT import_row_id, count(DISTINCT person_id)::int AS person_count,
+      CASE WHEN count(DISTINCT person_id) = 1 THEN min(person_id::text)::uuid END AS person_id
+    FROM live_evidence
+    WHERE evidence_type = 'work_email'
+    GROUP BY import_row_id
+  ),
+  effective_matches AS (
+    SELECT row.import_row_id,
+      CASE
+        WHEN work_email.person_count = 1 THEN GREATEST(COALESCE(live.person_count, 0), 1)
+        WHEN row.resolution_type = 'confirm_existing' THEN 1
+        WHEN row.resolution_type = 'create_new' THEN 0
+        ELSE COALESCE(live.person_count, 0)
+      END::int AS person_count,
+      CASE
+        WHEN work_email.person_count = 1 THEN work_email.person_id
+        WHEN row.resolution_type = 'confirm_existing' THEN row.resolution_person_id
+        WHEN row.resolution_type = 'create_new' THEN NULL
+        ELSE live.person_id
+      END AS person_id,
+      COALESCE(live.person_count, 0)::int AS automatic_person_count,
+      live.person_id AS automatic_person_id,
+      COALESCE(live.employee_identifier_matches, false) AS employee_identifier_matches,
+      COALESCE(live.member_identifier_matches, false) AS member_identifier_matches,
+      COALESCE(live.work_email_identity_matches, false) AS work_email_identity_matches,
+      COALESCE(live.personal_email_identity_matches, false) AS personal_email_identity_matches
+    FROM batch_rows row
+    LEFT JOIN live_matches live ON live.import_row_id = row.import_row_id
+    LEFT JOIN work_email_matches work_email ON work_email.import_row_id = row.import_row_id
+  ),
   direct_person_name_matches AS (
     SELECT imported.import_row_id,
       bool_or(imported.index_domain = 'person:first-name' AND live.entity_id IS NOT NULL) AS first_name_matches,
       bool_or(imported.index_domain = 'person:last-name' AND live.entity_id IS NOT NULL) AS last_name_matches,
       bool_or(imported.index_domain = 'person:preferred-name' AND live.entity_id IS NOT NULL) AS preferred_name_matches
     FROM import_indexes imported
-    JOIN live_matches match
+    JOIN effective_matches match
       ON match.import_row_id = imported.import_row_id AND match.person_count = 1
     LEFT JOIN local801.pii_exact_indexes live
       ON live.organization_id = $1
@@ -194,7 +234,7 @@ export const PROTECTED_IMPORT_REVIEW_CLASSIFICATION_CTE = `
         AND contact.archived_at IS NULL
         AND live.entity_id IS NOT NULL) AS personal_email_matches
     FROM import_indexes imported
-    JOIN live_matches match
+    JOIN effective_matches match
       ON match.import_row_id = imported.import_row_id AND match.person_count = 1
     LEFT JOIN local801.pii_exact_indexes live
       ON live.organization_id = $1
@@ -241,7 +281,7 @@ export const PROTECTED_IMPORT_REVIEW_CLASSIFICATION_CTE = `
       (person.id IS NOT NULL AND person.archived_at IS NULL) AS existing_person_active,
       COALESCE(error.error_count, 0) AS error_count
     FROM batch_rows row
-    LEFT JOIN live_matches match ON match.import_row_id = row.import_row_id
+    LEFT JOIN effective_matches match ON match.import_row_id = row.import_row_id
     LEFT JOIN direct_field_matches direct ON direct.import_row_id = row.import_row_id
     LEFT JOIN local801.people person ON person.id = match.person_id AND person.organization_id = $1
     LEFT JOIN row_error_counts error ON error.import_row_id = row.import_row_id

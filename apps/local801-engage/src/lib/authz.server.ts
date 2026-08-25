@@ -120,6 +120,7 @@ export async function getPolicyAcknowledgementUser(): Promise<PreviewUser | null
 
 const permissionRatePolicy: Partial<Record<Permission, RateLimitPolicy>> = {
   manageUsers: "administrative_mutation",
+  deleteEmployees: "administrative_mutation",
   manageImports: "import",
   approveImports: "import",
   manageCampaigns: "administrative_mutation",

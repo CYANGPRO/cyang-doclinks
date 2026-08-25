@@ -45,7 +45,7 @@ type ProtectedImportFileRow = {
   encryption_format_version: number;
 };
 
-type ProtectedImportReviewRow = {
+export type ProtectedImportReviewRow = {
   sheet_name: string;
   source_row_number: number;
   import_row_id: string;
@@ -126,7 +126,7 @@ function reviewEnvelope(row: ProtectedImportReviewRow): Pick<EncryptedPiiField, 
   };
 }
 
-function directPiiBundle(row: ProtectedImportReviewRow, organizationId: string, keyConfig: PiiKeyConfiguration) {
+export function decryptProtectedImportRowBundle(row: ProtectedImportReviewRow, organizationId: string, keyConfig: PiiKeyConfiguration) {
   const plaintext = decryptPiiField(
     reviewEnvelope(row),
     { organizationId, entity: "import-row", recordId: row.import_row_id, field: "direct-pii" },
@@ -341,7 +341,7 @@ export async function hydrateImportReviewDetailFromProtectedPii(
     rows: detail.rows.map((row) => {
       const protectedRow = byCoordinate.get(coordinateKey(row.sheet_name, row.source_row_number));
       if (!protectedRow) blocked("COMPANION_MISSING", "An import review row is missing its protected direct-PII companion.");
-      const bundle = directPiiBundle(protectedRow, organizationId, keyConfig);
+      const bundle = decryptProtectedImportRowBundle(protectedRow, organizationId, keyConfig);
       return {
         ...row,
         first_name: bundle.first_name ?? null,
