@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { fieldContactHref, fieldPersonHref, fieldQueueHref, normalizeFieldModeContext } from "../src/lib/field-mode.ts";
+import { fieldContactHref, fieldPersonHref, fieldQueueHref, normalizeFieldModeContext, standardQueueHref } from "../src/lib/field-mode.ts";
 
 test("field mode keeps only safe queue context and ignores search/cursor/person state", () => {
   assert.deepEqual(normalizeFieldModeContext({
@@ -30,6 +30,7 @@ test("field mode keeps only safe queue context and ignores search/cursor/person 
 test("field mode URLs contain only opaque handle and bounded queue settings", () => {
   const context = { scope: "assigned", focus: "stale", limit: 25 };
   assert.equal(fieldQueueHref(context), "/outreach?field=1&scope=assigned&focus=stale&limit=25");
+  assert.equal(standardQueueHref(context), "/outreach?view=standard&scope=assigned&focus=stale&limit=25");
   const person = fieldPersonHref("a".repeat(64), context);
   assert.equal(person, `/outreach/${"a".repeat(64)}/field?field=1&scope=assigned&focus=stale&limit=25`);
   assert.equal(fieldContactHref("a".repeat(64), context), `/outreach/${"a".repeat(64)}/contact?field=1&scope=assigned&focus=stale&limit=25`);
@@ -41,9 +42,25 @@ test("field outreach queue deliberately drops free-text search and opens lightwe
   assert.match(page, /term: fieldMode \? undefined : parameters\.q/);
   assert.match(page, /Search is turned off in field view/i);
   assert.match(page, /fieldPersonHref\(person\.handle, canonicalFieldContext\)/);
-  assert.match(page, /Start field view/);
+  assert.match(page, /MobileFieldViewSwitch/);
+  assert.match(page, /allowAutomaticMobileDefault=\{!standardView\}/);
+  assert.match(page, /standardQueueHref\(canonicalFieldContext\)/);
+  assert.match(page, /name="view" value="standard"/);
   assert.match(page, /FieldConnectionStatus/);
   assert.match(page, /Member details, notes, and form responses are never saved for offline use/i);
+});
+
+test("mobile outreach defaults to field view and respects a session opt-out", () => {
+  const source = readFileSync(new URL("../src/components/MobileFieldViewSwitch.tsx", import.meta.url), "utf8");
+  assert.match(source, /\(max-width: 720px\)/);
+  assert.match(source, /local801:outreach-view:v1/);
+  assert.match(source, /sessionStorage\.getItem/);
+  assert.match(source, /sessionStorage\.setItem/);
+  assert.match(source, /readViewPreference\(\) === "standard"/);
+  assert.match(source, /router\.replace\(fieldHref, \{ scroll: false \}\)/);
+  assert.match(source, /Start field view/);
+  assert.match(source, /Use standard view/);
+  assert.doesNotMatch(source, /addEventListener|member|email|phone|handle/i);
 });
 
 test("field employee route reuses existing protected reads and EngagementRecorder rather than new mutations", () => {

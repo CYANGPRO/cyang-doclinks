@@ -37,6 +37,16 @@ export function fieldQueueHref(context: Pick<FieldModeContext, "scope" | "focus"
   return `/outreach?${params.toString()}`;
 }
 
+export function standardQueueHref(context: Pick<FieldModeContext, "scope" | "focus" | "limit">) {
+  const params = new URLSearchParams({
+    view: "standard",
+    scope: context.scope,
+    focus: context.focus,
+    limit: String(context.limit),
+  });
+  return `/outreach?${params.toString()}`;
+}
+
 export function fieldPersonHref(
   employeeHandle: string,
   context: Pick<FieldModeContext, "scope" | "focus" | "limit">,

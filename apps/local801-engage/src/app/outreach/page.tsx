@@ -2,12 +2,13 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AlertBanner, AppliedFilterSummary, DisclosureCard, EmptyState, FilterBar, PageHeader, Pagination, SectionCard, StatusBadge, UnavailableState } from "@/components/DesignSystem";
 import { FieldConnectionStatus } from "@/components/FieldConnectionStatus";
+import { MobileFieldViewSwitch } from "@/components/MobileFieldViewSwitch";
 import { ProtectedPage } from "@/components/ProtectedPage";
 import { QueueDensity } from "@/components/QueueDensity";
 import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
 import { formatCatDateTime } from "@/lib/date-format";
-import { fieldPersonHref, fieldQueueHref, member360Href, normalizeFieldModeContext } from "@/lib/field-mode";
+import { fieldPersonHref, fieldQueueHref, member360Href, normalizeFieldModeContext, standardQueueHref } from "@/lib/field-mode";
 import { DEFAULT_OUTREACH_PAGE_SIZE, getOutreachQueue, type OutreachPriority, type OutreachQueuePage } from "@/lib/outreach";
 import { getProtectedOutreachQueue } from "@/lib/pii-protected-outreach-query";
 import { getPiiProtectedReadMode } from "@/lib/pii-protected-read";
@@ -22,10 +23,11 @@ function emptyResults(): OutreachQueuePage {
   };
 }
 
-function href(results: OutreachQueuePage, cursor: string | null, fieldMode: boolean) {
+function href(results: OutreachQueuePage, cursor: string | null, fieldMode: boolean, standardView: boolean) {
   const params = new URLSearchParams();
   if (!fieldMode && results.term) params.set("q", results.term);
   if (fieldMode) params.set("field", "1");
+  if (!fieldMode && standardView) params.set("view", "standard");
   params.set("scope", fieldMode ? results.effectiveScope : results.requestedScope);
   params.set("focus", results.focus);
   params.set("limit", String(results.pageSize));
@@ -84,6 +86,7 @@ export default async function OutreachPage({ searchParams }: { searchParams: Sea
   const hasCursor = typeof parameters.cursor === "string" && parameters.cursor.length > 0;
   const requestedFieldContext = normalizeFieldModeContext(parameters);
   const fieldMode = requestedFieldContext.enabled;
+  const standardView = !fieldMode && (Array.isArray(parameters.view) ? parameters.view[0] : parameters.view) === "standard";
   let results = emptyResults();
   let unavailable = false;
   let protectedReadMode: "legacy" | "preview" | "protected" = "legacy";
@@ -111,7 +114,8 @@ export default async function OutreachPage({ searchParams }: { searchParams: Sea
     limit: results.pageSize === 50 ? 50 as const : 25 as const,
   };
   const startFieldHref = fieldQueueHref(canonicalFieldContext);
-  const currentQueueHref = href(results, typeof parameters.cursor === "string" ? parameters.cursor : null, fieldMode);
+  const exitFieldHref = standardQueueHref(canonicalFieldContext);
+  const currentQueueHref = href(results, typeof parameters.cursor === "string" ? parameters.cursor : null, fieldMode, standardView);
   const filterSummary = [
     !fieldMode && results.term ? `Search: ${results.term}` : "",
     results.focus !== "all" ? `Focus: ${focusLabel(results.focus)}` : "",
@@ -125,9 +129,12 @@ export default async function OutreachPage({ searchParams }: { searchParams: Sea
       description={fieldMode
         ? "Work through your current list one person at a time. When you come back, the list refreshes using the latest assignments and follow-ups."
         : "The people you’re responsible for, ordered so overdue follow-ups and people who need attention rise to the top."}
-      actions={fieldMode
-        ? <Link className="button secondary outreach-header-action outreach-exit-field-action" href="/outreach">Exit field view</Link>
-        : <Link className="button outreach-header-action outreach-start-field-action" href={startFieldHref}>Start field view</Link>}
+      actions={<MobileFieldViewSwitch
+        allowAutomaticMobileDefault={!standardView}
+        fieldHref={startFieldHref}
+        fieldMode={fieldMode}
+        standardHref={exitFieldHref}
+      />}
     />
 
     {fieldMode ? <>
@@ -141,6 +148,7 @@ export default async function OutreachPage({ searchParams }: { searchParams: Sea
       <form action="/outreach" method="get">
         <FilterBar>
           {fieldMode ? <input type="hidden" name="field" value="1" /> : <div className="field"><label htmlFor="outreach-search">Search</label><input id="outreach-search" name="q" type="search" maxLength={100} defaultValue={results.term} placeholder="Name, department, location, classification, or work email" /></div>}
+          {standardView ? <input type="hidden" name="view" value="standard" /> : null}
           <div className="field"><label htmlFor="outreach-focus">Focus</label><select id="outreach-focus" name="focus" defaultValue={results.focus}><option value="all">Everyone in my list</option><option value="attention">Needs attention</option><option value="never-engaged">No conversation recorded</option><option value="stale">90+ days since contact</option></select></div>
           <div className="field"><label htmlFor="outreach-scope">Scope</label><select id="outreach-scope" name="scope" defaultValue={fieldMode ? results.effectiveScope : results.requestedScope}><option value="assigned">My assignments</option><option value="authorized">Everyone I can access</option></select></div>
           <div className="field"><label htmlFor="outreach-limit">Rows</label><select id="outreach-limit" name="limit" defaultValue={String(results.pageSize)}><option value="25">25</option><option value="50">50</option></select></div>
@@ -151,7 +159,7 @@ export default async function OutreachPage({ searchParams }: { searchParams: Sea
     </DisclosureCard>
 
     <SectionCard className="outreach-primary-queue" title={fieldMode ? "People in this field pass" : "People assigned for outreach"} description={unavailable ? undefined : peopleCountLabel(results.total)} badge={protectedReadMode === "protected" && !unavailable ? <StatusBadge tone="info">Protected PII</StatusBadge> : null}>
-      {!fieldMode && !unavailable ? <AppliedFilterSummary items={filterSummary} clearHref="/outreach" /> : null}
+      {!fieldMode && !unavailable ? <AppliedFilterSummary items={filterSummary} clearHref={standardView ? "/outreach?view=standard" : "/outreach"} /> : null}
       {unavailable ? <UnavailableState title="Your list is unavailable" description="We couldn’t load this list safely. Try again after the database connection and protected member-data checks are available." />
         : results.people.length === 0 ? <EmptyState title="No one matches this view" description="Try a different focus, scope, or search." />
         : <QueueDensity label="Outreach results"><div className="stack">
@@ -182,7 +190,7 @@ export default async function OutreachPage({ searchParams }: { searchParams: Sea
             </article>;
           })}
         </div></QueueDensity>}
-      {!unavailable && results.people.length ? <Pagination previousHref={results.previousCursor ? href(results, results.previousCursor, fieldMode) : null} historyBackFallbackHref={hasCursor && !results.previousCursor ? href(results, null, fieldMode) : null} nextHref={results.nextCursor ? href(results, results.nextCursor, fieldMode) : null} label={`Showing up to ${results.pageSize} of ${results.total}`} /> : null}
+      {!unavailable && results.people.length ? <Pagination previousHref={results.previousCursor ? href(results, results.previousCursor, fieldMode, standardView) : null} historyBackFallbackHref={hasCursor && !results.previousCursor ? href(results, null, fieldMode, standardView) : null} nextHref={results.nextCursor ? href(results, results.nextCursor, fieldMode, standardView) : null} label={`Showing up to ${results.pageSize} of ${results.total}`} /> : null}
     </SectionCard>
   </div></ProtectedPage>;
 }
