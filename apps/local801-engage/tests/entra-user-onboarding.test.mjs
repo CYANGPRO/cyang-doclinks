@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   buildOnboardingInvitationMessage,
+  deleteTeamMemberFromEntra,
   __testing,
   EntraOnboardingError,
   getEntraProvisioningConfig,
@@ -46,8 +47,17 @@ test("role-specific invitation explains identity, MFA, policy acceptance, protec
   for (const required of [
     "Assigned role: CAT",
     "exactly organizer@example.test",
+    "Use your personal email account",
+    "Do not use an employer-issued work or school account",
+    "finish accepting the invitation",
+    "one-time email code",
     "never creates or emails a password",
-    "multifactor authentication",
+    "Microsoft Authenticator",
+    "invited personal email",
+    `security-info/\\?tenantId=${organizationId}`,
+    "does not connect your employer",
+    "Do not select another personal or employer account",
+    "enter the displayed number",
     "Privacy and acceptable use",
     "must not be forwarded",
     "protect member and employee information",
@@ -60,6 +70,7 @@ test("role-specific invitation explains identity, MFA, policy acceptance, protec
 test("one-step onboarding sends a Microsoft invitation, assigns the enterprise app, and records ready state", async () => {
   const queries = [];
   const fetches = [];
+  const waits = [];
   const query = async (sql, parameters) => {
     queries.push({ sql, parameters });
     if (/RETURNING provider_user_id::text, status/.test(sql)) return [{ provider_user_id: null, status: "processing" }];
@@ -73,7 +84,12 @@ test("one-step onboarding sends a Microsoft invitation, assigns the enterprise a
     return response({ id: "assignment-id" }, 201);
   };
 
-  const result = await onboardTeamMemberWithEntra(target, { query, fetch: fetcher, env: environment() });
+  const result = await onboardTeamMemberWithEntra(target, {
+    query,
+    fetch: fetcher,
+    env: environment(),
+    wait: async (delayMs) => { waits.push(delayMs); },
+  });
   assert.deepEqual(result, { onboarding: "ready", invitationSent: true });
   assert.equal(fetches.length, 4);
   assert.equal(
@@ -95,6 +111,75 @@ test("one-step onboarding sends a Microsoft invitation, assigns the enterprise a
   assert.ok(queries.some(({ sql }) => /status = 'ready'/.test(sql)));
   assert.ok(queries.some(({ sql }) => /target_user\.deactivated_at IS NULL/.test(sql)));
   assert.equal(JSON.stringify(queries).includes("server-only-secret-value"), false);
+  assert.deepEqual(waits, [1_000]);
+});
+
+test("new guest assignment waits for Entra propagation and retries only Request_BadRequest", async () => {
+  const queries = [];
+  const fetches = [];
+  const waits = [];
+  let assignmentPosts = 0;
+  const query = async (sql, parameters) => {
+    queries.push({ sql, parameters });
+    if (/RETURNING provider_user_id::text, status/.test(sql)) return [{ provider_user_id: null, status: "processing" }];
+    return [];
+  };
+  const fetcher = async (url, init) => {
+    fetches.push({ url: String(url), init });
+    if (String(url).includes("/oauth2/v2.0/token")) return response({ access_token: "t".repeat(64) });
+    if (String(url).endsWith("/invitations")) return response({ status: "PendingAcceptance", invitedUser: { id: providerUserId } }, 201);
+    if (init.method === "GET") return response({ value: [] });
+    assignmentPosts += 1;
+    return assignmentPosts < 3
+      ? response({ error: { code: "Request_BadRequest", message: "transient tenant detail must not persist" } }, 400)
+      : response({ id: "assignment-id" }, 201);
+  };
+
+  const result = await onboardTeamMemberWithEntra(target, {
+    query,
+    fetch: fetcher,
+    env: environment(),
+    wait: async (delayMs) => { waits.push(delayMs); },
+  });
+
+  assert.deepEqual(result, { onboarding: "ready", invitationSent: true });
+  assert.equal(assignmentPosts, 3);
+  assert.deepEqual(waits, [1_000, 2_000, 4_000]);
+  assert.equal(fetches.filter(({ url }) => url.endsWith("/invitations")).length, 1);
+  assert.equal(JSON.stringify(queries).includes("transient tenant detail"), false);
+  assert.ok(queries.some(({ sql }) => /status = 'ready'/.test(sql)));
+});
+
+test("new guest assignment does not retry permission failures", async () => {
+  const queries = [];
+  const waits = [];
+  let assignmentPosts = 0;
+  const query = async (sql, parameters) => {
+    queries.push({ sql, parameters });
+    if (/RETURNING provider_user_id::text, status/.test(sql)) return [{ provider_user_id: null, status: "processing" }];
+    return [];
+  };
+  const fetcher = async (url, init) => {
+    if (String(url).includes("/oauth2/v2.0/token")) return response({ access_token: "t".repeat(64) });
+    if (String(url).endsWith("/invitations")) return response({ status: "PendingAcceptance", invitedUser: { id: providerUserId } }, 201);
+    if (init.method === "GET") return response({ value: [] });
+    assignmentPosts += 1;
+    return response({ error: { code: "Authorization_RequestDenied" } }, 403);
+  };
+
+  await assert.rejects(
+    onboardTeamMemberWithEntra(target, {
+      query,
+      fetch: fetcher,
+      env: environment(),
+      wait: async (delayMs) => { waits.push(delayMs); },
+    }),
+    (error) => error instanceof EntraOnboardingError
+      && error.code === "ENTRA_ASSIGNMENT_REJECTED_AUTHORIZATION_REQUESTDENIED",
+  );
+  assert.equal(assignmentPosts, 1);
+  assert.deepEqual(waits, [1_000]);
+  assert.equal(queries.find(({ sql }) => /status = 'failed'/.test(sql)).parameters[2], "ENTRA_ASSIGNMENT_REJECTED_AUTHORIZATION_REQUESTDENIED");
 });
 
 test("retry with a recorded Entra user is idempotent and does not send a second invitation", async () => {
@@ -123,6 +208,36 @@ test("retry with a recorded Entra user is idempotent and does not send a second 
   assert.match(fetches[2].url, /skiptoken=second-page/);
   assert.equal(fetches.some(({ url }) => url.endsWith("/invitations")), false);
   assert.equal(fetches.some(({ init }) => init.method === "POST" && !String(init.body ?? "").includes("client_credentials")), false);
+});
+
+test("account removal deletes only the recorded Entra object and treats an already deleted user as success", async () => {
+  for (const [deletionStatus, expected] of [[204, "deleted"], [404, "already_absent"]]) {
+    const fetches = [];
+    const fetcher = async (url, init) => {
+      fetches.push({ url: String(url), init });
+      if (String(url).includes("/oauth2/v2.0/token")) return response({ access_token: "t".repeat(64) });
+      return new Response(null, { status: deletionStatus });
+    };
+    const result = await deleteTeamMemberFromEntra(providerUserId, { fetch: fetcher, env: environment() });
+    assert.deepEqual(result, { entraDeletion: expected });
+    assert.equal(fetches.length, 2);
+    assert.equal(fetches[1].url, `https://graph.microsoft.com/v1.0/users/${providerUserId}`);
+    assert.equal(fetches[1].init.method, "DELETE");
+    assert.match(fetches[1].init.headers.Authorization, /^Bearer /);
+  }
+  assert.deepEqual(await deleteTeamMemberFromEntra(null, { env: environment() }), { entraDeletion: "not_recorded" });
+});
+
+test("account removal reports the exact missing Entra application permission without touching CAT state", async () => {
+  const fetcher = async (url) => String(url).includes("/oauth2/v2.0/token")
+    ? response({ access_token: "t".repeat(64) })
+    : response({ error: { code: "Authorization_RequestDenied" } }, 403);
+  await assert.rejects(
+    deleteTeamMemberFromEntra(providerUserId, { fetch: fetcher, env: environment() }),
+    (error) => error instanceof EntraOnboardingError
+      && error.code === "ENTRA_DELETION_REJECTED_AUTHORIZATION_REQUESTDENIED"
+      && /User\.ReadWrite\.All/.test(error.message),
+  );
 });
 
 test("assignment lookup requires both the requested user and configured app role before treating retry as complete", async () => {
@@ -233,6 +348,9 @@ test("migration and routes wire durable onboarding without storing passwords or 
   assert.doesNotMatch(migration, /password|access_token|invite_redeem|client_secret/i);
   assert.match(createRoute, /onboardTeamMemberWithEntra/);
   assert.match(updateRoute, /retry_onboarding/);
+  assert.match(updateRoute, /deleteTeamMemberFromEntra/);
+  assert.match(updateRoute, /removeTeamMemberFromCat/);
   assert.match(controls, /Add user and send invitation/);
   assert.match(controls, /Retry onboarding/);
+  assert.match(controls, /Remove account/);
 });

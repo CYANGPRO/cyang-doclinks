@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { formatCatDateTime } from "@/lib/date-format";
 
 type Option = { handle: string; label: string; detail: string | null };
 type PopulationCriteria = {
@@ -176,7 +177,7 @@ function PopulationBuilder({ campaignHandle }: { campaignHandle: string }) {
           <div><dt>Protected activity</dt><dd>{prepared.preview.protectedActivity}</dd></div>
           <div><dt>Unavailable</dt><dd>{prepared.preview.unavailable}</dd></div>
         </dl>
-        <p className="muted">Confirmation expires at {new Date(prepared.preview.expiresAt).toLocaleTimeString()} and fails if the live set changes.</p>
+        <p className="muted">Confirmation expires at {formatCatDateTime(prepared.preview.expiresAt)} and fails if the live set changes.</p>
         <div className="form-actions"><button className="button" type="button" onClick={confirm} disabled={pending}>{pending ? "Applying…" : `Confirm ${prepared.request.operation}`}</button><button className="button secondary" type="button" onClick={() => setPrepared(null)} disabled={pending}>Cancel</button></div>
       </div> : null}
       <FeedbackMessage feedback={feedback} />

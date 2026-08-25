@@ -170,7 +170,7 @@ export function EngagementCommandCenter({ report }: { report: EngagementCommandC
         <a className="button secondary" aria-current={report.filters.breakdown === "work-location" ? "page" : undefined} href={filterUrl(report, "work-location")}>By work location</a>
       </div>
       {coverageRows.length === 0 ? <EmptyState title="No coverage breakdown" description="No one matches the current filters." /> : (
-        <DataTable caption={`Coverage by ${coverageLabel.toLowerCase()}`} headers={[coverageLabel, "Represented", "Ever contacted", "Recent", "Never", "Coverage", "Recent coverage"]}>
+        <DataTable caption={`Coverage by ${coverageLabel.toLowerCase()}`} headers={[coverageLabel, "Represented", "Ever contacted", "Recent", "Never", "Coverage"]}>
           {coverageRows.map((row) => <tr key={row.label}>
             <td><strong>{row.label}</strong></td>
             <td>{whole(row.representedCount)}</td>
@@ -178,7 +178,6 @@ export function EngagementCommandCenter({ report }: { report: EngagementCommandC
             <td>{whole(row.recentEngagedCount)}</td>
             <td>{whole(row.neverEngagedCount)}</td>
             <td>{percent(row.coverageRate)}</td>
-            <td>{percent(row.recentCoverageRate)}</td>
           </tr>)}
         </DataTable>
       )}
@@ -206,15 +205,13 @@ export function EngagementCommandCenter({ report }: { report: EngagementCommandC
 
     <SectionCard title="Organizer assignment and contact coverage" description={`Assigned people, recorded contacts, and open follow-ups for ${Math.min(report.organizers.length, 50)} organizer${Math.min(report.organizers.length, 50) === 1 ? "" : "s"} during ${recentLabel}. These counts do not rank organizers.`}>
       {report.organizers.length === 0 ? <EmptyState title="No CAT organizer activity" description="No assignments, recorded contacts, or follow-ups match the current filters." /> : (
-        <DataTable caption="CAT team coverage" headers={["CAT organizer", "Assigned", "Reached in period", "Coverage", "Contacts", "Outstanding follow-ups", "Overdue"]}>
+        <DataTable caption="CAT team coverage" headers={["CAT organizer", "Assigned", "Reached in period", "Coverage", "Follow-ups"]}>
           {report.organizers.map((row) => <tr key={row.label}>
             <td><strong>{row.label}</strong></td>
             <td>{whole(row.assignedCount)}</td>
             <td>{whole(row.reachedInPeriodCount)}</td>
             <td>{percent(row.coverageRate)}</td>
-            <td>{whole(row.engagementEventCount)}</td>
-            <td>{whole(row.outstandingFollowupCount)}</td>
-            <td>{whole(row.overdueFollowupCount)}</td>
+            <td>{whole(row.outstandingFollowupCount)} open<div className="muted">{whole(row.overdueFollowupCount)} overdue</div></td>
           </tr>)}
         </DataTable>
       )}

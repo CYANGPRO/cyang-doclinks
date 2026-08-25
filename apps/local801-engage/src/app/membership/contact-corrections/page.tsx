@@ -5,6 +5,7 @@ import { AlertBanner, DataTable, EmptyState, PageHeader, SectionCard, StatusBadg
 import { ProtectedPage } from "@/components/ProtectedPage";
 import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
+import { formatCatDateTime } from "@/lib/date-format";
 import { listContactCorrectionsForReview, type ContactCorrectionReviewItem } from "@/lib/contact-corrections";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
 
@@ -16,7 +17,7 @@ const fieldLabels: Record<string, string> = {
 };
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+  return formatCatDateTime(value);
 }
 
 function PersonName({ item, canOpenMember }: { item: ContactCorrectionReviewItem; canOpenMember: boolean }) {

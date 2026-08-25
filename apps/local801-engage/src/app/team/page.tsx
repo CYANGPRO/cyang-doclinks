@@ -4,6 +4,7 @@ import { ProtectedPage } from "@/components/ProtectedPage";
 import { ProvisionTeamMemberForm, TeamMemberControls } from "@/components/TeamAccessControls";
 import { can, navForRole, roleLabels, type Permission, type Role } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
+import { formatCatDateTime } from "@/lib/date-format";
 import { hydrateTeamAccessPageFromProtectedPii, isPiiProtectedReadEnabled } from "@/lib/pii-protected-read";
 import { getTeamAccessPage, teamReadSafeCode } from "@/lib/team-access";
 import { writeSecuritySignal } from "@/lib/security-signal";
@@ -42,8 +43,7 @@ const roleOrder = Object.keys(roleLabels) as Role[];
 const permissionOrder = Object.keys(permissionLabels) as Permission[];
 
 function displayTimestamp(value: string | null) {
-  if (!value) return "Not yet";
-  return value.replace("T", " ").replace(/\.\d{3}Z$/, " UTC");
+  return formatCatDateTime(value, "Not yet");
 }
 
 function areasForRole(role: Role) {
@@ -154,7 +154,7 @@ export default async function TeamPage() {
                       ) : protectedPeer ? (
                         <span className="stat-detail">System Owner required.</span>
                       ) : (
-                        <TeamMemberControls handle={member.handle} currentRole={member.role} active={member.active} roles={page.assignableRoles} displayName={member.displayName} onboardingStatus={member.onboardingStatus} />
+                        <TeamMemberControls handle={member.handle} currentRole={member.role} active={member.active} roles={page.assignableRoles} displayName={member.displayName} onboardingStatus={member.onboardingStatus} canRemove={!member.identityLinked && member.lastAuthenticatedAt === null} />
                       )}
                     </td>
                   </tr>

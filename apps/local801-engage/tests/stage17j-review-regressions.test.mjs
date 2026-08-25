@@ -92,6 +92,8 @@ test("contact view shows all phone and email types and uses explicit preference 
   assert.match(contact, /telHref\(preferredPhone\)/);
   assert.match(contact, /smsHref\(preferredPhone\)/);
   assert.match(contact, /mailto:\$\{preferredEmail\}/);
+  assert.equal(contact.match(/className="page-actions member360-contact-actions"/g)?.length, 1);
+  assert.match(contact, /member360-contact-actions[\s\S]*member360-contact-call-action[\s\S]*member360-contact-text-action[\s\S]*member360-contact-email-action/);
 });
 
 test("workload reset remounts uncontrolled filters from the URL state", () => {

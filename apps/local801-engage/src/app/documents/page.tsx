@@ -18,6 +18,7 @@ import { MobileDocumentIntake } from "@/components/MobileDocumentIntake";
 import { ProtectedPage } from "@/components/ProtectedPage";
 import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
+import { formatCatDate } from "@/lib/date-format";
 import { documentUploadVisibilities } from "@/lib/document-upload";
 import { getDocumentsPage, type DocumentVisibility } from "@/lib/documents";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
@@ -68,10 +69,7 @@ function documentType(mediaType: string | null, filename: string | null) {
 }
 
 function createdDate(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeZone: "America/Chicago",
-  }).format(new Date(value));
+  return formatCatDate(value, "Date unavailable");
 }
 
 function uploaderLabel(value: string) {
@@ -140,14 +138,14 @@ export default async function DocumentsPage({
       ) : <>
         <DataTable
           caption="Documents"
-          headers={["Document", "Category", "File", "Visibility", "Uploader", "Created", "Action"]}
+          headers={["Document", "File", "Access", "Created", "Action"]}
         >
           {page.documents.map((document) => <tr key={document.downloadHandle}>
             <td>
               <strong>{document.title}</strong>
+              <div className="muted">{document.category}</div>
               <div><StatusBadge tone={statusTone(document.status)}>{statusLabel(document.status)}</StatusBadge></div>
             </td>
-            <td>{document.category}</td>
             <td>
               <strong>{documentType(document.mediaType, document.originalFilename)}</strong>
               <div className="muted">{document.originalFilename ?? "Filename unavailable"}</div>
@@ -155,8 +153,8 @@ export default async function DocumentsPage({
             <td>
               {visibilityLabels[document.visibility]}
               <div className="muted">{visibilityDescriptions[document.visibility]}</div>
+              <div className="muted">Uploaded by {uploaderLabel(document.uploaderName)}</div>
             </td>
-            <td>{uploaderLabel(document.uploaderName)}</td>
             <td>{createdDate(document.createdAt)}</td>
             <td>
               <div className="inline-actions">

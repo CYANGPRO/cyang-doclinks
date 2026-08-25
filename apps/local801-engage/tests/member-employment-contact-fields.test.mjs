@@ -16,16 +16,22 @@ test("migration 0018 adds reportable employment facts and labeled protected cont
   assert.match(migration, /create or replace view reporting\.new_hires/);
 });
 
-test("directory, new-hire, and upload views expose every approved workbook field", async () => {
-  const [directory, newHires, uploadRoute] = await Promise.all([
+test("summary views omit job status and personal contacts while the protected contact screen retains them", async () => {
+  const [directory, newHires, contact, uploadRoute] = await Promise.all([
     text("../src/app/directory/page.tsx"),
     text("../src/app/new-hires/page.tsx"),
+    text("../src/app/outreach/[handle]/contact/page.tsx"),
     text("../src/app/api/imports/validate/route.ts"),
   ]);
   for (const source of [directory, newHires]) {
-    for (const label of ["Hire Date", "Job Status", "Work Email", "Work Phone", "Cell Phone", "Home Phone", "Home Email"]) {
+    for (const label of ["Hire Date", "Work", "Contact"]) {
       assert.match(source, new RegExp(label));
     }
+    assert.doesNotMatch(source, /Job Status|person\.jobStatus/);
+    assert.doesNotMatch(source, /person\.(?:cellPhone|homePhone|homeEmail)/);
+  }
+  for (const label of ["Cell phone", "Home phone", "Home email"]) {
+    assert.match(contact, new RegExp(label));
   }
   for (const header of ["MAPE Hire Date", "Appointment Employment Status Name", "Work Phone", "Cell Phone", "Home Phone", "Home Email"]) {
     assert.match(uploadRoute, new RegExp(header));

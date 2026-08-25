@@ -38,7 +38,8 @@ test("Stage 17J New Hires removes progress and action presentation while retaini
   const page = source("src/app/new-hires/page.tsx");
   const css = source("src/app/stage17.css");
 
-  assert.match(page, /headers=\{\["Person", "Hire Date", "Job Status", "Classification", "Department \/ Work Location", "Work Email", "Work Phone", "Cell Phone", "Home Phone", "Home Email", "Assignment"\]\}/);
+  assert.match(page, /headers=\{\["Person", "Hire Date", "Work", "Contact", "Assignment"\]\}/);
+  assert.doesNotMatch(page, /Job Status|person\.jobStatus/);
   assert.doesNotMatch(page, /new-hire-progress-badges|new-hire-mobile-progress|new-hire-action-cell|new-hire-member360/);
   assert.match(page, /className="person-membership-stack"/);
   assert.match(page, /className="new-hire-desktop-results"/);

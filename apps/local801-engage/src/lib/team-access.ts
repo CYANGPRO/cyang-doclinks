@@ -3,7 +3,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { can, type Role } from "./access.ts";
 import { prepareAtomicAuditStatement } from "./audit.ts";
-import { queryLocal801, runLocal801Transaction, type DatabaseQuery, type DatabaseStatement } from "./db.ts";
+import { queryLocal801, runLocal801Transaction, withLocal801Transaction, type DatabaseQuery, type DatabaseStatement } from "./db.ts";
 import type { WorkspaceContext } from "./workspace-context.ts";
 
 const HANDLE_RE = /^[0-9a-f]{64}$/i;
@@ -54,6 +54,21 @@ type TargetRow = {
   role: string;
   deactivated_at: string | Date | null;
 };
+
+type RemovalStateRow = {
+  provider_user_id: string | null;
+  last_authenticated_at: string | Date | null;
+  identity_linked: boolean;
+};
+
+export type TeamMemberRemovalTarget = {
+  organizationId: string;
+  userId: string;
+  providerUserId: string | null;
+  role: Role;
+};
+
+type TransactionRunner = <T>(callback: (query: DatabaseQuery) => Promise<T>) => Promise<T>;
 
 export class TeamAccessError extends Error {
   readonly code: string;
@@ -301,6 +316,123 @@ export async function resolveTeamMemberOnboardingTarget(
     displayName: member.displayName,
     role: target.role,
   };
+}
+
+export async function resolveTeamMemberRemovalTarget(
+  context: WorkspaceContext,
+  handleInput: unknown,
+  query: DatabaseQuery = queryLocal801,
+): Promise<TeamMemberRemovalTarget> {
+  const target = await resolveTarget(context, handleInput, query);
+  if (target.id === context.userId) throw new TeamAccessError("SELF_REMOVAL", "Use another system owner to remove your account.", 409);
+  assertTargetManageable(context.role, target.role);
+  const [state] = await query<RemovalStateRow>(`
+    /* team-access:resolve-removal-target */
+    SELECT onboarding.provider_user_id::text, app_user.last_authenticated_at,
+      EXISTS (
+        SELECT 1 FROM local801.auth_identities identity
+        WHERE identity.organization_id = app_user.organization_id AND identity.user_id = app_user.id
+      ) AS identity_linked
+    FROM local801.users app_user
+    LEFT JOIN local801.user_identity_onboarding onboarding
+      ON onboarding.organization_id = app_user.organization_id AND onboarding.user_id = app_user.id
+    WHERE app_user.organization_id = $1::uuid AND app_user.id = $2::uuid
+    LIMIT 1
+  `, [context.organizationId, target.id]);
+  if (!state) throw new TeamAccessError("USER_NOT_FOUND", "The team member is no longer available.", 409);
+  if (state.last_authenticated_at !== null || state.identity_linked) {
+    throw new TeamAccessError("ACCOUNT_HAS_HISTORY", "This account has CAT sign-in history and cannot be erased. Deactivate it instead to preserve records and audit history.", 409);
+  }
+  return {
+    organizationId: context.organizationId,
+    userId: target.id,
+    providerUserId: state.provider_user_id,
+    role: target.role,
+  };
+}
+
+async function hardDeleteUnusedTeamMember(context: WorkspaceContext, target: TeamMemberRemovalTarget, query: DatabaseQuery) {
+  await query(`
+    DELETE FROM local801.pii_exact_indexes
+    WHERE organization_id = $1::uuid AND entity_type = 'user' AND entity_id = $2::uuid
+  `, [context.organizationId, target.userId]);
+  const deleted = await query<{ id: string }>(`
+    WITH ${managerActorCte()}
+    DELETE FROM local801.users app_user
+    USING actor
+    WHERE app_user.organization_id = $1::uuid
+      AND app_user.id = $4::uuid
+      AND app_user.id <> actor.id
+      AND app_user.last_authenticated_at IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM local801.auth_identities identity
+        WHERE identity.organization_id = app_user.organization_id AND identity.user_id = app_user.id
+      )
+      AND ($3::text = 'system_owner' OR NOT EXISTS (
+        SELECT 1 FROM local801.workspace_user_roles protected_user_role
+        JOIN local801.workspace_roles protected_role
+          ON protected_role.id = protected_user_role.role_id AND protected_role.organization_id = $1::uuid
+        WHERE protected_user_role.user_id = app_user.id AND protected_role.code IN ('system_owner','local_admin')
+      ))
+    RETURNING app_user.id::text
+  `, [context.organizationId, context.userId, context.role, target.userId]);
+  if (deleted.length !== 1) {
+    throw new TeamAccessError("REMOVAL_CONFLICT", "This account changed before it could be removed. Refresh Team & Access and try again.", 409);
+  }
+}
+
+function removalHistoryError(error: unknown) {
+  if (error instanceof TeamAccessError) return error;
+  const code = error && typeof error === "object" && "code" in error ? (error as { code?: unknown }).code : null;
+  if (code === "23503") {
+    return new TeamAccessError("ACCOUNT_HAS_HISTORY", "This account is referenced by CAT work or audit history and cannot be erased. Deactivate it instead.", 409);
+  }
+  return null;
+}
+
+export async function preflightTeamMemberRemoval(
+  context: WorkspaceContext,
+  target: TeamMemberRemovalTarget,
+  transaction: TransactionRunner = withLocal801Transaction,
+) {
+  const rollback = new Error("TEAM_REMOVAL_PREFLIGHT_ROLLBACK");
+  try {
+    await transaction(async (query) => {
+      await hardDeleteUnusedTeamMember(context, target, query);
+      throw rollback;
+    });
+  } catch (error) {
+    if (error === rollback) return { removable: true as const };
+    const safe = removalHistoryError(error);
+    if (safe) throw safe;
+    throw error;
+  }
+  throw new TeamAccessError("REMOVAL_PREFLIGHT_INVALID", "The account removal preflight did not roll back safely.", 503);
+}
+
+export async function removeTeamMemberFromCat(
+  context: WorkspaceContext,
+  target: TeamMemberRemovalTarget,
+  dependencies: { query?: DatabaseQuery; transaction?: TransactionRunner } = {},
+) {
+  const query = dependencies.query ?? queryLocal801;
+  const transaction = dependencies.transaction ?? withLocal801Transaction;
+  const audit = await prepareAtomicAuditStatement({
+    eventType: "record.archive", actorId: context.userId, organizationId: context.organizationId,
+    subjectType: "workspace_user", subjectId: target.userId,
+    payload: { accountRemoved: true, entraRemovalRequested: target.providerUserId !== null },
+  }, query);
+  try {
+    await transaction(async (transactionQuery) => {
+      await hardDeleteUnusedTeamMember(context, target, transactionQuery);
+      await transactionQuery(audit.sql, audit.parameters);
+    });
+  } catch (error) {
+    const safe = removalHistoryError(error);
+    if (safe) throw safe;
+    throw error;
+  }
+  return { removed: true as const };
 }
 
 export async function changeTeamMemberRole(

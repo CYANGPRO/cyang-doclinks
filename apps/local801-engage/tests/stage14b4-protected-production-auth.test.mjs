@@ -240,6 +240,81 @@ test("the configured bootstrap object can atomically rebind one legacy active sy
   }
 });
 
+test("a verified directory bootstrap object migrates the system owner without the stale onboarding object", async () => {
+  const previous = Object.fromEntries(Object.keys(protectedPiiEnv()).map((key) => [key, process.env[key]]));
+  Object.assign(process.env, protectedPiiEnv());
+  try {
+    const keyConfig = getPiiKeyConfiguration();
+    const email = "owner@example.test";
+    const tenantId = "aaaaaaaa-0000-4000-8000-000000000001";
+    const objectId = "834e272c-3b2b-40ae-92e6-017803ce3525";
+    const subject = `${tenantId}:${objectId}`;
+    const protectedEmail = encryptPiiField(email, {
+      organizationId, entity: "user", recordId: userId, field: "email",
+    }, keyConfig);
+    const userRow = {
+      organization_slug: "local801",
+      organization_id: organizationId,
+      user_id: userId,
+      auth_session_version: 4,
+      role: "system_owner",
+      email_encrypted_payload: protectedEmail.encryptedPayload,
+      email_encryption_key_version: protectedEmail.encryptionKeyVersion,
+      email_encryption_format_version: protectedEmail.encryptionFormatVersion,
+    };
+    const queries = [];
+    const transactions = [];
+    const binding = await authorizeProtectedProductionIdentity({
+      providerId: "local801-workforce",
+      subject,
+      objectId,
+      email: "",
+      emailVerified: false,
+      bootstrapObjectMatched: true,
+      mfaVerified: true,
+      directoryObjectVerified: true,
+    }, {
+      enabled: true,
+      organizationSlug: "local801",
+      providerId: "local801-workforce",
+      providerName: "Microsoft Entra ID",
+      wellKnown: "https://login.microsoftonline.com/example/v2.0/.well-known/openid-configuration",
+      clientId: "client",
+      clientSecret: "secret",
+      tenantId,
+      bootstrapObjectId: objectId,
+      mfaClaim: "amr",
+      mfaValue: "mfa",
+    }, {
+      query: async (sql, parameters) => {
+        queries.push(sql);
+        if (sql.includes("protected-organization")) return [{ id: organizationId, slug: "local801" }];
+        if (sql.includes("protected-bound-subject-account")) return [];
+        if (sql.includes("protected-bootstrap-owner")) return [];
+        if (sql.includes("protected-legacy-bootstrap-owner")) return [userRow];
+        if (sql.includes("protected-subject-lookup")) {
+          assert.deepEqual(parameters.slice(0, 3), [organizationId, "auth:provider-subject:local801-workforce", "local801-workforce"]);
+          return [];
+        }
+        if (sql.includes("protected-user-identity")) return [];
+        throw new Error(`Unexpected query: ${sql}`);
+      },
+      transaction: async (statements) => transactions.push(statements),
+    });
+    assert.equal(binding.userId, userId);
+    assert.equal(binding.role, "system_owner");
+    assert.match(queries.join("\n"), /protected-legacy-bootstrap-owner/);
+    assert.doesNotMatch(queries.join("\n"), /protected-onboarding-object-lookup/);
+    assert.equal(transactions.length, 1);
+    assert.match(transactions[0][0].sql, /production-auth:protected-bind-identity/);
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
 test("new protected OIDC links place only non-PII placeholders in legacy identity columns", async () => {
   const source = await readFile(protectedAuthUrl, "utf8");
   assert.match(source, /placeholderSubject = `protected:\$\{identityId\}`/);

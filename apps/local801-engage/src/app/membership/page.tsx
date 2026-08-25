@@ -4,6 +4,7 @@ import { DataTable, DisclosureCard, EmptyState, PageHeader, SectionCard, StatCar
 import { ProtectedPage } from "@/components/ProtectedPage";
 import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
+import { formatCatDate } from "@/lib/date-format";
 import { getMembershipBreakdowns, getMembershipSummary, unavailableMembershipSummary } from "@/lib/membership";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
 
@@ -26,8 +27,7 @@ function countLabel(value: number | "—", singular: string, plural: string) {
 }
 
 function snapshotLabel(value: string | null) {
-  if (!value) return "Not recorded";
-  return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" }).format(new Date(`${value}T00:00:00Z`));
+  return formatCatDate(value);
 }
 
 function drilldownHref(group: MembershipGroup, label: string) {

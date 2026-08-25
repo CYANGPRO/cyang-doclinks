@@ -10,6 +10,7 @@ const DEFAULT_APP_ROLE_ID = "00000000-0000-0000-0000-000000000000";
 const GRAPH_ROOT = "https://graph.microsoft.com/v1.0";
 const MAX_ASSIGNMENT_PAGES = 20;
 const MAX_ASSIGNMENT_RECORDS = 5_000;
+const ASSIGNMENT_PROPAGATION_DELAYS_MS = [1_000, 2_000, 4_000, 8_000] as const;
 
 const roleIntroductions: Record<Role, string> = {
   system_owner: "Full system governance, user access, protected data, configuration, reports, and audit oversight.",
@@ -61,6 +62,8 @@ type OnboardingRow = {
   status: string;
 };
 
+type Wait = (delayMs: number) => Promise<void>;
+
 export class EntraOnboardingError extends Error {
   readonly code: string;
   readonly status: number;
@@ -110,7 +113,11 @@ export function getEntraProvisioningConfig(env: NodeJS.ProcessEnv = process.env)
   return { enabled, tenantId, clientId, clientSecret, enterpriseAppObjectId, appRoleId, appUrl, supportEmail };
 }
 
-export function buildOnboardingInvitationMessage(target: Pick<EntraOnboardingTarget, "displayName" | "email" | "role">, config: Pick<EntraProvisioningConfig, "appUrl" | "supportEmail">) {
+export function buildOnboardingInvitationMessage(
+  target: Pick<EntraOnboardingTarget, "displayName" | "email" | "role">,
+  config: Pick<EntraProvisioningConfig, "appUrl" | "supportEmail" | "tenantId">,
+) {
+  const securityInfoUrl = `https://mysignins.microsoft.com/security-info/?tenantId=${encodeURIComponent(config.tenantId)}`;
   return [
     `${target.displayName},`,
     "",
@@ -118,11 +125,14 @@ export function buildOnboardingInvitationMessage(target: Pick<EntraOnboardingTar
     `Assigned role: ${roleLabels[target.role]}`,
     `Role access: ${roleIntroductions[target.role]}`,
     "",
-    "Complete these steps:",
+    "Complete these steps in order:",
     "1. Use the invitation link in this email. It is personal to you and must not be forwarded.",
-    `2. Sign in with exactly ${target.email}. Microsoft may use your existing account or send a one-time email code. CAT never creates or emails a password.`,
-    "3. Complete Microsoft multifactor authentication when prompted.",
-    `4. Continue to ${config.appUrl}/sign-in and accept ${CURRENT_ACCESS_POLICY.title} (${CURRENT_ACCESS_POLICY.version}) before using the workspace.`,
+    `2. Use your personal email account, exactly ${target.email}. Do not use an employer-issued work or school account. If Microsoft offers a one-time email code, request the code, enter it, and finish accepting the invitation. CAT never creates or emails a password.`,
+    "3. Register Microsoft Authenticator for the Local 801 guest sign-in tied to your invited personal email. Install or open Microsoft Authenticator, scan the QR code Microsoft shows, and approve the test request.",
+    `   If registration does not open automatically, use this tenant-specific Security info page while signed in as ${target.email}: ${securityInfoUrl}`,
+    `4. Go to ${config.appUrl}/sign-in, choose Continue with Microsoft Entra ID, and select exactly ${target.email}. Microsoft might label the Local 801 guest entry as a work or school account; that label identifies Local 801's guest directory and does not connect your employer. Do not select another personal or employer account.`,
+    "5. Approve the Microsoft Authenticator sign-in request and enter the displayed number when prompted.",
+    `6. Accept ${CURRENT_ACCESS_POLICY.title} (${CURRENT_ACCESS_POLICY.version}) before using the workspace.`,
     "",
     "By accessing the workspace, you agree to use it only for authorized Local 801 work; protect member and employee information; avoid shared accounts, forwarded invitations, and unapproved offline copies; follow records, privacy, and incident-reporting requirements; and understand that security-relevant activity is audited. Your access is limited to the assigned CAT role and may be changed or revoked.",
     "",
@@ -140,7 +150,9 @@ async function safeGraphCode(response: Response) {
   }
 }
 
-async function graphFailure(response: Response, operation: "TOKEN" | "INVITATION" | "ASSIGNMENT" | "ASSIGNMENT_CHECK") {
+type GraphOperation = "TOKEN" | "INVITATION" | "ASSIGNMENT" | "ASSIGNMENT_CHECK" | "DELETION";
+
+async function graphFailure(response: Response, operation: GraphOperation) {
   const graphCode = await safeGraphCode(response);
   const unavailable = response.status === 429 || response.status >= 500;
   const code = unavailable ? `ENTRA_${operation}_UNAVAILABLE` : `ENTRA_${operation}_REJECTED`;
@@ -151,7 +163,9 @@ async function graphFailure(response: Response, operation: "TOKEN" | "INVITATION
   }));
   if (graphCode === "AUTHORIZATION_REQUESTDENIED") {
     return new EntraOnboardingError(`${code}_${graphCode}`.slice(0, 80),
-      "Microsoft Entra application permission consent is incomplete. An Entra administrator must confirm the approved Microsoft Graph application permissions and grant admin consent, then retry onboarding.", 502);
+      operation === "DELETION"
+        ? "Microsoft Entra cannot remove this account until an Entra administrator grants the CAT application the User.ReadWrite.All application permission and admin consent."
+        : "Microsoft Entra application permission consent is incomplete. An Entra administrator must confirm the approved Microsoft Graph application permissions and grant admin consent, then retry onboarding.", 502);
   }
   if (graphCode === "REQUEST_UNSUPPORTEDQUERY") {
     return new EntraOnboardingError(`${code}_${graphCode}`.slice(0, 80),
@@ -189,7 +203,7 @@ async function accessToken(config: EntraProvisioningConfig, fetcher: typeof fetc
   return payload.access_token;
 }
 
-async function graphJson(url: string, init: RequestInit, operation: "INVITATION" | "ASSIGNMENT" | "ASSIGNMENT_CHECK", fetcher: typeof fetch) {
+async function graphJson(url: string, init: RequestInit, operation: Exclude<GraphOperation, "TOKEN" | "DELETION">, fetcher: typeof fetch) {
   let response: Response;
   try {
     response = await fetcher(url, { ...init, cache: "no-store", signal: AbortSignal.timeout(15_000) });
@@ -198,6 +212,40 @@ async function graphJson(url: string, init: RequestInit, operation: "INVITATION"
   }
   if (!response.ok) throw await graphFailure(response, operation);
   return response.status === 204 ? {} : response.json() as Promise<unknown>;
+}
+
+export async function deleteTeamMemberFromEntra(
+  providerUserId: string | null,
+  dependencies: { fetch?: typeof fetch; env?: NodeJS.ProcessEnv } = {},
+) {
+  if (providerUserId === null) return { entraDeletion: "not_recorded" as const };
+  const normalizedProviderUserId = normalizedUuid(providerUserId);
+  if (!normalizedProviderUserId) {
+    throw new EntraOnboardingError("ENTRA_DELETION_TARGET_INVALID", "The recorded Microsoft Entra account identifier is invalid.", 409);
+  }
+  const fetcher = dependencies.fetch ?? fetch;
+  const config = getEntraProvisioningConfig(dependencies.env ?? process.env);
+  if (!config.enabled) {
+    throw new EntraOnboardingError("ENTRA_PROVISIONING_DISABLED", "Automated Microsoft Entra account management is not enabled.");
+  }
+  const token = await accessToken(config, fetcher);
+  let response: Response;
+  try {
+    response = await fetcher(`${GRAPH_ROOT}/users/${normalizedProviderUserId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch {
+    throw new EntraOnboardingError("ENTRA_DELETION_UNAVAILABLE", "Microsoft Entra is temporarily unavailable. No CAT account was removed; try again.");
+  }
+  if (response.status === 404) return { entraDeletion: "already_absent" as const };
+  if (!response.ok) throw await graphFailure(response, "DELETION");
+  if (response.status !== 204) {
+    throw new EntraOnboardingError("ENTRA_DELETION_INVALID", "Microsoft Entra returned an invalid account-removal response.", 502);
+  }
+  return { entraDeletion: "deleted" as const };
 }
 
 async function inviteGuest(target: EntraOnboardingTarget, config: EntraProvisioningConfig, token: string, fetcher: typeof fetch) {
@@ -258,7 +306,7 @@ function assignmentNextLink(input: unknown, config: EntraProvisioningConfig) {
   return next.toString();
 }
 
-async function ensureEnterpriseAppAssignment(providerUserId: string, config: EntraProvisioningConfig, token: string, fetcher: typeof fetch) {
+async function hasEnterpriseAppAssignment(providerUserId: string, config: EntraProvisioningConfig, token: string, fetcher: typeof fetch) {
   const collectionUrl = `${GRAPH_ROOT}/servicePrincipals/${config.enterpriseAppObjectId}/appRoleAssignedTo`;
   const visited = new Set<string>();
   let nextUrl: string | null = collectionUrl;
@@ -287,18 +335,70 @@ async function ensureEnterpriseAppAssignment(providerUserId: string, config: Ent
       throw new EntraOnboardingError("ENTRA_ASSIGNMENT_CHECK_LIMIT", "Microsoft Entra returned more application assignments than CAT can verify safely. The CAT account is saved; an administrator must review the enterprise application before retrying.", 502);
     }
     if (list.value.some((entry) => entry !== null && typeof entry === "object"
-      && exactAssignment(entry as AssignmentEntry, providerUserId, config))) return;
+      && exactAssignment(entry as AssignmentEntry, providerUserId, config))) return true;
     nextUrl = assignmentNextLink(list["@odata.nextLink"], config);
   }
-  await graphJson(`${GRAPH_ROOT}/servicePrincipals/${config.enterpriseAppObjectId}/appRoleAssignedTo`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      principalId: providerUserId,
-      resourceId: config.enterpriseAppObjectId,
-      appRoleId: config.appRoleId,
-    }),
-  }, "ASSIGNMENT", fetcher);
+  return false;
+}
+
+async function createEnterpriseAppAssignment(
+  providerUserId: string,
+  config: EntraProvisioningConfig,
+  token: string,
+  fetcher: typeof fetch,
+  retryPropagation: boolean,
+  wait: Wait,
+) {
+  const collectionUrl = `${GRAPH_ROOT}/servicePrincipals/${config.enterpriseAppObjectId}/appRoleAssignedTo`;
+  const delays = retryPropagation ? ASSIGNMENT_PROPAGATION_DELAYS_MS : [0];
+  for (let attempt = 0; attempt < delays.length; attempt += 1) {
+    if (delays[attempt] > 0) await wait(delays[attempt]);
+    if (attempt > 0 && await hasEnterpriseAppAssignment(providerUserId, config, token, fetcher)) return;
+
+    let response: Response;
+    try {
+      response = await fetcher(collectionUrl, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          principalId: providerUserId,
+          resourceId: config.enterpriseAppObjectId,
+          appRoleId: config.appRoleId,
+        }),
+        cache: "no-store",
+        signal: AbortSignal.timeout(15_000),
+      });
+    } catch {
+      throw new EntraOnboardingError("ENTRA_ASSIGNMENT_UNAVAILABLE", "Microsoft Entra is temporarily unavailable. The CAT account is saved; retry onboarding from Team & Access.");
+    }
+    if (response.ok) return;
+
+    const graphCode = await safeGraphCode(response.clone());
+    const propagationPending = retryPropagation
+      && response.status === 400
+      && graphCode === "REQUEST_BADREQUEST"
+      && attempt < delays.length - 1;
+    if (!propagationPending) throw await graphFailure(response, "ASSIGNMENT");
+    console.warn("[local801-entra-propagation-retry]", JSON.stringify({
+      operation: "ASSIGNMENT",
+      status: response.status,
+      graphCode,
+      attempt: attempt + 1,
+      nextDelayMs: delays[attempt + 1],
+    }));
+  }
+}
+
+async function ensureEnterpriseAppAssignment(
+  providerUserId: string,
+  config: EntraProvisioningConfig,
+  token: string,
+  fetcher: typeof fetch,
+  retryPropagation: boolean,
+  wait: Wait,
+) {
+  if (await hasEnterpriseAppAssignment(providerUserId, config, token, fetcher)) return;
+  await createEnterpriseAppAssignment(providerUserId, config, token, fetcher, retryPropagation, wait);
 }
 
 async function markFailure(target: EntraOnboardingTarget, code: string, query: DatabaseQuery) {
@@ -311,10 +411,11 @@ async function markFailure(target: EntraOnboardingTarget, code: string, query: D
 
 export async function onboardTeamMemberWithEntra(
   target: EntraOnboardingTarget,
-  dependencies: { query?: DatabaseQuery; fetch?: typeof fetch; env?: NodeJS.ProcessEnv } = {},
+  dependencies: { query?: DatabaseQuery; fetch?: typeof fetch; env?: NodeJS.ProcessEnv; wait?: Wait } = {},
 ) {
   const query = dependencies.query ?? queryLocal801;
   const fetcher = dependencies.fetch ?? fetch;
+  const wait = dependencies.wait ?? ((delayMs) => new Promise<void>((resolve) => setTimeout(resolve, delayMs)));
   const config = getEntraProvisioningConfig(dependencies.env ?? process.env);
   if (!config.enabled) {
     throw new EntraOnboardingError("ENTRA_PROVISIONING_DISABLED", "Automated Microsoft Entra onboarding is not enabled.");
@@ -371,7 +472,7 @@ export async function onboardTeamMemberWithEntra(
       `, [target.organizationId, target.userId, providerUserId, invitation.invitationStatus]);
     }
 
-    await ensureEnterpriseAppAssignment(providerUserId, config, token, fetcher);
+    await ensureEnterpriseAppAssignment(providerUserId, config, token, fetcher, invitationSent, wait);
     await query(`
       UPDATE local801.user_identity_onboarding
       SET status = 'ready', access_assigned_at = now(), completed_at = now(), last_error_code = NULL
@@ -387,4 +488,11 @@ export async function onboardTeamMemberWithEntra(
   }
 }
 
-export const __testing = { DEFAULT_APP_ROLE_ID, MAX_ASSIGNMENT_PAGES, MAX_ASSIGNMENT_RECORDS, roleIntroductions, UUID_RE };
+export const __testing = {
+  ASSIGNMENT_PROPAGATION_DELAYS_MS,
+  DEFAULT_APP_ROLE_ID,
+  MAX_ASSIGNMENT_PAGES,
+  MAX_ASSIGNMENT_RECORDS,
+  roleIntroductions,
+  UUID_RE,
+};

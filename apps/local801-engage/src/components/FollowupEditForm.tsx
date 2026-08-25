@@ -90,6 +90,7 @@ export function FollowupEditForm({
           <input
             id={`followup-due-${followupHandle}`}
             type="datetime-local"
+            step={60}
             value={dueValue}
             onChange={(event) => setDueValue(event.target.value)}
             disabled={busy}

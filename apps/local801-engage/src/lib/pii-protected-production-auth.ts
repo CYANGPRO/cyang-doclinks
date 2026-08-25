@@ -747,13 +747,13 @@ export async function authorizeProtectedProductionIdentity(
   // selects or authorizes a database account.
   let account;
   try {
-    account = identity.directoryObjectVerified
-      ? await protectedAuthStage(
-        "PROTECTED_AUTH_ACCOUNT_FAILED",
-        () => resolveUserByOnboardingObjectId(organization, identity, query),
-      )
-      : identity.bootstrapObjectMatched
-        ? await resolveBootstrapOwner(organization, query)
+    account = identity.bootstrapObjectMatched
+      ? await resolveBootstrapOwner(organization, query)
+      : identity.directoryObjectVerified
+        ? await protectedAuthStage(
+          "PROTECTED_AUTH_ACCOUNT_FAILED",
+          () => resolveUserByOnboardingObjectId(organization, identity, query),
+        )
         : await resolveUserByProtectedEmail(organization, identity, query);
   } catch (error) {
     if (error instanceof ProtectedAuthError) throw error;

@@ -15,6 +15,7 @@ import { ProtectedPage } from "@/components/ProtectedPage";
 import { SaveCurrentView } from "@/components/WorkPreferenceControls";
 import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
+import { formatCatDate, formatCatDateTime } from "@/lib/date-format";
 import {
   getWorkloadCalendar,
   type WorkloadCalendarBucket,
@@ -56,22 +57,7 @@ function windowFilter(value: string | string[] | undefined): WindowFilter {
 }
 
 function dateLabel(entry: WorkloadCalendarEntry) {
-  if (!entry.dueAt) {
-    return new Intl.DateTimeFormat("en-US", {
-      timeZone: "America/Chicago",
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    }).format(new Date(`${entry.dateKey}T12:00:00Z`));
-  }
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/Chicago",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(entry.dueAt));
+  return entry.dueAt ? formatCatDateTime(entry.dueAt) : formatCatDate(entry.dateKey);
 }
 
 function bucketTone(bucket: WorkloadCalendarBucket) {

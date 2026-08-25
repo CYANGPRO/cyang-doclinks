@@ -183,7 +183,7 @@ export function EngagementRecorder({
           <div className="form-grid">
             <div className="field"><label htmlFor="contactMethod">Contact method</label><select id="contactMethod" name="contactMethod" defaultValue="in_person" required>{contactMethods.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
             <div className="field"><label htmlFor="outcome">What happened?</label><select id="outcome" name="outcome" value={outcome} onChange={(event) => setOutcome(event.target.value)} required>{outcomes.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
-            <div className="field"><label htmlFor="occurredAt">When</label><input id="occurredAt" name="occurredAt" type="datetime-local" /><small>Leave this blank to use the current time. Entered times use your device time zone.</small></div>
+            <div className="field"><label htmlFor="occurredAt">When</label><input id="occurredAt" name="occurredAt" type="datetime-local" step={60} /><small>Leave this blank to use the current time. Entered times use your device time zone.</small></div>
             <div className="field"><label htmlFor="assignmentHandle">Context</label><select id="assignmentHandle" name="assignmentHandle" defaultValue={assignments[0]?.handle || ""} required={!organizationWide}>{organizationWide ? <option value="">General outreach</option> : null}{assignments.map((assignment) => <option key={assignment.handle} value={assignment.handle}>{assignment.label} · {assignment.relationship}</option>)}</select></div>
           </div>
 
@@ -202,7 +202,7 @@ export function EngagementRecorder({
 
           <label className="choice-field"><input type="checkbox" checked={followupEnabled} onChange={(event: { target: { checked: boolean } }) => { setFollowupEnabled(event.target.checked); if (!event.target.checked) setFollowupDueAt(""); }} /><span><strong>Create a follow-up</strong><span className="field-help choice-help">Schedule the next contact while you’re recording this conversation.</span></span></label>
           {followupEnabled ? <div className="form-grid">
-            <div className="field"><label htmlFor="followupDueAt">Follow-up due</label><input id="followupDueAt" name="followupDueAt" type="datetime-local" value={followupDueAt} onChange={(event) => setFollowupDueAt(event.target.value)} required /></div>
+            <div className="field"><label htmlFor="followupDueAt">Follow-up due</label><input id="followupDueAt" name="followupDueAt" type="datetime-local" step={60} value={followupDueAt} onChange={(event) => setFollowupDueAt(event.target.value)} required /></div>
             <div className="field"><label htmlFor="assigneeHandle">Assign to</label><select id="assigneeHandle" name="assigneeHandle" defaultValue={assignees.find((item) => item.current)?.handle || assignees[0]?.handle || ""} required>{assignees.map((assignee) => <option key={assignee.handle} value={assignee.handle}>{assignee.label}{assignee.current ? " (me)" : ""}</option>)}</select></div>
           </div> : null}
           <div className="form-actions"><button className="button" type="submit" disabled={busy}>{busy ? "Saving…" : "Save conversation"}</button></div>

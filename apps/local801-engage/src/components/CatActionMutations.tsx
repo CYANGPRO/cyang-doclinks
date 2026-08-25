@@ -241,7 +241,7 @@ export function CatActionTaskCreateForm({ actionHandle, assignees }: { actionHan
       </div>
       <div className="field">
         <label htmlFor="new-cat-task-due">Due</label>
-        <input id="new-cat-task-due" name="dueAt" type="datetime-local" />
+        <input id="new-cat-task-due" name="dueAt" type="datetime-local" step={60} />
       </div>
     </div>
     <div className="form-actions"><button className="button" type="submit" disabled={pending}>{pending ? "Creating…" : "Create task"}</button></div>
@@ -316,7 +316,7 @@ export function CatActionTaskEditForm({ actionHandle, task, assignees }: { actio
         </div>
         <div className="field">
           <label htmlFor={`cat-task-due-${task.handle}`}>Due</label>
-          <input id={`cat-task-due-${task.handle}`} type="datetime-local" value={dueAt} onChange={(event) => setDueAt(event.target.value)} />
+          <input id={`cat-task-due-${task.handle}`} type="datetime-local" step={60} value={dueAt} onChange={(event) => setDueAt(event.target.value)} />
         </div>
       </div>
       <div className="form-actions"><button className="button secondary" type="submit" disabled={pending}>{pending ? "Saving…" : "Save task"}</button></div>

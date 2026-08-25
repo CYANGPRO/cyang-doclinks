@@ -66,7 +66,7 @@ test("audit activity workbook is a formatted Excel file with only the safe visib
   assert.doesNotMatch(sheet, /role\.change/);
 
   const styles = await zip.file("xl/styles.xml").async("string");
-  assert.match(styles, /formatCode="yyyy-mm-dd hh:mm"/);
+  assert.match(styles, /formatCode="mm\/dd\/yyyy h:mm AM\/PM"/);
   assert.match(styles, /FF134D8C/);
 });
 

@@ -27,12 +27,31 @@ test("mobile More is a modal destination sheet with keyboard and scroll manageme
 test("shared tables become labeled records instead of sideways mobile tables", () => {
   const design = source("src/components/DesignSystem.tsx");
   const sortable = source("src/components/SortableDataTable.tsx");
+  const globals = source("src/app/globals.css");
+  const stage16 = source("src/app/stage16.css");
   const css = source("src/app/stage17-redesign.css");
   assert.match(design, /SortableDataTable/);
   assert.match(sortable, /cloneElement\(cell, \{ "data-label": headers\[index\] \?\? "" \}\)/);
   assert.match(sortable, /className="responsive-table"/);
   assert.match(css, /\.responsive-table thead \{ display: none; \}/);
   assert.match(css, /\.responsive-table td::before \{[\s\S]*content: attr\(data-label\)/);
+  assert.match(globals, /\.table-scroll \{[^}]*overflow-x: visible/);
+  assert.doesNotMatch(`${globals}\n${stage16}`, /\.data-table \{[^}]*min-width: (?:640|720)px/);
+  assert.doesNotMatch(sortable, /Swipe horizontally/);
+});
+
+test("dense operational tables keep no more than six decision-focused columns", () => {
+  const directory = source("src/app/directory/page.tsx");
+  const newHires = source("src/app/new-hires/page.tsx");
+  const campaigns = source("src/app/campaigns/page.tsx");
+  const catActions = source("src/app/cat-actions/page.tsx");
+  const documents = source("src/app/documents/page.tsx");
+
+  assert.match(directory, /\["Person", "Hire Date", "Work", "Contact", "Action"\]/);
+  assert.match(newHires, /\["Person", "Hire Date", "Work", "Contact", "Assignment"\]/);
+  assert.match(campaigns, /\["Campaign", "Status", "Dates", "Population", "Contacted", "Completed"\]/);
+  assert.match(catActions, /\["Action", "Cycle", "Workload", "Completed", "Next due"\]/);
+  assert.match(documents, /\["Document", "File", "Access", "Created", "Action"\]/);
 });
 
 test("Home leads with prioritized work and a compact role-aware snapshot", () => {

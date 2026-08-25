@@ -512,7 +512,7 @@ body {
 
 .data-table {
   font-size: .87rem;
-  min-width: 720px;
+  min-width: 0;
 }
 
 .data-table th {

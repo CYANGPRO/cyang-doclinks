@@ -362,6 +362,9 @@ body {
 .member360-page > .expandable-card { margin-top: 10px; }
 .member360-page > .expandable-card + .expandable-card { margin-top: 8px; }
 .member360-followups-anchor .expandable-card { margin-top: 8px; }
+.member360-contact-actions { align-items: center; margin-top: 12px; }
+.member360-contact-actions .button { min-width: 70px; }
+.member360-contact-action-note { margin-left: 4px; }
 
 /* Reports behave like one workspace rather than seven unrelated pages. */
 .reports-workspace-page .report-view-nav {
@@ -440,7 +443,11 @@ body {
 
 /* Responsive records replace sideways tables. */
 .responsive-table .table-scroll-hint { display: none; }
-.table-scroll { border-color: var(--border-soft); box-shadow: none; }
+.table-scroll { border-color: var(--border-soft); box-shadow: none; overflow: visible; }
+.data-table { min-width: 0; width: 100%; }
+.data-table th,
+.data-table td { min-width: 0; overflow-wrap: anywhere; }
+.data-table .button { white-space: normal; }
 .data-table th { background: #f3f6f8; color: #657783; }
 .data-table tbody tr:hover,
 .data-table tbody tr:focus-within { background: #f7fafc; }
@@ -689,6 +696,8 @@ body {
   .member360-sticky-actions { top: 62px; }
   .field-mode-content { max-width: none; }
   .member360-field-page .alert-banner { font-size: .82rem; }
+  .member360-contact-actions .button { flex: 1 1 0; min-width: 64px; }
+  .member360-contact-action-note { flex-basis: 100%; margin-left: 0; }
 
   .reports-workspace-page .report-view-nav {
     display: grid;

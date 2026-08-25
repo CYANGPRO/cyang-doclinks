@@ -5,6 +5,7 @@ import { FieldConnectionStatus } from "@/components/FieldConnectionStatus";
 import { ProtectedPage } from "@/components/ProtectedPage";
 import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
+import { formatCatDateTime } from "@/lib/date-format";
 import { fieldPersonHref, fieldQueueHref, member360Href, normalizeFieldModeContext } from "@/lib/field-mode";
 import { DEFAULT_OUTREACH_PAGE_SIZE, getOutreachQueue, type OutreachPriority, type OutreachQueuePage } from "@/lib/outreach";
 import { getProtectedOutreachQueue } from "@/lib/pii-protected-outreach-query";
@@ -43,10 +44,7 @@ function priority(priority: OutreachPriority) {
 }
 
 function dateTime(value: string | null) {
-  if (!value) return "Not recorded";
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/Chicago", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
-  }).format(new Date(value));
+  return formatCatDateTime(value);
 }
 
 function readiness(person: OutreachQueuePage["people"][number]) {

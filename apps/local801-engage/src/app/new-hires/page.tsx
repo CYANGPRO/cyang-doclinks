@@ -17,6 +17,7 @@ import { NewHireAssignmentControl } from "@/components/NewHireAssignmentControl"
 import { ProtectedPage } from "@/components/ProtectedPage";
 import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
+import { formatCatDate, formatCatDateTime } from "@/lib/date-format";
 import { getNewHireAssignmentOptions } from "@/lib/new-hire-assignment";
 import {
   DEFAULT_NEW_HIRE_PAGE_SIZE,
@@ -68,16 +69,11 @@ function contactPresentation(state: NewHireContactState): { label: string; tone:
 }
 
 function hireDate(value: string) {
-  return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" }).format(new Date(`${value}T00:00:00Z`));
+  return formatCatDate(value);
 }
 
 function dateTime(value: string | null) {
-  if (!value) return "Not recorded";
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "America/Chicago",
-  }).format(new Date(value));
+  return formatCatDateTime(value);
 }
 
 function daysLabel(value: number) {
@@ -247,7 +243,7 @@ export default async function NewHiresPage({ searchParams }: { searchParams: Sea
           </div> : null}
 
           <div className="new-hire-desktop-results">
-            <DataTable caption="New hires" headers={["Person", "Hire Date", "Job Status", "Classification", "Department / Work Location", "Work Email", "Work Phone", "Cell Phone", "Home Phone", "Home Email", "Assignment"]}>
+            <DataTable caption="New hires" headers={["Person", "Hire Date", "Work", "Contact", "Assignment"]}>
               {results.people.map((person) => {
                 const contact = contactPresentation(person.contactState);
                 return <tr key={`${person.hireDate}:${person.handle}`}>
@@ -261,14 +257,16 @@ export default async function NewHiresPage({ searchParams }: { searchParams: Sea
                     <strong>{hireDate(person.hireDate)}</strong>
                     <div className="muted">{daysLabel(person.daysSinceHire)}</div>
                   </td>
-                  <td>{person.jobStatus || <span className="muted">Not recorded</span>}</td>
-                  <td>{person.classification || <span className="muted">Not recorded</span>}</td>
-                  <td>{person.department || <span className="muted">Not recorded</span>}<div className="muted">{person.workLocation || "Work location not recorded"}</div></td>
-                  <td><div>{person.workEmail ? <a href={`mailto:${person.workEmail}`}>{person.workEmail}</a> : <span className="muted">Not recorded</span>}</div><div><StatusBadge tone={contact.tone}>{contact.label}</StatusBadge></div></td>
-                  <td>{person.workPhone ? <a href={`tel:${person.workPhone}`}>{person.workPhone}</a> : <span className="muted">Not recorded</span>}</td>
-                  <td>{person.cellPhone ? <a href={`tel:${person.cellPhone}`}>{person.cellPhone}</a> : <span className="muted">Not recorded</span>}</td>
-                  <td>{person.homePhone ? <a href={`tel:${person.homePhone}`}>{person.homePhone}</a> : <span className="muted">Not recorded</span>}</td>
-                  <td>{person.homeEmail ? <a href={`mailto:${person.homeEmail}`}>{person.homeEmail}</a> : <span className="muted">Not recorded</span>}</td>
+                  <td>
+                    <strong>{person.classification || "Classification not recorded"}</strong>
+                    <div>{person.department || <span className="muted">Department not recorded</span>}</div>
+                    <div className="muted">{person.workLocation || "Work location not recorded"}</div>
+                  </td>
+                  <td>
+                    <div>{person.workEmail ? <a href={`mailto:${person.workEmail}`}>{person.workEmail}</a> : <span className="muted">Work email not recorded</span>}</div>
+                    <div>{person.workPhone ? <a href={`tel:${person.workPhone}`}>{person.workPhone}</a> : <span className="muted">Work phone not recorded</span>}</div>
+                    <div><StatusBadge tone={contact.tone}>{contact.label}</StatusBadge></div>
+                  </td>
                   <td>
                     <StatusBadge tone={person.assigned ? "info" : "warning"}>{person.assigned ? "Assigned" : "Unassigned"}</StatusBadge>
                     <div className="muted">{organizerLabel(person)}</div>

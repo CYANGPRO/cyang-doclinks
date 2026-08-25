@@ -7,6 +7,7 @@ import { OutreachAssignmentControl } from "@/components/OutreachAssignmentContro
 import { ProtectedPage } from "@/components/ProtectedPage";
 import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
+import { formatCatDate, formatCatDateTime } from "@/lib/date-format";
 import { getEngagementFormOptions } from "@/lib/engagement-recording";
 import { getMember360ConnectedContext, type Member360ConnectedContext } from "@/lib/member360";
 import { getOutreachWorkspace, OutreachAccessError, type OutreachWorkspace } from "@/lib/outreach";
@@ -21,9 +22,7 @@ type Params = Promise<{ handle: string }>;
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 function dateTime(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/Chicago", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
-  }).format(new Date(value));
+  return formatCatDateTime(value);
 }
 
 function responseLabel(value: string) {
@@ -242,7 +241,7 @@ export default async function OutreachEmployeePage({ params, searchParams }: { p
         : lifecycle.length === 0 ? <EmptyState title="No history recorded" description="No membership or employment events are recorded for this person yet." />
         : <DataTable caption={`${workspace.displayName} employment and membership history`} headers={["Effective date", "Event", "Context"]}>
           {lifecycle.map((event, index) => <tr key={`${event.effectiveDate}:${event.kind}:${event.eventType}:${index}`}>
-            <td>{event.effectiveDate}</td>
+            <td>{formatCatDate(event.effectiveDate)}</td>
             <td><strong>{lifecycleLabel(event)}</strong></td>
             <td>{lifecycleContext(event)}</td>
           </tr>)}

@@ -16,6 +16,7 @@ import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
 import { getCampaignReport, type CampaignPerformance } from "@/lib/campaign-reports";
 import { getCatActionReport, type CatActionPerformance } from "@/lib/cat-action-reports";
+import { formatCatDate, formatCatDateTime } from "@/lib/date-format";
 import { getEngagementCommandCenterReport } from "@/lib/engagement-command-center";
 import {
   hydrateCommandCenterReportFromProtectedPii,
@@ -76,16 +77,11 @@ function percent(value: number) {
 }
 
 function monthLabel(value: string) {
-  return new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${value}T00:00:00Z`));
+  return formatCatDate(value);
 }
 
 function refreshedLabel(value: string | null) {
-  if (!value) return "Refresh time unavailable";
-  return `Updated ${new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "America/Chicago",
-  }).format(new Date(value))}`;
+  return `Updated ${formatCatDateTime(value, "time unavailable")}`;
 }
 
 function statusLabel(value: string) {
@@ -204,7 +200,7 @@ function engagementTrend(rows: EngagementTrendPoint[]) {
   if (rows.length === 0) return <EmptyState title="No outreach activity trend" description="No recorded conversations or outreach events are available for this organization." />;
   const max = Math.max(1, ...rows.map((row) => row.eventCount));
   return <div className="grid">{rows.map((row) => <div key={row.date} style={{ display: "grid", gap: 6 }}>
-    <strong>{new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" }).format(new Date(`${row.date}T00:00:00Z`))}</strong>
+    <strong>{formatCatDate(row.date)}</strong>
     <div style={{ alignItems: "center", display: "grid", gap: 8, gridTemplateColumns: "100px minmax(120px, 1fr) auto" }}>
       <span className="muted">Contacts</span>
       <div className="progress-track"><div className="progress-fill" style={{ width: `${(row.eventCount / max) * 100}%` }} /></div>
@@ -230,7 +226,6 @@ function engagementBreakdownTable(
 }
 
 function newHireBreakdownTable(title: string, rows: NewHireBreakdown[]) {
-  const dimensionLabel = title.endsWith("job status") ? "Job status" : title.endsWith("department") ? "Department" : "Work location";
   return (
     <SectionCard title={title} description={`Showing ${Math.min(rows.length, 50)} group${Math.min(rows.length, 50) === 1 ? "" : "s"}.`}>
       {rows.length === 0 ? <EmptyState title={`No ${title.toLowerCase()} data`} description="No new-hire totals are available for this organization." /> : (
@@ -251,13 +246,12 @@ function campaignPerformanceTable(rows: CampaignPerformance[]) {
   return (
     <SectionCard title="Campaign population and completion" description={`Population, assignment, contact, and completion for ${Math.min(rows.length, 50)} campaign${Math.min(rows.length, 50) === 1 ? "" : "s"}.`}>
       {rows.length === 0 ? <EmptyState title="No campaign performance data" description="No active or closed campaign totals are available for this organization." /> : (
-        <DataTable caption="Campaign performance" headers={["Campaign", "Status", "Population", "Assigned", "Contacted", "Completed", "Coverage"]}>
+        <DataTable caption="Campaign performance" headers={["Campaign", "Status", "Population", "Contacted", "Completed", "Coverage"]}>
           {rows.map((row) => (
             <tr key={`${row.name}:${row.status}`}>
               <td><strong>{row.name}</strong></td>
               <td>{statusLabel(row.status)}</td>
               <td>{whole(row.populationCount)}</td>
-              <td>{whole(row.assignedCount)} <span className="muted">({percent(row.assignmentRate)})</span></td>
               <td>{whole(row.contactedCount)}</td>
               <td>{whole(row.completedCount)} <span className="muted">({percent(row.completionRate)})</span></td>
               <td>{percent(row.coverageRate)}</td>
@@ -273,16 +267,14 @@ function catActionPerformanceTable(rows: CatActionPerformance[]) {
   return (
     <SectionCard title="CAT Action workload and completion" description={`Task counts, overdue work, completion, and participation for ${Math.min(rows.length, 50)} CAT Action${Math.min(rows.length, 50) === 1 ? "" : "s"}.`}>
       {rows.length === 0 ? <EmptyState title="No CAT Action performance data" description="No CAT Action totals are available for this organization." /> : (
-        <DataTable caption="CAT Action performance" headers={["CAT Action", "Status", "Tasks", "Open", "Completed", "Overdue", "Participants", "Completion"]}>
+        <DataTable caption="CAT Action performance" headers={["CAT Action", "Status", "Workload", "Completed", "Overdue", "Completion"]}>
           {rows.map((row, index) => (
             <tr key={`${row.name}:${row.status}:${index}`}>
               <td><strong>{row.name}</strong></td>
               <td>{statusLabel(row.status)}</td>
-              <td>{whole(row.taskCount)}</td>
-              <td>{whole(row.openTaskCount)}</td>
+              <td>{whole(row.openTaskCount)} open<div className="muted">{whole(row.taskCount)} tasks · {whole(row.participantCount)} participants</div></td>
               <td>{whole(row.completedTaskCount)}</td>
               <td>{whole(row.overdueTaskCount)}</td>
-              <td>{whole(row.participantCount)}</td>
               <td>{percent(row.completionRate)}</td>
             </tr>
           ))}
@@ -463,7 +455,6 @@ export default async function ReportsPage({
 
         {newHireBreakdownTable("New hires by department", newHireReport.departments)}
         {newHireBreakdownTable("New hires by work location", newHireReport.workLocations)}
-        {newHireBreakdownTable("New hires by job status", newHireReport.jobStatuses)}
       </>
     ) : !membershipReport ? (
       <SectionCard title="Membership reporting">

@@ -16,6 +16,7 @@ import {
 import { ProtectedPage } from "@/components/ProtectedPage";
 import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
+import { formatCatDateTime } from "@/lib/date-format";
 import {
   DEFAULT_FOLLOWUP_PAGE_SIZE,
   getFollowupQueue,
@@ -52,15 +53,7 @@ function href(results: FollowupQueuePage, cursor: string | null) {
 }
 
 function dateTime(value: string | null) {
-  if (!value) return "Not recorded";
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/Chicago",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
+  return formatCatDateTime(value);
 }
 
 function bucket(item: FollowupQueueItem) {

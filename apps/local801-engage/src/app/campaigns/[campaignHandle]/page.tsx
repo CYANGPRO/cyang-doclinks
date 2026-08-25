@@ -33,6 +33,7 @@ import { listCampaignCatLinks } from "@/lib/campaign-cat-links";
 import { getCampaignPopulationCandidates } from "@/lib/campaign-population-management";
 import { getCampaignDetail, getCampaignOrganizerProgress, getCampaignPopulationPage } from "@/lib/campaigns";
 import { getCatActionsPage, type CatActionPortfolioItem } from "@/lib/cat-actions";
+import { formatCatDate, formatCatDateTime } from "@/lib/date-format";
 import { hydrateCampaignDetailFromProtectedPii } from "@/lib/pii-protected-campaign-read";
 import { isPiiProtectedReadEnabled } from "@/lib/pii-protected-read";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
@@ -48,20 +49,13 @@ function scalar(value: string | string[] | undefined) {
 }
 
 function dueLabel(value: string | null) {
-  if (!value) return "No due date";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Due date unavailable";
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "America/Chicago",
-  }).format(date);
+  return formatCatDateTime(value, value ? "Due date unavailable" : "No due date");
 }
 
 function dateRange(startsOn: string | null, endsOn: string | null) {
   if (!startsOn && !endsOn) return "No campaign dates set";
-  if (startsOn && endsOn) return `${startsOn} through ${endsOn}`;
-  return startsOn ? `Starts ${startsOn}` : `Ends ${endsOn}`;
+  if (startsOn && endsOn) return `${formatCatDate(startsOn)} through ${formatCatDate(endsOn)}`;
+  return startsOn ? `Starts ${formatCatDate(startsOn)}` : `Ends ${formatCatDate(endsOn)}`;
 }
 
 function percent(value: number, total: number) {
@@ -217,7 +211,7 @@ export default async function CampaignDetailPage({
         {population.people.length === 0 ? (
           <EmptyState title={campaign.population > 0 ? "No participants match these filters" : "No one in this campaign"} description={campaign.population > 0 ? "Change the assignment or workflow filters to see other participants." : campaign.status === "draft" ? "Use Campaign operations to build this draft population before activation." : "No active people are included in this campaign."} />
         ) : <>
-          <DataTable caption={`${campaign.name} participants`} headers={["Person", "Department", "Workflow", "Assignment", "Organizer", "Due", "Actions"]}>
+          <DataTable caption={`${campaign.name} participants`} headers={["Person", "Work", "Workflow", "Assignment", "Actions"]}>
             {population.people.map((person) => <tr key={person.personHandle}>
               <td>
                 <strong>{person.first_name} {person.last_name}</strong>
@@ -229,9 +223,9 @@ export default async function CampaignDetailPage({
                 <StatusBadge tone={person.assignment_status === "completed" ? "ready" : person.assignment_status ? "pending" : "neutral"}>
                   {person.assignment_status?.replaceAll("_", " ") ?? "Unassigned"}
                 </StatusBadge>
+                <div>{person.assignee_name || "No organizer"}</div>
+                <div className="muted">Due {dueLabel(person.assignment_due_at)}</div>
               </td>
-              <td>{person.assignee_name || "Unassigned"}</td>
-              <td>{dueLabel(person.assignment_due_at)}</td>
               <td>
                 <div className="grid">
                   {campaign.status !== "closed" && person.assignment_status !== "completed" ? (

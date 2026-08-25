@@ -86,8 +86,15 @@ export default async function OutreachContactPage({ params, searchParams }: { pa
         <div><strong>Home email</strong><div>{contacts.homeEmail ? <a href={`mailto:${contacts.homeEmail}`}>{contacts.homeEmail}</a> : "Not available to you"}</div></div>
         <div><strong>Work email</strong><div>{contacts.workEmail ? <a href={`mailto:${contacts.workEmail}`}>{contacts.workEmail}</a> : "Not available to you"}</div></div>
       </div>
-      {preferredPhone ? <div className="page-actions member360-contact-actions"><a className="button member360-contact-call-action" href={telHref(preferredPhone)}>Call</a><a className="button secondary member360-contact-text-action" href={smsHref(preferredPhone)}>Text</a><span className="muted">Uses {preferredPhoneLabel}.</span></div> : null}
-      {preferredEmail ? <div className="page-actions member360-contact-actions"><a className="button secondary member360-contact-email-action" href={`mailto:${preferredEmail}`}>Email</a><span className="muted">Uses {preferredEmailLabel}.</span></div> : null}
+      {preferredPhone || preferredEmail ? <div className="page-actions member360-contact-actions">
+        {preferredPhone ? <><a className="button member360-contact-call-action" href={telHref(preferredPhone)}>Call</a><a className="button secondary member360-contact-text-action" href={smsHref(preferredPhone)}>Text</a></> : null}
+        {preferredEmail ? <a className="button secondary member360-contact-email-action" href={`mailto:${preferredEmail}`}>Email</a> : null}
+        <span className="muted member360-contact-action-note">
+          {preferredPhone ? `Call and text use ${preferredPhoneLabel}.` : ""}
+          {preferredPhone && preferredEmail ? " " : ""}
+          {preferredEmail ? `Email uses ${preferredEmailLabel}.` : ""}
+        </span>
+      </div> : null}
     </SectionCard>
 
     <DisclosureCard className="member360-contact-privacy" title="Contact privacy and availability" description="Details are limited to your access and are not saved for offline use.">

@@ -1,5 +1,5 @@
-import { changeTeamMemberRole, resolveTeamMemberOnboardingTarget, revokeTeamMemberSessions, setTeamMemberActive, TeamAccessError } from "@/lib/team-access";
-import { onboardTeamMemberWithEntra } from "@/lib/entra-user-onboarding";
+import { changeTeamMemberRole, preflightTeamMemberRemoval, removeTeamMemberFromCat, resolveTeamMemberOnboardingTarget, resolveTeamMemberRemovalTarget, revokeTeamMemberSessions, setTeamMemberActive, TeamAccessError } from "@/lib/team-access";
+import { deleteTeamMemberFromEntra, onboardTeamMemberWithEntra } from "@/lib/entra-user-onboarding";
 import { authorizeTeamMutation, readTeamJson, teamJson, teamMutationFailure } from "@/lib/team-mutation-http";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
 import { writeSecuritySignal } from "@/lib/security-signal";
@@ -27,6 +27,13 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     else if (action === "retry_onboarding") {
       const target = await resolveTeamMemberOnboardingTarget(context, userHandle);
       result = await onboardTeamMemberWithEntra(target);
+    }
+    else if (action === "remove_account") {
+      const target = await resolveTeamMemberRemovalTarget(context, userHandle);
+      await preflightTeamMemberRemoval(context, target);
+      const entra = await deleteTeamMemberFromEntra(target.providerUserId);
+      const cat = await removeTeamMemberFromCat(context, target);
+      result = { ...entra, ...cat };
     }
     else throw new TeamAccessError("INVALID_ACTION", "The requested team access action is invalid.", 400);
     writeSecuritySignal("warn", "administrative_change", {

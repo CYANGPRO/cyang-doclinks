@@ -19,6 +19,7 @@ import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
 import { getCatActionManagementOptions } from "@/lib/cat-action-management";
 import { getCatActionsPage, type CatActionPortfolioPage } from "@/lib/cat-actions";
+import { formatCatDateTime } from "@/lib/date-format";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
 
 function statusTone(status: string): StatusTone {
@@ -29,12 +30,7 @@ function statusTone(status: string): StatusTone {
 }
 
 function dateTime(value: string | null) {
-  if (!value) return "No open deadline";
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "America/Chicago",
-  }).format(new Date(value));
+  return formatCatDateTime(value, "No open deadline");
 }
 
 function href(page: CatActionPortfolioPage, cursor: string | null) {
@@ -126,18 +122,19 @@ export default async function CatActionsPage({
       {!page ? <UnavailableState title="CAT Actions unavailable" description="We couldn’t load CAT Action or task details safely." />
         : page.actions.length === 0 ? <EmptyState title="No matching CAT Actions" description="No CAT Actions match the filters you chose." />
         : <>
-          <DataTable caption="CAT Actions" headers={["Action", "Cycle", "Tasks", "Open", "Completed", "Overdue", "Assigned", "Next due"]}>
+          <DataTable caption="CAT Actions" headers={["Action", "Cycle", "Workload", "Completed", "Next due"]}>
             {page.actions.map((action) => <tr key={action.handle}>
               <td>
                 <strong><Link href={`/cat-actions/${action.handle}`}>{action.name}</Link></strong>
                 <div><StatusBadge tone={statusTone(action.status)}>{action.status}</StatusBadge></div>
               </td>
               <td>{action.contractCycleName ?? "No contract cycle"}</td>
-              <td>{action.taskCount}</td>
-              <td>{action.openTaskCount}</td>
+              <td>
+                <strong>{action.openTaskCount} open</strong>
+                <div className="muted">{action.taskCount} total · {action.assignedUserCount} assigned</div>
+                {action.overdueTaskCount ? <div><StatusBadge tone="danger">{action.overdueTaskCount} overdue</StatusBadge></div> : null}
+              </td>
               <td>{action.completedTaskCount} <span className="muted">({action.completionRate.toFixed(1)}%)</span></td>
-              <td>{action.overdueTaskCount ? <StatusBadge tone="danger">{action.overdueTaskCount}</StatusBadge> : "0"}</td>
-              <td>{action.assignedUserCount}</td>
               <td>{dateTime(action.nextDueAt)}</td>
             </tr>)}
           </DataTable>

@@ -22,14 +22,12 @@ function reportQueryRecorder() {
     if (sql.includes("reports:membership-by-classification")) return [{ label: "Management Analyst 4", represented_count: "2", member_count: "1", nonmember_count: "1", other_count: "0" }];
     if (sql.includes("reports:membership-by-department")) return [{ label: "Health Licensing", represented_count: "2", member_count: "2", nonmember_count: "0", other_count: "0" }];
     if (sql.includes("reports:membership-by-work-location")) return [{ label: "Downtown", represented_count: "2", member_count: "2", nonmember_count: "0", other_count: "0" }];
-    if (sql.includes("reports:membership-by-job-status")) return [{ label: "Permanent", represented_count: "2", member_count: "2", nonmember_count: "0", other_count: "0" }];
     if (sql.includes("reports:membership-data-quality")) return [{ missing_names: "0", missing_work_email: "0" }];
     if (sql.includes("reports:new-hires-overview")) return [{ new_hires: "2", current_members: "2" }];
     if (sql.includes("reports:new-hires-engagement")) return [{ new_hires: "2", engaged_count: "0" }];
     if (sql.includes("reports:new-hires-monthly")) return [{ hire_month: "2026-08-01", new_hires: "2", current_members: "2" }];
     if (sql.includes("reports:new-hires-by-department")) return [{ label: "Customer Support", new_hires: "1" }, { label: "Environmental Review", new_hires: "1" }];
     if (sql.includes("reports:new-hires-by-work-location")) return [{ label: "East Office", new_hires: "1" }, { label: "West Office", new_hires: "1" }];
-    if (sql.includes("reports:new-hires-by-job-status")) return [{ label: "Permanent", new_hires: "2" }];
     if (sql.includes("reports:engagement-overview")) return [{ event_count: "1", active_organizers: "1" }];
     if (sql.includes("reports:engagement-followup-overview")) return [{ followup_count: "1", open_followups: "1" }];
     if (sql.includes("reports:engagement-over-time")) return [{ engagement_date: "2026-08-13", event_count: "1" }];
@@ -49,7 +47,7 @@ test("aggregate membership report remains available to every viewReports role", 
   for (const role of ["system_owner", "local_admin", "membership_data_manager", "cat_admin", "cat_lead", "report_viewer"]) {
     const { calls, query } = reportQueryRecorder();
     const report = await getMembershipReport(context(role), query);
-    assert.equal(calls.length, 7);
+    assert.equal(calls.length, 6);
     assert.equal(report.overview.representedCount, 8);
     assert.equal(report.overview.membershipRate, 62.5);
     assert.equal(report.classifications[0].label, "Management Analyst 4");
@@ -60,7 +58,7 @@ test("aggregate new-hire report is available to every viewReports role", async (
   for (const role of ["system_owner", "local_admin", "membership_data_manager", "cat_admin", "cat_lead", "report_viewer"]) {
     const { calls, query } = reportQueryRecorder();
     const report = await getNewHireReport(context(role), query);
-    assert.equal(calls.length, 6);
+    assert.equal(calls.length, 5);
     assert.equal(report.overview.newHireCount, 2);
     assert.equal(report.overview.currentMemberCount, 2);
     assert.equal(report.overview.conversionRate, 100);
@@ -90,7 +88,7 @@ test("roles without viewReports fail before any report SQL runs", async () => {
 test("every new-hire query is organization scoped, reporting-view based, and aggregate-only", async () => {
   const { calls, query } = reportQueryRecorder();
   await getNewHireReport(context("report_viewer"), query);
-  assert.equal(calls.length, 6);
+  assert.equal(calls.length, 5);
   for (const call of calls) {
     assert.deepEqual(call.parameters, [organizationId]);
     assert.match(call.sql, /organization_id = \$1::uuid/);
@@ -105,7 +103,7 @@ test("new-hire trend and breakdown queries are bounded", async () => {
   assert.match(calls.find((call) => call.sql.includes("reports:new-hires-monthly")).sql, /LIMIT 12/);
   assert.match(calls.find((call) => call.sql.includes("reports:new-hires-by-department")).sql, /LIMIT 50/);
   assert.match(calls.find((call) => call.sql.includes("reports:new-hires-by-work-location")).sql, /LIMIT 50/);
-  assert.match(calls.find((call) => call.sql.includes("reports:new-hires-by-job-status")).sql, /LIMIT 50/);
+  assert.equal(calls.some((call) => call.sql.includes("job-status")), false);
 });
 
 test("new-hire monthly cohorts return chronologically with bounded conversion rates", async () => {
@@ -212,6 +210,7 @@ test("Reports page provides real navigation for ready reports and New Hires dash
   assert.match(source, /New hires by hire month/);
   assert.match(source, /New hires by department/);
   assert.match(source, /New hires by work location/);
+  assert.doesNotMatch(source, /job status|jobStatuses/i);
   assert.match(source, /getNewHireReport/);
   assert.match(source, /viewReports/);
   assert.doesNotMatch(source, /personId|firstName|lastName|identifierValue|employeeId/i);

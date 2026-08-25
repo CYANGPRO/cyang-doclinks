@@ -177,11 +177,22 @@ export function productionIdentityFromProfile(profile: Record<string, unknown>, 
   if ((!emailPattern.test(email) || email.length > 320) && !directoryObjectVerified) throw new ProductionAuthError("EMAIL_REQUIRED", "A valid identity-provider email address is required.");
   if (!emailVerified && !bootstrapObjectMatched && !directoryObjectVerified) throw new ProductionAuthError("EMAIL_NOT_VERIFIED", "The identity provider must verify the sign-in email address.");
   if (!mfaVerified) throw new ProductionAuthError("MFA_REQUIRED", "The identity provider did not provide the required MFA assurance claim.");
+  if (bootstrapObjectMatched) {
+    const bootstrapIdentity = {
+      providerId: config.providerId,
+      subject,
+      objectId,
+      email,
+      emailVerified,
+      bootstrapObjectMatched,
+      mfaVerified,
+    };
+    return directoryObjectVerified
+      ? { ...bootstrapIdentity, directoryObjectVerified: true }
+      : bootstrapIdentity;
+  }
   if (directoryObjectVerified) {
     return { providerId: config.providerId, subject, email, emailVerified, mfaVerified, directoryObjectVerified };
-  }
-  if (bootstrapObjectMatched) {
-    return { providerId: config.providerId, subject, objectId, email, emailVerified, bootstrapObjectMatched, mfaVerified };
   }
   return { providerId: config.providerId, subject, objectId, email, emailVerified, bootstrapObjectMatched, mfaVerified, directoryObjectVerified };
 }

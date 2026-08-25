@@ -5,6 +5,7 @@ import { DataTable, DisclosureCard, EmptyState, FilterBar, PageHeader, Paginatio
 import { ProtectedPage } from "@/components/ProtectedPage";
 import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
+import { formatCatDate } from "@/lib/date-format";
 import { DATA_QUALITY_ISSUES, getDataQualityQueue, type DataQualityIssueCode, type DataQualityIssueFilter, type DataQualityQueuePage, type DataQualitySummary } from "@/lib/data-quality";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
 
@@ -29,9 +30,7 @@ function filterHref(issue: DataQualityIssueFilter, pageSize: number) {
 }
 
 function formatDate(value: string | null) {
-  if (!value) return "Unknown";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "Unknown" : new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(date);
+  return formatCatDate(value, "Unknown");
 }
 
 function issueCount(summary: DataQualitySummary, issue: DataQualityIssueFilter) {

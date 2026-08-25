@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { AlertBanner, SectionCard } from "@/components/DesignSystem";
 import type { DocumentUploadVisibilityOption } from "@/components/DocumentUploadForm";
+import { formatCatDate } from "@/lib/date-format";
 import { isNativeMobile, Local801Native, type NativeDocument, type PendingShare } from "@/lib/native-mobile";
 
 function safeRoute(value: string) {
@@ -42,7 +43,7 @@ export function MobileDocumentIntake({ visibilityOptions }: { visibilityOptions:
     setBusy(true); setMessage(null);
     try {
       const scanned = await Local801Native.scanDocument();
-      setDocument(scanned); setTitle(`Scanned document ${new Date().toLocaleDateString()}`);
+      setDocument(scanned); setTitle(`Scanned document ${formatCatDate(new Date())}`);
       setMessage("The scan is held only for this secure upload. Confirm its title and sharing scope.");
     } catch (error) { setMessage(error instanceof Error ? error.message : "The document scanner could not start."); }
     finally { setBusy(false); }

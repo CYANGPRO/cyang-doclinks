@@ -14,6 +14,7 @@ import { MobileDeviceControl } from "@/components/MobileDeviceControl";
 import { DeleteSavedViewButton, DismissNotificationButton } from "@/components/WorkPreferenceControls";
 import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
+import { formatCatDate, formatCatDateTime } from "@/lib/date-format";
 import { listSavedWorkViews } from "@/lib/work-preferences";
 import { getWorkNotifications, type WorkNotification, type WorkNotificationUrgency } from "@/lib/work-notifications";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
@@ -35,26 +36,10 @@ function urgencyLabel(urgency: WorkNotificationUrgency) {
 
 function dateTime(value: string | null) {
   if (!value) return null;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    const parsed = new Date(`${value}T12:00:00Z`);
-    if (Number.isNaN(parsed.getTime())) return null;
-    return new Intl.DateTimeFormat("en-US", {
-      timeZone: "America/Chicago",
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    }).format(parsed);
-  }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/Chicago",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(parsed);
+  const formatted = /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? formatCatDate(value, "")
+    : formatCatDateTime(value, "");
+  return formatted || null;
 }
 
 function NotificationItems({ items }: { items: WorkNotification[] }) {

@@ -40,7 +40,6 @@ export type MembershipReport = {
   classifications: MembershipBreakdown[];
   departments: MembershipBreakdown[];
   workLocations: MembershipBreakdown[];
-  jobStatuses: MembershipBreakdown[];
   dataQuality: MembershipDataQuality;
 };
 
@@ -70,7 +69,6 @@ export type NewHireReport = {
   monthly: NewHireTrendPoint[];
   departments: NewHireBreakdown[];
   workLocations: NewHireBreakdown[];
-  jobStatuses: NewHireBreakdown[];
 };
 
 export type EngagementOverview = {
@@ -238,7 +236,7 @@ export async function getMembershipReport(
 ): Promise<MembershipReport> {
   if (!can(context.role, "viewReports")) throw new Error("Forbidden.");
 
-  const [overviewRows, changeRows, classificationRows, departmentRows, workLocationRows, jobStatusRows, qualityRows] = await Promise.all([
+  const [overviewRows, changeRows, classificationRows, departmentRows, workLocationRows, qualityRows] = await Promise.all([
     query<OverviewRow>(`
       /* reports:membership-overview */
       SELECT
@@ -301,20 +299,6 @@ export async function getMembershipReport(
       ORDER BY label ASC
       LIMIT 50
     `, [context.organizationId]),
-    query<BreakdownRow>(`
-      /* reports:membership-by-job-status */
-      SELECT
-        COALESCE(NULLIF(trim(job_status), ''), 'Unspecified') AS label,
-        sum(people_count) AS represented_count,
-        sum(people_count) FILTER (WHERE membership_status = 'member') AS member_count,
-        sum(people_count) FILTER (WHERE membership_status = 'nonmember') AS nonmember_count,
-        sum(people_count) FILTER (WHERE membership_status NOT IN ('member', 'nonmember')) AS other_count
-      FROM reporting.membership_by_job_status
-      WHERE organization_id = $1::uuid
-      GROUP BY COALESCE(NULLIF(trim(job_status), ''), 'Unspecified')
-      ORDER BY label ASC
-      LIMIT 50
-    `, [context.organizationId]),
     query<DataQualityRow>(`
       /* reports:membership-data-quality */
       SELECT missing_names, missing_work_email
@@ -348,7 +332,6 @@ export async function getMembershipReport(
     classifications: classificationRows.map(breakdown),
     departments: departmentRows.map(breakdown),
     workLocations: workLocationRows.map(breakdown),
-    jobStatuses: jobStatusRows.map(breakdown),
     dataQuality: {
       missingNames: count(qualityRows[0]?.missing_names),
       missingWorkEmail: count(qualityRows[0]?.missing_work_email),
@@ -362,7 +345,7 @@ export async function getNewHireReport(
 ): Promise<NewHireReport> {
   if (!can(context.role, "viewReports")) throw new Error("Forbidden.");
 
-  const [overviewRows, engagementRows, monthlyRows, departmentRows, workLocationRows, jobStatusRows] = await Promise.all([
+  const [overviewRows, engagementRows, monthlyRows, departmentRows, workLocationRows] = await Promise.all([
     query<NewHireOverviewRow>(`
       /* reports:new-hires-overview */
       SELECT
@@ -409,17 +392,6 @@ export async function getNewHireReport(
       ORDER BY label ASC
       LIMIT 50
     `, [context.organizationId]),
-    query<NewHireBreakdownRow>(`
-      /* reports:new-hires-by-job-status */
-      SELECT
-        COALESCE(NULLIF(trim(job_status), ''), 'Unspecified') AS label,
-        count(*) AS new_hires
-      FROM reporting.new_hires
-      WHERE organization_id = $1::uuid
-      GROUP BY COALESCE(NULLIF(trim(job_status), ''), 'Unspecified')
-      ORDER BY label ASC
-      LIMIT 50
-    `, [context.organizationId]),
   ]);
 
   const newHireCount = count(overviewRows[0]?.new_hires);
@@ -451,7 +423,6 @@ export async function getNewHireReport(
       .reverse(),
     departments: departmentRows.map((row) => ({ label: row.label, newHireCount: count(row.new_hires) })),
     workLocations: workLocationRows.map((row) => ({ label: row.label, newHireCount: count(row.new_hires) })),
-    jobStatuses: jobStatusRows.map((row) => ({ label: row.label, newHireCount: count(row.new_hires) })),
   };
 }
 

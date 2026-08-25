@@ -260,7 +260,7 @@ export function CampaignAssignmentForm({
         </div>
         <div className="field">
           <label htmlFor={`campaign-due-${personHandle}`}>Due</label>
-          <input id={`campaign-due-${personHandle}`} type="datetime-local" value={dueAt} onChange={(event) => setDueAt(event.target.value)} />
+          <input id={`campaign-due-${personHandle}`} type="datetime-local" step={60} value={dueAt} onChange={(event) => setDueAt(event.target.value)} />
         </div>
       </div>
       <div className="form-actions"><button className="button secondary" type="submit" disabled={pending}>{pending ? "Saving…" : "Save assignment"}</button></div>

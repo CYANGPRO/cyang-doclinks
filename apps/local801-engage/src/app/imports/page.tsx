@@ -5,6 +5,7 @@ import { ImportPreviewForm } from "@/components/ImportPreviewForm";
 import { ProtectedPage } from "@/components/ProtectedPage";
 import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
+import { formatCatDateTime } from "@/lib/date-format";
 import { DEFAULT_IMPORT_BATCH_PAGE_SIZE, getImportBatchesPage, type ImportBatchQueueItem } from "@/lib/import-persistence";
 import { hydrateImportBatchQueueFromProtectedPii } from "@/lib/pii-protected-import-read";
 import { getPiiProtectedReadMode } from "@/lib/pii-protected-read";
@@ -14,12 +15,6 @@ import { importProcessingSafeFailureMessage, importProcessingStages, importProce
 export const dynamic = "force-dynamic";
 
 type ImportQueueItem = ImportBatchQueueItem;
-
-const importDateFormatter = new Intl.DateTimeFormat("en-US", {
-  dateStyle: "medium",
-  timeStyle: "short",
-  timeZone: "America/Chicago",
-});
 
 function processingLabel(stage: string | null) {
   if (!stage || !importProcessingStages.includes(stage as (typeof importProcessingStages)[number])) return "Earlier import";
@@ -59,8 +54,7 @@ function importKindLabel(kind: string) {
 }
 
 function importedAtLabel(createdAt: string) {
-  const date = new Date(createdAt);
-  return Number.isNaN(date.getTime()) ? "Import date unavailable" : `Imported ${importDateFormatter.format(date)}`;
+  return `Imported ${formatCatDateTime(createdAt, "date unavailable")}`;
 }
 
 function rowCountLabel(count: number) {

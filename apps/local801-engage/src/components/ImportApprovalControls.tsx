@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { formatCatDate } from "@/lib/date-format";
 import type { ImportApprovalReview, ResolutionType } from "@/lib/import-approval";
 
 type SavedResolution = {
@@ -245,7 +246,7 @@ export function ImportApprovalPanel({ batchId, review }: { batchId: string; revi
         {batch.importKind === "current_roster" ? (
           <div className="muted">
             <p>
-              Snapshot {preview.snapshotDate ?? "date not set"}: {preview.counts.snapshotRows} planned rows,
+              Snapshot {formatCatDate(preview.snapshotDate, "date not set")}: {preview.counts.snapshotRows} planned rows,
               {` ${preview.counts.enteringSnapshot} entering and ${preview.counts.leavingSnapshot} leaving the snapshot.`}
               {" "}Snapshot absence never plans a drop, separation, archive, or deletion.
             </p>
@@ -277,7 +278,7 @@ export function ImportApprovalPanel({ batchId, review }: { batchId: string; revi
               {batch.importKind === "membership_drops" && row.membershipAction === "none" ? (
                 <div>Membership: already a nonmember; no status change or duplicate drop event.</div>
               ) : null}
-              {row.eventAction !== "none" ? <div>Planned {row.eventAction} event{row.eventDate ? ` on ${row.eventDate}` : ""}</div> : null}
+              {row.eventAction !== "none" ? <div>Planned {row.eventAction} event{row.eventDate ? ` on ${formatCatDate(row.eventDate)}` : ""}</div> : null}
             </div>
             <span className="badge">preview</span>
           </div>

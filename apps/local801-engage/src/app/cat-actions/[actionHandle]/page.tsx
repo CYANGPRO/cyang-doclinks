@@ -33,6 +33,7 @@ import {
   getCatActionTasksPage,
   type CatActionTaskPage,
 } from "@/lib/cat-actions";
+import { formatCatDate, formatCatDateTime } from "@/lib/date-format";
 import { hydrateCatActionDetailFromProtectedPii } from "@/lib/pii-protected-cat-action-read";
 import { isPiiProtectedReadEnabled } from "@/lib/pii-protected-read";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
@@ -47,17 +48,11 @@ function statusTone(status: string): StatusTone {
 }
 
 function dateOnly(value: string | null) {
-  if (!value) return "Not set";
-  return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" }).format(new Date(`${value}T00:00:00Z`));
+  return formatCatDate(value, "Not set");
 }
 
 function dateTime(value: string | null) {
-  if (!value) return "Not set";
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "America/Chicago",
-  }).format(new Date(value));
+  return formatCatDateTime(value, "Not set");
 }
 
 function scalar(value: string | string[] | undefined) {

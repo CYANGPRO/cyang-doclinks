@@ -4,6 +4,7 @@ import { ProtectedPage } from "@/components/ProtectedPage";
 import { can } from "@/lib/access";
 import { auditEventFilterOptions, getAuditDisplayPage } from "@/lib/audit-display";
 import { getPreviewUser } from "@/lib/authz.server";
+import { formatCatDateTime } from "@/lib/date-format";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
 
 export const dynamic = "force-dynamic";
@@ -20,16 +21,6 @@ function exportHref(eventType: string) {
   if (eventType) query.set("eventType", eventType);
   const suffix = query.toString();
   return `/api/audit/export${suffix ? `?${suffix}` : ""}`;
-}
-
-function displayTimestamp(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Timestamp unavailable";
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "America/Chicago",
-  }).format(date);
 }
 
 export default async function AuditPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
@@ -95,7 +86,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
         : <>
           <DataTable caption="Audit activity" headers={["When", "What happened", "Actor", "Affected area"]}>
             {page.events.map((event) => <tr key={event.id}>
-              <td>{displayTimestamp(event.created_at)}</td>
+              <td>{formatCatDateTime(event.created_at, "Timestamp unavailable")}</td>
               <td>
                 <strong>{event.eventLabel}</strong>
               </td>

@@ -4,6 +4,7 @@ import { DataTable, EmptyState, FilterBar, PageHeader, Pagination, SectionCard, 
 import { ProtectedPage } from "@/components/ProtectedPage";
 import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
+import { formatCatDate } from "@/lib/date-format";
 import { DEFAULT_DIRECTORY_PAGE_SIZE, getDirectoryPage, type DirectoryPage as Results } from "@/lib/directory";
 import { hydrateDirectoryPageFromProtectedPii, isPiiProtectedReadEnabled } from "@/lib/pii-protected-read";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
@@ -100,7 +101,7 @@ export default async function DirectoryPage({ searchParams }: { searchParams: Se
         </div> : null}
 
         <div className="directory-desktop-results">
-          <DataTable caption="Directory results" headers={canOpenEmployee ? ["Person", "Hire Date", "Job Status", "Classification", "Department / Work Location", "Work Email", "Work Phone", "Cell Phone", "Home Phone", "Home Email", "Action"] : ["Person", "Hire Date", "Job Status", "Classification", "Department / Work Location", "Work Email", "Work Phone", "Cell Phone", "Home Phone", "Home Email"]}>
+          <DataTable caption="Directory results" headers={canOpenEmployee ? ["Person", "Hire Date", "Work", "Contact", "Action"] : ["Person", "Hire Date", "Work", "Contact"]}>
             {results.people.map((person) => <tr key={person.handle}>
               <td>
                 <div className="person-membership-stack">
@@ -108,15 +109,16 @@ export default async function DirectoryPage({ searchParams }: { searchParams: Se
                   {person.membershipStatus ? <StatusBadge>{membershipStatusLabel(person.membershipStatus)}</StatusBadge> : null}
                 </div>
               </td>
-              <td>{person.hireDate || <span className="muted">Not recorded</span>}</td>
-              <td>{person.jobStatus || <span className="muted">Not recorded</span>}</td>
-              <td>{person.classification || <span className="muted">Not recorded</span>}</td>
-              <td>{person.department || <span className="muted">Not recorded</span>}<div className="muted">{person.workLocation || "Work location not recorded"}</div></td>
-              <td>{person.workEmail ? <a href={`mailto:${person.workEmail}`}>{person.workEmail}</a> : <span className="muted">Not recorded</span>}</td>
-              <td>{person.workPhone ? <a href={`tel:${person.workPhone}`}>{person.workPhone}</a> : <span className="muted">Not recorded</span>}</td>
-              <td>{person.cellPhone ? <a href={`tel:${person.cellPhone}`}>{person.cellPhone}</a> : <span className="muted">Not recorded</span>}</td>
-              <td>{person.homePhone ? <a href={`tel:${person.homePhone}`}>{person.homePhone}</a> : <span className="muted">Not recorded</span>}</td>
-              <td>{person.homeEmail ? <a href={`mailto:${person.homeEmail}`}>{person.homeEmail}</a> : <span className="muted">Not recorded</span>}</td>
+              <td>{person.hireDate ? formatCatDate(person.hireDate) : <span className="muted">Not recorded</span>}</td>
+              <td>
+                <strong>{person.classification || "Classification not recorded"}</strong>
+                <div>{person.department || <span className="muted">Department not recorded</span>}</div>
+                <div className="muted">{person.workLocation || "Work location not recorded"}</div>
+              </td>
+              <td>
+                <div>{person.workEmail ? <a href={`mailto:${person.workEmail}`}>{person.workEmail}</a> : <span className="muted">Work email not recorded</span>}</div>
+                <div>{person.workPhone ? <a href={`tel:${person.workPhone}`}>{person.workPhone}</a> : <span className="muted">Work phone not recorded</span>}</div>
+              </td>
               {canOpenEmployee ? <td className="directory-action-cell"><Link className="button secondary directory-member360-button" href={`/outreach/${person.handle}`}>Outreach record <span aria-hidden="true">→</span></Link></td> : null}
             </tr>)}
           </DataTable>

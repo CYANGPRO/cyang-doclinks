@@ -55,11 +55,13 @@ export function ProvisionTeamMemberForm({ roles }: { roles: Role[] }) {
   </form>;
 }
 
-export function TeamMemberControls({ handle, currentRole, active, roles, displayName, onboardingStatus }: { handle: string; currentRole: Role; active: boolean; roles: Role[]; displayName: string; onboardingStatus: "pending" | "processing" | "invited" | "ready" | "failed" | "not_managed" }) {
+export function TeamMemberControls({ handle, currentRole, active, roles, displayName, onboardingStatus, canRemove }: { handle: string; currentRole: Role; active: boolean; roles: Role[]; displayName: string; onboardingStatus: "pending" | "processing" | "invited" | "ready" | "failed" | "not_managed"; canRemove: boolean }) {
   const router = useRouter();
   const [role, setRole] = useState<Role>(currentRole);
   const [pending, setPending] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Feedback>(null);
+  const [confirmingRemoval, setConfirmingRemoval] = useState(false);
+  const [removalConfirmation, setRemovalConfirmation] = useState("");
 
   async function action(actionName: string, body: Record<string, unknown> = {}) {
     setPending(actionName); setFeedback(null);
@@ -69,9 +71,18 @@ export function TeamMemberControls({ handle, currentRole, active, roles, display
         ? "Signed out on all devices."
         : actionName === "retry_onboarding"
           ? "Microsoft Entra access is assigned and the invitation has been sent."
+          : actionName === "remove_account"
+            ? "The unused account was removed from CAT and Microsoft Entra. It can now be added again."
           : "Access updated." }); router.refresh();
     } catch (error) { setFeedback({ tone: "error", message: error instanceof Error ? error.message : "We couldn’t update this user." }); }
     finally { setPending(null); }
+  }
+
+  function removeAccount() {
+    if (removalConfirmation !== displayName) return;
+    setConfirmingRemoval(false);
+    setRemovalConfirmation("");
+    void action("remove_account");
   }
 
   function disruptiveAction(actionName: "deactivate" | "revoke_sessions") {
@@ -90,7 +101,20 @@ export function TeamMemberControls({ handle, currentRole, active, roles, display
       {!active || onboardingStatus === "ready" || onboardingStatus === "processing" ? null : (
         <button className="button secondary" type="button" disabled={pending !== null} onClick={() => void action("retry_onboarding")}>{pending === "retry_onboarding" ? "Retrying…" : onboardingStatus === "failed" ? "Retry onboarding" : "Send Entra invitation"}</button>
       )}
+      {canRemove ? <button className="button secondary" type="button" disabled={pending !== null} onClick={() => setConfirmingRemoval(true)}>{pending === "remove_account" ? "Removing…" : "Remove account"}</button> : null}
     </div>
+    {!canRemove || !confirmingRemoval ? null : (
+      <div className="stack" role="group" aria-label={`Confirm removal of ${displayName}`}>
+        <div className="field">
+          <label htmlFor={`remove-${handle}`}>Type <strong>{displayName}</strong> to permanently remove this unused account from CAT and Microsoft Entra.</label>
+          <input id={`remove-${handle}`} value={removalConfirmation} onChange={(event) => setRemovalConfirmation(event.target.value)} autoComplete="off" />
+        </div>
+        <div className="form-actions compact-actions">
+          <button className="button secondary" type="button" disabled={pending !== null || removalConfirmation !== displayName} onClick={removeAccount}>Confirm removal</button>
+          <button className="button secondary" type="button" disabled={pending !== null} onClick={() => { setConfirmingRemoval(false); setRemovalConfirmation(""); }}>Cancel</button>
+        </div>
+      </div>
+    )}
     <FeedbackMessage feedback={feedback} />
   </div>;
 }

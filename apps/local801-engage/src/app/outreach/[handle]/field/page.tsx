@@ -6,6 +6,7 @@ import { FieldConnectionStatus } from "@/components/FieldConnectionStatus";
 import { ProtectedPage } from "@/components/ProtectedPage";
 import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
+import { formatCatDateTime } from "@/lib/date-format";
 import { getEngagementFormOptions } from "@/lib/engagement-recording";
 import { fieldContactHref, fieldQueueHref, member360Href, normalizeFieldModeContext } from "@/lib/field-mode";
 import { getOutreachWorkspace, OutreachAccessError, type OutreachWorkspace } from "@/lib/outreach";
@@ -17,14 +18,7 @@ type Params = Promise<{ handle: string }>;
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 function dateTime(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/Chicago",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
+  return formatCatDateTime(value);
 }
 
 export default async function FieldOutreachPersonPage({ params, searchParams }: { params: Params; searchParams: SearchParams }) {

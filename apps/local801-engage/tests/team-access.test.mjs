@@ -6,6 +6,9 @@ import {
   changeTeamMemberRole,
   getTeamAccessPage,
   provisionTeamMember,
+  preflightTeamMemberRemoval,
+  removeTeamMemberFromCat,
+  resolveTeamMemberRemovalTarget,
   revokeTeamMemberSessions,
   setTeamMemberActive,
   teamReadSafeCode,
@@ -178,6 +181,68 @@ test("deactivate/reactivate and revoke sessions always increment auth session ve
   assert.match(reactivateTransactions[0][0].sql, /auth_session_version = auth_session_version \+ 1/);
 });
 
+test("unused invite removal requires no CAT sign-in or identity and performs a rollback preflight", async () => {
+  const providerUserId = "55555555-5555-4555-8555-555555555555";
+  const query = async (sql, parameters) => {
+    if (sql.includes("resolve-target")) return [target()];
+    if (sql.includes("resolve-removal-target")) {
+      assert.deepEqual(parameters, [organizationId, targetId]);
+      return [{ provider_user_id: providerUserId, last_authenticated_at: null, identity_linked: false }];
+    }
+    return [];
+  };
+  const removalTarget = await resolveTeamMemberRemovalTarget(context(), handle, query);
+  assert.equal(removalTarget.providerUserId, providerUserId);
+
+  const statements = [];
+  const transaction = async (callback) => callback(async (sql, parameters) => {
+    statements.push({ sql, parameters });
+    if (/DELETE FROM local801\.users/.test(sql)) return [{ id: targetId }];
+    return [];
+  });
+  assert.deepEqual(await preflightTeamMemberRemoval(context(), removalTarget, transaction), { removable: true });
+  assert.match(statements[0].sql, /DELETE FROM local801\.pii_exact_indexes/);
+  assert.match(statements[1].sql, /last_authenticated_at IS NULL/);
+  assert.match(statements[1].sql, /NOT EXISTS[\s\S]*local801\.auth_identities/);
+  assert.match(statements[1].sql, /role\.code IN \('system_owner','local_admin'\)/);
+});
+
+test("unused invite removal is audited atomically and releases the CAT email for re-adding", async () => {
+  const removalTarget = { organizationId, userId: targetId, providerUserId: null, role: "cat_lead" };
+  const statements = [];
+  const result = await removeTeamMemberFromCat(context(), removalTarget, {
+    query: async (sql) => sql.includes("SELECT event_hash") ? [] : [],
+    transaction: async (callback) => callback(async (sql, parameters) => {
+      statements.push({ sql, parameters });
+      if (/DELETE FROM local801\.users/.test(sql)) return [{ id: targetId }];
+      return [];
+    }),
+  });
+  assert.deepEqual(result, { removed: true });
+  assert.match(statements[0].sql, /DELETE FROM local801\.pii_exact_indexes/);
+  assert.match(statements[1].sql, /DELETE FROM local801\.users/);
+  assert.match(statements[2].sql, /INSERT INTO local801\.audit_events/);
+});
+
+test("accounts with sign-in or referenced CAT history fail closed and must be deactivated", async () => {
+  const signedInQuery = async (sql) => sql.includes("resolve-target")
+    ? [target()]
+    : [{ provider_user_id: null, last_authenticated_at: "2026-08-24T00:00:00Z", identity_linked: true }];
+  await assert.rejects(
+    resolveTeamMemberRemovalTarget(context(), handle, signedInQuery),
+    (error) => error instanceof TeamAccessError && error.code === "ACCOUNT_HAS_HISTORY",
+  );
+
+  const removalTarget = { organizationId, userId: targetId, providerUserId: null, role: "cat_lead" };
+  await assert.rejects(
+    preflightTeamMemberRemoval(context(), removalTarget, async (callback) => callback(async (sql) => {
+      if (/DELETE FROM local801\.users/.test(sql)) throw Object.assign(new Error("foreign key"), { code: "23503" });
+      return [];
+    })),
+    (error) => error instanceof TeamAccessError && error.code === "ACCOUNT_HAS_HISTORY",
+  );
+});
+
 test("non-admin roles are denied before Team SQL", async () => {
   for (const role of ["membership_data_manager", "cat_admin", "cat_lead", "cat_member", "report_viewer"]) {
     let calls = 0;
@@ -202,8 +267,12 @@ test("Team APIs are same-origin, bounded, production-capable, and server-authori
   assert.match(updateRoute, /changeTeamMemberRole/);
   assert.match(updateRoute, /setTeamMemberActive/);
   assert.match(updateRoute, /revokeTeamMemberSessions/);
+  assert.match(updateRoute, /remove_account/);
   assert.match(page, /CAT never creates or emails a password/);
   assert.match(page, /grants access to the Entra enterprise application/);
   assert.match(page, /System Owner required/);
   assert.match(controls, /Sign out everywhere/);
+  assert.match(controls, /Confirm removal/);
+  assert.match(controls, /removalConfirmation !== displayName/);
+  assert.doesNotMatch(controls, /window\.prompt/);
 });

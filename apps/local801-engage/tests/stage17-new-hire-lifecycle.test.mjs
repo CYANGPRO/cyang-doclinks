@@ -30,6 +30,7 @@ test("known membership alone does not silently skip organizing workflow stages",
 
 test("new-hire page omits progress and action columns", () => {
   const page = readFileSync(new URL("../src/app/new-hires/page.tsx", import.meta.url), "utf8");
-  assert.match(page, /headers=\{\["Person", "Hire Date", "Job Status", "Classification", "Department \/ Work Location", "Work Email", "Work Phone", "Cell Phone", "Home Phone", "Home Email", "Assignment"\]\}/);
+  assert.match(page, /headers=\{\["Person", "Hire Date", "Work", "Contact", "Assignment"\]\}/);
+  assert.doesNotMatch(page, /Job Status|person\.jobStatus/);
   assert.doesNotMatch(page, /new-hire-progress-badges|new-hire-mobile-progress|new-hire-action-cell|new-hire-member360/);
 });

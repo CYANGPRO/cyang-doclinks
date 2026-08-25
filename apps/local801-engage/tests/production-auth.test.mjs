@@ -102,6 +102,25 @@ test("OIDC directory identities require the exact tenant, a valid object ID, and
     mfaVerified: true,
     directoryObjectVerified: true,
   });
+  assert.deepEqual(productionIdentityFromProfile({
+    sub: "provider-pairwise-subject",
+    tid: "aaaaaaaa-0000-4000-8000-000000000001",
+    oid: "bbbbbbbb-0000-4000-8000-000000000002",
+    preferred_username: "mutable@example.test",
+    amr: ["mfa"],
+  }, {
+    ...immutableConfig,
+    bootstrapObjectId: "bbbbbbbb-0000-4000-8000-000000000002",
+  }), {
+    providerId: "local801-oidc",
+    subject: "aaaaaaaa-0000-4000-8000-000000000001:bbbbbbbb-0000-4000-8000-000000000002",
+    objectId: "bbbbbbbb-0000-4000-8000-000000000002",
+    email: "",
+    emailVerified: false,
+    bootstrapObjectMatched: true,
+    mfaVerified: true,
+    directoryObjectVerified: true,
+  });
   assert.throws(() => productionIdentityFromProfile({
     sub: "provider-pairwise-subject",
     tid: "dddddddd-0000-4000-8000-000000000004",
