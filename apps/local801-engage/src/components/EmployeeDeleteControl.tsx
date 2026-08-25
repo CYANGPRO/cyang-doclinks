@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
 
 export function EmployeeDeleteControl({ displayName, personHandle }: { displayName: string; personHandle: string }) {
   const router = useRouter();
+  const confirmationId = useId();
   const [open, setOpen] = useState(false);
   const [confirmation, setConfirmation] = useState("");
   const [busy, setBusy] = useState(false);
@@ -34,7 +35,7 @@ export function EmployeeDeleteControl({ displayName, personHandle }: { displayNa
     {open ? <div className="employee-delete-confirmation">
       <strong>Remove {displayName} from active CAT records?</strong>
       <p>This is a recoverable archive. CAT retains audit and historical activity.</p>
-      <div className="field"><label htmlFor={`remove-${personHandle}`}>Type REMOVE to confirm</label><input id={`remove-${personHandle}`} value={confirmation} autoComplete="off" onChange={(event) => setConfirmation(event.target.value)} /></div>
+      <div className="field"><label htmlFor={confirmationId}>Type REMOVE to confirm</label><input id={confirmationId} value={confirmation} autoComplete="off" onChange={(event) => setConfirmation(event.target.value)} /></div>
       <button className="button danger" type="button" disabled={busy || confirmation !== "REMOVE"} onClick={remove}>{busy ? "Removing…" : "Confirm removal"}</button>
       {error ? <p className="error-text" role="alert">{error}</p> : null}
     </div> : null}

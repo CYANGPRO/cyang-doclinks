@@ -38,8 +38,12 @@ export function ImportDataIssueControls({ issue }: { issue: ImportDataIssue }) {
 
   return <div className="import-data-issue-controls">
     {issue.exactWorkEmailMatch ? <div className="data-issue-email-lock">
-      <strong>Exact work-email match protected</strong>
-      <span>CAT will keep the active employee matched by work email. Manual choices cannot override it.</span>
+      <strong>Existing employee matched by exact work email</strong>
+      {issue.exactWorkEmailEmployee ? <div className="data-issue-email-employee">
+        <div className="possible-match-name"><strong>{issue.exactWorkEmailEmployee.displayName}</strong><span>{issue.exactWorkEmailEmployee.employeeReference}</span></div>
+        <div className="possible-match-work">{[issue.exactWorkEmailEmployee.department, issue.exactWorkEmailEmployee.classification, issue.exactWorkEmailEmployee.workLocation].filter(Boolean).join(" · ") || "Work details unavailable"}</div>
+      </div> : <span>The matched employee details are temporarily unavailable.</span>}
+      <span>CAT will attach this row to that employee. Manual choices cannot override an exact active work-email match.</span>
     </div> : <>
       <div className="possible-match-heading">
         <strong>Possible employee matches</strong>

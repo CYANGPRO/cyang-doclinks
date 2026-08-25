@@ -83,6 +83,7 @@ export type ImportDataIssue = {
   errorMessages: string[];
   decision: "link_existing" | "create_new" | null;
   exactWorkEmailMatch: boolean;
+  exactWorkEmailEmployee: MatchCandidate | null;
   candidates: MatchCandidate[];
 };
 
@@ -293,6 +294,24 @@ export async function getImportDataIssues(context: WorkspaceContext, query: Data
         selected: item.employee.person_id === row.resolution_person_id,
       })));
       const byId = new Map(employeeDetails.map((item) => [item.employee.person_id, item]));
+      const candidateDetails = (personId: string, score: number, reasons: string[], selected: boolean): MatchCandidate | null => {
+        const item = byId.get(personId);
+        if (!item) return null;
+        return {
+          personHandle: outreachHandle(context.organizationId, item.employee.person_id),
+          displayName: item.displayName,
+          employeeReference: `L801-${String(item.employee.employee_reference).padStart(6, "0")}`,
+          department: item.employee.department,
+          classification: item.employee.classification,
+          workLocation: item.employee.work_location,
+          score,
+          reasons,
+          selected,
+        };
+      };
+      const exactWorkEmailEmployee = row.work_email_identity_matches && row.person_id
+        ? candidateDetails(row.person_id, 100, ["Exact active work email"], true)
+        : null;
       return {
         batchId: batch.id,
         importKind: batch.import_kind,
@@ -307,20 +326,10 @@ export async function getImportDataIssues(context: WorkspaceContext, query: Data
         errorMessages: Array.isArray(row.error_messages) ? row.error_messages : [],
         decision: row.resolution_type === "confirm_existing" ? "link_existing" : row.resolution_type === "create_new" ? "create_new" : null,
         exactWorkEmailMatch: Boolean(row.work_email_identity_matches),
+        exactWorkEmailEmployee,
         candidates: ranked.flatMap((candidate) => {
-          const item = byId.get(candidate.personId);
-          if (!item) return [];
-          return [{
-            personHandle: outreachHandle(context.organizationId, item.employee.person_id),
-            displayName: item.displayName,
-            employeeReference: `L801-${String(item.employee.employee_reference).padStart(6, "0")}`,
-            department: item.employee.department,
-            classification: item.employee.classification,
-            workLocation: item.employee.work_location,
-            score: candidate.score,
-            reasons: candidate.reasons,
-            selected: item.employee.person_id === row.resolution_person_id,
-          }];
+          const candidateDetail = candidateDetails(candidate.personId, candidate.score, candidate.reasons, candidate.personId === row.resolution_person_id);
+          return candidateDetail ? [candidateDetail] : [];
         }),
       };
     }),

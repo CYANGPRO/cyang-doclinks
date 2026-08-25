@@ -742,6 +742,10 @@
 .possible-match-empty { font-size: .82rem; margin: 0; }
 .data-issue-email-lock { background: var(--success-soft); border-left: 3px solid var(--success); display: grid; font-size: .82rem; gap: 3px; padding: 10px 12px; }
 .data-issue-email-lock span { color: var(--text-muted); }
+.data-issue-email-employee { background: var(--surface); border: 1px solid #8cc7a5; border-radius: 8px; margin: 6px 0; padding: 10px 12px; }
+.data-quality-email-match { background: var(--success-soft); border-left: 3px solid var(--success); display: grid; font-size: .72rem; gap: 2px; line-height: 1.35; padding: 7px 9px; }
+.data-quality-email-match.unavailable { background: var(--warning-soft); border-left-color: var(--warning); }
+.data-quality-email-match span { color: var(--text-muted); }
 .import-data-issue-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; }
 .import-data-issue-footnote { font-size: .74rem; margin: 0; }
 .import-data-issues-footer { margin-top: 16px; }

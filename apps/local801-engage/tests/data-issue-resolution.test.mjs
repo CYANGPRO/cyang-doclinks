@@ -125,7 +125,14 @@ test("data-issue and Directory controls use guarded APIs and explicit confirmati
   assert.match(issueRoute, /authorizeWorkspaceMutation\(request, "manageImports"\)/);
   assert.match(directoryRoute, /authorizeWorkspaceMutation\(request, "deleteEmployees"\)/);
   assert.match(issueControls, /CAT never attaches a possible match automatically/);
+  assert.match(issueControls, /Existing employee matched by exact work email/);
+  assert.match(issueControls, /issue\.exactWorkEmailEmployee\.displayName/);
   assert.match(issueControls, /Remove from import/);
   assert.match(deleteControls, /confirmation !== "REMOVE"/);
   assert.match(deleteControls, /recoverable archive/i);
+  const dataQualityPage = readFileSync(new URL("../src/app/membership/data-quality/page.tsx", import.meta.url), "utf8");
+  assert.match(dataQualityPage, /canDeleteEmployee = can\(user\.role, "deleteEmployees"\)/);
+  assert.match(dataQualityPage, /<EmployeeDeleteControl displayName=\{person\.displayName\} personHandle=\{person\.handle\}/);
+  assert.match(dataQualityPage, /Exact work-email match ready/);
+  assert.match(dataQualityPage, /An import row with the same address matches this employee/);
 });

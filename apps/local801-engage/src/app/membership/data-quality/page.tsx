@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { DataQualityFixControls } from "@/components/DataQualityFixControls";
+import { EmployeeDeleteControl } from "@/components/EmployeeDeleteControl";
 import { ImportDataIssueControls } from "@/components/ImportDataIssueControls";
 import { AppliedFilterSummary, DataTable, DisclosureCard, EmptyState, FilterBar, PageHeader, Pagination, SectionCard, StatusBadge, UnavailableState } from "@/components/DesignSystem";
 import { ProtectedPage } from "@/components/ProtectedPage";
@@ -61,11 +62,20 @@ function hasDirectIssue(issues: readonly DataQualityIssueCode[]) {
   return issues.some((issue) => issue !== "not_in_latest_roster");
 }
 
+function WorkEmailMatchStatus({ issues }: { issues: readonly DataQualityIssueCode[] }) {
+  const missing = issues.includes("missing_work_email");
+  return <div className={`data-quality-email-match${missing ? " unavailable" : ""}`}>
+    <strong>{missing ? "Work-email match unavailable" : "Exact work-email match ready"}</strong>
+    <span>{missing ? "Add a work email to enable employee matching." : "An import row with the same address matches this employee."}</span>
+  </div>;
+}
+
 export default async function MembershipDataQualityPage({ searchParams }: { searchParams: SearchParams }) {
   const user = await getPreviewUser();
   if (!user) redirect("/sign-in");
   if (!can(user.role, "manageImports")) redirect("/unauthorized");
   const canOpenMember = can(user.role, "recordEngagement");
+  const canDeleteEmployee = can(user.role, "deleteEmployees");
   const parameters = await searchParams;
   const hasCursor = typeof parameters.cursor === "string" && parameters.cursor.length > 0;
   let results: DataQualityQueuePage | null = null;
@@ -104,7 +114,7 @@ export default async function MembershipDataQualityPage({ searchParams }: { sear
 
     <SectionCard className="import-data-issues-section" title="Import rows needing a decision" description="Review possible employee matches, attach a row, create a new employee on approval, or remove the row from this import." badge={<StatusBadge tone="info">Protected PII</StatusBadge>}>
       {importIssuesUnavailable ? <UnavailableState title="Import issues unavailable" description="We couldn’t safely load protected import rows or possible employee matches." />
-        : importIssues.length === 0 ? <EmptyState title="No import decisions waiting" description="The latest reviewed import has no unresolved or proposed-new rows requiring an individual decision." />
+        : importIssues.length === 0 ? <EmptyState title="No import decisions waiting" description="No unresolved import rows are waiting. Exact work-email matches and possible employees will appear here when a row needs a decision." />
           : <>
             <p className="muted import-data-issues-intro">An exact active work-email match always wins and cannot be overridden. When there is no exact work-email match, CAT ranks a short list using full names and workplace details. An administrator must confirm every attachment.</p>
             <div className="import-data-issue-list">
@@ -170,11 +180,13 @@ export default async function MembershipDataQualityPage({ searchParams }: { sear
                 <td>{person.classification || "Classification unavailable"}<div className="muted">{person.department || "Department unavailable"}<br />{person.workLocation || "Work location unavailable"}</div></td>
                 <td>{formatDate(person.updatedAt)}</td>
                 <td className="data-quality-actions-cell">
+                  <WorkEmailMatchStatus issues={person.issues} />
                   {hasDirectIssue(person.issues) ? <DataQualityFixControls displayName={person.displayName} personHandle={person.handle} issues={person.issues} /> : null}
                   <div className="data-quality-secondary-actions">
                     {canOpenMember ? <Link href={`/outreach/${person.handle}`}>Outreach record</Link> : null}
                     <Link href="/imports">Data imports</Link>
                   </div>
+                  {canDeleteEmployee ? <EmployeeDeleteControl displayName={person.displayName} personHandle={person.handle} /> : null}
                 </td>
               </tr>)}
             </DataTable>
@@ -189,8 +201,10 @@ export default async function MembershipDataQualityPage({ searchParams }: { sear
               <div className="data-quality-mobile-issues">{person.issues.map((issue) => <div key={issue}><strong>{labels.get(issue)}</strong><div className="muted">{explanations.get(issue)}</div></div>)}</div>
               <div className="data-quality-mobile-work"><strong>Work</strong><span>{person.classification || "Classification unavailable"}</span><span>{person.department || "Department unavailable"}</span><span>{person.workLocation || "Work location unavailable"}</span></div>
               <div className="muted data-quality-mobile-updated">Updated {formatDate(person.updatedAt)}</div>
+              <WorkEmailMatchStatus issues={person.issues} />
               {hasDirectIssue(person.issues) ? <DataQualityFixControls displayName={person.displayName} personHandle={person.handle} issues={person.issues} /> : null}
               <div className="data-quality-secondary-actions">{canOpenMember ? <Link href={`/outreach/${person.handle}`}>Outreach record</Link> : null}<Link href="/imports">Data imports</Link></div>
+              {canDeleteEmployee ? <EmployeeDeleteControl displayName={person.displayName} personHandle={person.handle} /> : null}
             </article>)}
           </div>
 
