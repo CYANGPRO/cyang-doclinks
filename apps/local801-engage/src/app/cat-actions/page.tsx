@@ -119,8 +119,8 @@ export default async function CatActionsPage({
     </section> : null}
 
     <SectionCard title="CAT Action work records" description={page ? `${page.total} ${page.total === 1 ? "action matches" : "actions match"} the current filters.` : "The action list could not be loaded safely."}>
-      {!page ? <UnavailableState title="CAT Actions unavailable" description="We couldn’t load CAT Action or task details safely." />
-        : page.actions.length === 0 ? <EmptyState title="No matching CAT Actions" description="No CAT Actions match the filters you chose." />
+      {!page ? <UnavailableState title="CAT Actions unavailable" description="We couldn’t load CAT Action or task details safely." action={<Link className="button secondary" href="/cat-actions">Try again</Link>} />
+        : page.actions.length === 0 ? <EmptyState title={page.term || page.status ? "No matching CAT Actions" : "No CAT Actions yet"} description={page.term || page.status ? "No CAT Actions match the filters you chose." : "Create the first CAT Action to start assigning and tracking work."} action={page.term || page.status ? <Link className="button secondary" href="/cat-actions">Clear filters</Link> : <a className="button" href="#create-cat-action">Create first CAT Action</a>} />
         : <>
           <DataTable caption="CAT Actions" headers={["Action", "Cycle", "Workload", "Completed", "Next due"]}>
             {page.actions.map((action) => <tr key={action.handle}>
@@ -146,9 +146,11 @@ export default async function CatActionsPage({
         </>}
     </SectionCard>
 
-    <DisclosureCard title="Create a CAT Action" description="Create the work record here; restricted strategy stays in its protected area." className="route-secondary-panel create-record-panel">
-      {options ? <CatActionCreateForm cycles={options.contractCycles} />
-        : <UnavailableState title="Action creation unavailable" description="We couldn’t load the options needed to create a CAT Action." />}
-    </DisclosureCard>
+    <div id="create-cat-action">
+      <DisclosureCard title="Create a CAT Action" description="Create the work record here; restricted strategy stays in its protected area." className="route-secondary-panel create-record-panel">
+        {options ? <CatActionCreateForm cycles={options.contractCycles} />
+          : <UnavailableState title="Action creation unavailable" description="We couldn’t load the options needed to create a CAT Action." />}
+      </DisclosureCard>
+    </div>
   </div></ProtectedPage>;
 }

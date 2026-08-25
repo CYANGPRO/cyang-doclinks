@@ -51,6 +51,8 @@ type Props = {
   organizationWide: boolean;
 };
 
+type ActionResponse = "willing" | "considering" | "declined" | "completed";
+
 async function responseBody(response: Response) {
   return response.json().catch(() => ({})) as Promise<{ message?: unknown; engagementHandle?: unknown }>;
 }
@@ -72,6 +74,7 @@ export function EngagementRecorder({
   const [followupEnabled, setFollowupEnabled] = useState(false);
   const [followupDueAt, setFollowupDueAt] = useState("");
   const [lastEngagementHandle, setLastEngagementHandle] = useState<string | null>(null);
+  const [actionSelections, setActionSelections] = useState<Record<string, ActionResponse | "">>({});
   const currentByAction = useMemo(() => new Map(currentActions.map((item) => [item.handle, item.response])), [currentActions]);
   const followupSuggestion = useMemo(() => followupSuggestionForOutcome(outcome), [outcome]);
 
@@ -127,7 +130,7 @@ export function EngagementRecorder({
     }
   }
 
-  async function updateAction(actionHandle: string, responseValue: "willing" | "considering" | "declined" | "completed") {
+  async function updateAction(actionHandle: string, responseValue: ActionResponse) {
     if (actionBusy) return;
     setActionBusy(actionHandle);
     setError(null);
@@ -213,12 +216,30 @@ export function EngagementRecorder({
         <div className="section-heading"><div><h3>Action readiness</h3><p>Keep the current response up to date. Earlier responses stay in the history.</p></div></div>
         {lastEngagementHandle ? <p className="muted">Changes you make now will be linked to the conversation you just saved.</p> : null}
         {actionDefinitions.length === 0 ? <div className="empty-state"><strong>No actions are set up yet</strong><p>Create the action catalog before recording willingness.</p></div> : <div className="stack">
-          {actionDefinitions.map((action) => <article className="section-card" key={action.handle}>
-            <div className="section-heading"><div><h3>{action.label}</h3><p>Engagement level {action.engagementLevel} · Current: {currentByAction.get(action.handle) || "not recorded"}</p></div></div>
-            <div className="page-actions compact-actions">
-              {(["willing", "considering", "declined", "completed"] as const).map((value) => <button key={value} className="button secondary" type="button" disabled={Boolean(actionBusy)} onClick={() => updateAction(action.handle, value)}>{actionBusy === action.handle ? "Saving…" : value[0].toUpperCase() + value.slice(1)}</button>)}
-            </div>
-          </article>)}
+          {actionDefinitions.map((action) => {
+            const current = currentByAction.get(action.handle) as ActionResponse | undefined;
+            const selected = actionSelections[action.handle] ?? current ?? "";
+            const fieldId = `action-response-${action.handle}`;
+            return <article className="section-card" key={action.handle}>
+              <div className="section-heading"><div><h3>{action.label}</h3><p>Engagement level {action.engagementLevel} · Current: {current || "not recorded"}</p></div></div>
+              <div className="form-grid action-readiness-editor">
+                <div className="field">
+                  <label htmlFor={fieldId}>Response</label>
+                  <select id={fieldId} value={selected} onChange={(event) => setActionSelections((previous) => ({ ...previous, [action.handle]: event.target.value as ActionResponse | "" }))}>
+                    <option value="">Choose a response</option>
+                    <option value="willing">Willing</option>
+                    <option value="considering">Considering</option>
+                    <option value="declined">Declined</option>
+                    <option value="completed">Completed</option>
+                  </select>
+                </div>
+                <div className="field action-readiness-submit">
+                  <label htmlFor={`${fieldId}-save`}>Save</label>
+                  <button id={`${fieldId}-save`} className="button secondary" type="button" disabled={Boolean(actionBusy) || !selected || selected === current} onClick={() => selected && updateAction(action.handle, selected)}>{actionBusy === action.handle ? "Saving…" : "Update response"}</button>
+                </div>
+              </div>
+            </article>;
+          })}
         </div>}
         <div className="form-actions"><button className="button danger" type="button" disabled={Boolean(actionBusy)} onClick={declineAll}>{actionBusy === "declines_all" ? "Saving…" : "Declines all actions"}</button></div>
       </section>

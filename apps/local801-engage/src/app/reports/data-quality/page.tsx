@@ -5,6 +5,8 @@ import { ProtectedPage } from "@/components/ProtectedPage";
 import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
 import { getDataQualitySummary, type DataQualitySummary } from "@/lib/data-quality";
+import { enforceAuthenticatedRateLimit } from "@/lib/rate-limit";
+import { recordReportAccess, reportFailureDiagnostic } from "@/lib/report-access";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
 
 const emptySummary = (): DataQualitySummary => ({
@@ -27,15 +29,19 @@ export default async function DataQualityReportPage() {
   let unavailable = false;
   try {
     const context = await resolveWorkspaceContext(user);
+    const limit = await enforceAuthenticatedRateLimit({ organizationId: context.organizationId, userId: context.userId, policy: "download_export" });
+    if (!limit.ok) throw new Error("Report rate limit denied.");
     summary = await getDataQualitySummary(context);
-  } catch {
+    await recordReportAccess(context, "data-quality");
+  } catch (error) {
+    console.error("[local801-report-safe-failure]", JSON.stringify(reportFailureDiagnostic(error, "data-quality")));
     unavailable = true;
   }
   const canManage = can(user.role, "manageImports");
 
   return <ProtectedPage permission="viewReports"><div className="content route-data-quality-report-page reports-workspace-page">
     <PageHeader eyebrow="Reports" title="Data quality report" description="Review aggregate, protected-safe indicators. This report does not expose names, emails, identifiers, or person-level rows." actions={<><Link className="button secondary" href="/reports?view=overview">Back to reports</Link>{canManage ? <Link className="button" href="/membership/data-quality">Open data quality queue</Link> : null}</>} />
-    {unavailable ? <SectionCard><UnavailableState title="Data-quality report unavailable" description="Aggregate results are withheld until an authorized database context can be established." /></SectionCard> : <>
+    {unavailable ? <SectionCard><UnavailableState title="Data-quality report unavailable" description="Aggregate results are withheld until an authorized database context can be established. Reference: REPORTS_UNAVAILABLE." action={<Link className="button secondary" href="/reports/data-quality">Try again</Link>} /></SectionCard> : <>
       <div className="metrics-grid" aria-label="Aggregate data quality indicators">
         <StatCard label="People needing review" value={summary.flaggedPeople.toLocaleString()} detail="Distinct active people with one or more explicit issue categories." />
         <StatCard label="Missing employee/member ID" value={summary.missingIdentifier.toLocaleString()} detail="No employee or member identifier record." />

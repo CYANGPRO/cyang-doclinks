@@ -74,6 +74,9 @@ test("Stage 7B workspace is operational through protected client controls", () =
   assert.match(engagementRecorder, /Record a conversation/);
   assert.match(engagementRecorder, /Create a follow-up/);
   assert.match(engagementRecorder, /Declines all actions/);
+  assert.match(engagementRecorder, /Choose a response/);
+  assert.match(engagementRecorder, /Update response/);
+  assert.doesNotMatch(engagementRecorder, /\.map\(\(value\) => <button/);
 });
 
 test("outreach queue exposes the approved operational focus controls", () => {

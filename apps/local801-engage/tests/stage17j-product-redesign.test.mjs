@@ -64,15 +64,15 @@ test("Home leads with prioritized work and a compact role-aware snapshot", () =>
   assert.ok(home.indexOf('className="priority-panel"') < home.indexOf('className="snapshot-panel"'));
 });
 
-test("uploads lead their workspaces while program setup remains secondary", () => {
+test("uploads lead their workspaces while campaign setup is shown once", () => {
   const imports = source("src/app/imports/page.tsx");
   const campaigns = source("src/app/campaigns/page.tsx");
   const documents = source("src/app/documents/page.tsx");
   assert.ok(imports.indexOf('title="Start a new import"') < imports.indexOf('title="Import history"'));
-  assert.ok(campaigns.indexOf('title="Campaign work records"') < campaigns.indexOf('title="Create a draft campaign"'));
+  assert.ok(campaigns.indexOf('title="Create campaign"') < campaigns.indexOf('title="Campaign portfolio"'));
   assert.ok(documents.indexOf('title="Upload a document"') < documents.indexOf('title="Document library"'));
   assert.match(imports, /<DisclosureCard[\s\S]*title="Start a new import"/);
-  assert.match(campaigns, /<DisclosureCard[\s\S]*title="Create a draft campaign"/);
+  assert.equal((campaigns.match(/<CampaignCreateForm/g) ?? []).length, 1);
   assert.match(documents, /<DisclosureCard[\s\S]*title="Upload a document"/);
 });
 

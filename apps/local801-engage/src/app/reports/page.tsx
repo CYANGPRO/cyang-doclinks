@@ -36,7 +36,7 @@ import {
 } from "@/lib/reports";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
 import { enforceAuthenticatedRateLimit } from "@/lib/rate-limit";
-import { recordReportAccess } from "@/lib/report-access";
+import { recordReportAccess, reportFailureDiagnostic } from "@/lib/report-access";
 import { reportValueLabel } from "@/lib/report-labels";
 import { measureServerOperation } from "@/lib/performance-timing";
 
@@ -327,7 +327,8 @@ export default async function ReportsPage({
       loaded.protectedReadEnabled = isPiiProtectedReadEnabled();
       return loaded;
     });
-  } catch {
+  } catch (error) {
+    console.error("[local801-report-safe-failure]", JSON.stringify(reportFailureDiagnostic(error, view)));
     // Fail closed. Never substitute placeholder report values when the reporting query is unavailable.
   }
   const {
@@ -356,11 +357,11 @@ export default async function ReportsPage({
 
     {view === "overview" ? (
       !commandCenterReport ? (
-        <SectionCard title="Outreach coverage and workload"><UnavailableState title="Outreach coverage unavailable" description="We couldn’t load assignment, contact, follow-up, and new-hire timing totals for your current access. No substitute numbers are shown." /></SectionCard>
+        <SectionCard title="Outreach coverage and workload"><UnavailableState title="Outreach coverage unavailable" description="We couldn’t load assignment, contact, follow-up, and new-hire timing totals for your current access. No substitute numbers are shown. Reference: REPORTS_UNAVAILABLE." action={<Link className="button secondary" href="/reports?view=overview">Try again</Link>} /></SectionCard>
       ) : <EngagementCommandCenter report={commandCenterReport} />
     ) : view === "cat-actions" ? (
       !catActionReport ? (
-        <SectionCard title="CAT Action reporting"><UnavailableState title="CAT Action report unavailable" description="We couldn’t load the CAT Action summary for your current access." /></SectionCard>
+        <SectionCard title="CAT Action reporting"><UnavailableState title="CAT Action report unavailable" description="We couldn’t load the CAT Action summary for your current access. Reference: REPORTS_UNAVAILABLE." action={<Link className="button secondary" href="/reports?view=cat-actions">Try again</Link>} /></SectionCard>
       ) : <>
         <SectionCard title="CAT Action totals" description="Counts of non-archived CAT Actions, tasks, completion, overdue work, and participants. Restricted strategy content is never included.">
           <div className="metrics-grid">
@@ -390,7 +391,7 @@ export default async function ReportsPage({
       </>
     ) : view === "campaigns" ? (
       !campaignReport ? (
-        <SectionCard title="Campaign reporting"><UnavailableState title="Campaign report unavailable" description="We couldn’t load the campaign summary for your current access." /></SectionCard>
+        <SectionCard title="Campaign reporting"><UnavailableState title="Campaign report unavailable" description="We couldn’t load the campaign summary for your current access. Reference: REPORTS_UNAVAILABLE." action={<Link className="button secondary" href="/reports?view=campaigns">Try again</Link>} /></SectionCard>
       ) : <>
         <SectionCard title="Campaign totals" description="Counts of non-archived campaigns, participants, organizer assignments, recorded contacts, and completed work.">
           <div className="metrics-grid">
@@ -411,7 +412,7 @@ export default async function ReportsPage({
       </>
     ) : view === "engagement" ? (
       !engagementReport ? (
-        <SectionCard title="Outreach activity"><UnavailableState title="Outreach activity report unavailable" description="We couldn’t load recorded contacts, organizer activity, and follow-up totals for your current access." /></SectionCard>
+        <SectionCard title="Outreach activity"><UnavailableState title="Outreach activity report unavailable" description="We couldn’t load recorded contacts, organizer activity, and follow-up totals for your current access. Reference: REPORTS_UNAVAILABLE." action={<Link className="button secondary" href="/reports?view=engagement">Try again</Link>} /></SectionCard>
       ) : <>
         <SectionCard title="Recorded outreach totals" description="Counts of recorded contacts, organizers with activity, and open or completed follow-ups.">
           <div className="metrics-grid">
@@ -437,7 +438,7 @@ export default async function ReportsPage({
     ) : view === "new-hires" ? (
       !newHireReport ? (
         <SectionCard title="New-hire reporting">
-          <UnavailableState title="New-hire report unavailable" description="We couldn’t load the new-hire summary for your current access." />
+          <UnavailableState title="New-hire report unavailable" description="We couldn’t load the new-hire summary for your current access. Reference: REPORTS_UNAVAILABLE." action={<Link className="button secondary" href="/reports?view=new-hires">Try again</Link>} />
         </SectionCard>
       ) : <>
         <SectionCard title="New-hire membership and contact totals" description="Counts of recorded hires, current members, people contacted, and people with no recorded contact.">
@@ -458,7 +459,7 @@ export default async function ReportsPage({
       </>
     ) : !membershipReport ? (
       <SectionCard title="Membership reporting">
-        <UnavailableState title="Membership report unavailable" description="We couldn’t load the membership summary for your current access." />
+        <UnavailableState title="Membership report unavailable" description="We couldn’t load the membership summary for your current access. Reference: REPORTS_UNAVAILABLE." action={<Link className="button secondary" href="/reports?view=membership">Try again</Link>} />
       </SectionCard>
     ) : <>
       <SectionCard title="Current membership totals" description={refreshedLabel(membershipReport.overview.refreshedAt)}>

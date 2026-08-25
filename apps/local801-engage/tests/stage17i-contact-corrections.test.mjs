@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   ContactCorrectionError,
+  contactCorrectionFailureDiagnostic,
   decideContactCorrection,
   getVisibleContactActions,
   listContactCorrectionsForReview,
@@ -37,6 +38,25 @@ function environment(overrides = {}) {
 }
 
 const keyConfig = getPiiKeyConfiguration(environment());
+
+test("contact update diagnostics expose database structure without messages or protected values", () => {
+  const diagnostic = contactCorrectionFailureDiagnostic({
+    name: "DatabaseError",
+    code: "42703",
+    table_name: "contact_correction_requests",
+    constraint_name: "safe_constraint",
+    message: "contains protected member data",
+    detail: "contains proposed contact information",
+  });
+  assert.deepEqual(diagnostic, {
+    name: "DatabaseError",
+    code: "42703",
+    constraint: "safe_constraint",
+    table: "contact_correction_requests",
+  });
+  assert.equal(JSON.stringify(diagnostic).includes("protected member data"), false);
+  assert.equal(JSON.stringify(diagnostic).includes("proposed contact information"), false);
+});
 const protectedState = {
   write_mode: "protected",
   backfill_state: "complete",

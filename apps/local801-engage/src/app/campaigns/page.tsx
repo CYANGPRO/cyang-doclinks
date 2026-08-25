@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { CampaignCreateForm } from "@/components/CampaignMutations";
-import { DataTable, DisclosureCard, EmptyState, PageHeader, Pagination, SectionCard, StatusBadge, UnavailableState } from "@/components/DesignSystem";
+import { DataTable, EmptyState, PageHeader, Pagination, SectionCard, StatusBadge, UnavailableState } from "@/components/DesignSystem";
 import { ProtectedPage } from "@/components/ProtectedPage";
 import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
@@ -35,11 +35,11 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
       title="Campaigns"
       description="Create a defined participant list, assign organizers, track contact and completion, and connect the work to CAT Actions."
     />
-    <SectionCard title="Create campaign" description="Start in draft while you prepare the population, or activate immediately when the campaign is ready." badge={<StatusBadge tone="ready">Audited operation</StatusBadge>}>
+    <SectionCard id="create-campaign" title="Create campaign" description="Start in draft while you prepare the population, or activate immediately when the campaign is ready." badge={<StatusBadge tone="ready">Audited operation</StatusBadge>}>
       <CampaignCreateForm />
     </SectionCard>
     <SectionCard title="Campaign portfolio" badge={<StatusBadge tone="info">Aggregate SQL</StatusBadge>}>
-      {!page ? <UnavailableState title="Campaigns unavailable" description="No placeholder campaign is presented as live." /> : page.campaigns.length === 0 ? <EmptyState title="No campaigns" description="Create a draft campaign to begin the organizing workflow." /> : <>
+      {!page ? <UnavailableState title="Campaigns unavailable" description="No placeholder campaign is presented as live." action={<Link className="button secondary" href="/campaigns">Try again</Link>} /> : page.campaigns.length === 0 ? <EmptyState title="No campaigns" description="Create a draft campaign to begin the organizing workflow." action={<a className="button" href="#create-campaign">Create first campaign</a>} /> : <>
         <DataTable caption="Campaign summaries" headers={["Campaign", "Status", "Dates", "Population", "Contacted", "Completed"]}>
           {page.campaigns.map((campaign) => <tr key={campaign.handle}>
             <td><strong><Link href={`/campaigns/${campaign.handle}`}>{campaign.name}</Link></strong></td>
@@ -57,8 +57,5 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
         />
       </>}
     </SectionCard>
-    <DisclosureCard title="Create a draft campaign" description="Name the campaign and set its dates. Build and review the participant list before activation." className="route-secondary-panel create-record-panel">
-      <CampaignCreateForm />
-    </DisclosureCard>
   </div></ProtectedPage>;
 }

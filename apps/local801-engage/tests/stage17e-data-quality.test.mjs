@@ -113,6 +113,8 @@ test("legacy Reports data-quality navigation redirects to aggregate protected-sa
   assert.match(report, /aggregate, protected-safe indicators/i);
   assert.match(report, /does not expose names, emails, identifiers, or person-level rows/);
   assert.match(report, /getDataQualitySummary/);
+  assert.match(report, /recordReportAccess\(context, "data-quality"\)/);
+  assert.match(report, /enforceAuthenticatedRateLimit/);
 });
 
 test("Stage 17E historical implementation remains migration-free and rejects fuzzy duplicate scoring", () => {

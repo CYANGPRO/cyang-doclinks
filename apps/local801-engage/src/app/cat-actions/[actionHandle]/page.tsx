@@ -163,34 +163,6 @@ export default async function CatActionDetailPage({
         <StatCard label="Assigned users" value={action.assignedUserCount} detail="People assigned to tasks" />
       </section>
 
-      <SectionCard title="Action context" badge={<StatusBadge tone={statusTone(action.status)}>{action.status}</StatusBadge>}>
-        <DataTable caption="CAT action context" headers={["Contract cycle", "Cycle status", "Starts", "Ends", "Next open due", "Created"]}>
-          <tr>
-            <td>{action.contractCycle?.name ?? "No contract cycle"}</td>
-            <td>{action.contractCycle?.status ?? "—"}</td>
-            <td>{dateOnly(action.contractCycle?.startsOn ?? null)}</td>
-            <td>{dateOnly(action.contractCycle?.endsOn ?? null)}</td>
-            <td>{dateTime(action.nextDueAt)}</td>
-            <td>{dateTime(action.createdAt)}</td>
-          </tr>
-        </DataTable>
-      </SectionCard>
-
-      <SectionCard title="Manage action" description="Changes are same-origin protected, organization scoped, role authorized, and written atomically with a durable audit event.">
-        {mutationReady ? <CatActionEditForm
-          actionHandle={action.handle}
-          initialName={action.name}
-          initialStatus={action.status}
-          cycles={options!.contractCycles}
-        /> : <UnavailableState title="Action editing unavailable" description="Authorized management options could not be loaded." />}
-      </SectionCard>
-
-      {action.status !== "closed" ? <SectionCard title="Create task" description="Create an operational task with an optional CAT organizer and due date. Strategy notes are not accepted here."
-        badge={protectedReadEnabled ? <StatusBadge tone="preview">Protected PII</StatusBadge> : undefined}>
-        {mutationReady ? <CatActionTaskCreateForm actionHandle={action.handle} assignees={options!.assignees} />
-          : <UnavailableState title="Task creation unavailable" description="Authorized assignee options could not be loaded." />}
-      </SectionCard> : null}
-
       <DisclosureCard title="Filter tasks" description="Search this CAT Action’s tasks and narrow them by status." defaultOpen={Boolean(tasks.term || tasks.status)} className="route-secondary-panel task-filter-panel">
         <form action={`/cat-actions/${action.handle}`} method="get">
           {fromCampaign ? <input type="hidden" name="fromCampaign" value={fromCampaign} /> : null}

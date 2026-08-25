@@ -69,6 +69,28 @@ function databaseErrorCode(error: unknown) {
   return error && typeof error === "object" && "code" in error ? String(error.code) : null;
 }
 
+function diagnosticField(error: unknown, key: string, maxLength: number) {
+  try {
+    if (!error || typeof error !== "object") return null;
+    const value = (error as Record<string, unknown>)[key];
+    return typeof value === "string" ? value.slice(0, maxLength) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function contactCorrectionFailureDiagnostic(error: unknown) {
+  const code = diagnosticField(error, "code", 80);
+  const constraint = diagnosticField(error, "constraint_name", 120) ?? diagnosticField(error, "constraint", 120);
+  const table = diagnosticField(error, "table_name", 120) ?? diagnosticField(error, "table", 120);
+  return {
+    name: diagnosticField(error, "name", 80) ?? "UnknownError",
+    ...(code ? { code } : {}),
+    ...(constraint ? { constraint } : {}),
+    ...(table ? { table } : {}),
+  };
+}
+
 function mapDecisionDatabaseError(error: unknown): never {
   const code = databaseErrorCode(error);
   if (code === "P1701") {

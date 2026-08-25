@@ -6,7 +6,7 @@ import { ProtectedPage } from "@/components/ProtectedPage";
 import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
 import { formatCatDateTime } from "@/lib/date-format";
-import { listContactCorrectionsForReview, type ContactCorrectionReviewItem } from "@/lib/contact-corrections";
+import { contactCorrectionFailureDiagnostic, listContactCorrectionsForReview, type ContactCorrectionReviewItem } from "@/lib/contact-corrections";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
 
 const fieldLabels: Record<string, string> = {
@@ -40,7 +40,8 @@ export default async function ContactCorrectionsPage() {
     const page = await listContactCorrectionsForReview(context);
     items = page.items;
     hasMore = page.hasMore;
-  } catch {
+  } catch (error) {
+    console.error("[local801-contact-correction-safe-failure]", JSON.stringify(contactCorrectionFailureDiagnostic(error)));
     unavailable = true;
   }
 
@@ -51,7 +52,7 @@ export default async function ContactCorrectionsPage() {
       description="Review contact information organizers flagged before it changes the member record."
       actions={<div className="page-actions contact-corrections-header-actions"><Link className="button secondary" href="/membership/data-quality">Data quality</Link><Link className="button secondary" href="/imports">Data imports</Link></div>}
     />
-    {unavailable ? <UnavailableState title="Contact updates are unavailable" description="We couldn’t safely load the protected review queue, so proposed values are not shown." /> :
+    {unavailable ? <UnavailableState title="Contact updates are unavailable" description="We couldn’t safely load the protected review queue, so proposed values are not shown. Reference: CONTACT_UPDATES_UNAVAILABLE." action={<Link className="button secondary" href="/membership/contact-corrections">Try again</Link>} /> :
       <SectionCard className="contact-corrections-review-queue" title="Contact updates waiting for review" description={items.length ? `${items.length}${hasMore ? "+" : ""} proposed ${items.length === 1 && !hasMore ? "update requires" : "updates require"} an approval or rejection decision.` : "No proposed contact changes currently require a decision."} badge={<StatusBadge tone="info">Protected PII</StatusBadge>}>
         {items.length === 0 ? <EmptyState title="No contact updates waiting" description="New updates submitted by organizers will appear here." /> : <>
           {hasMore ? <AlertBanner title="More updates are waiting" tone="warning">This bounded view shows the oldest 50 updates. Review these items and the next waiting updates will appear automatically.</AlertBanner> : null}

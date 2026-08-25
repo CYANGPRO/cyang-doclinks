@@ -173,7 +173,7 @@ export default async function OutreachEmployeePage({ params, searchParams }: { p
       </div>
     </SectionCard>
 
-    {can(user.role, "assignOutreach") ? <SectionCard title="Manage outreach assignment" description="Choose the primary LCAT or CAT responsible for this member, or delete the current direct assignment. Campaign assignments, follow-ups, conversations, and audit history remain unchanged.">
+    {can(user.role, "assignOutreach") ? <DisclosureCard title="Manage outreach assignment" description="Choose the primary LCAT or CAT responsible for this member, or delete the current direct assignment. Campaign assignments, follow-ups, conversations, and audit history remain unchanged." className="route-secondary-panel member360-assignment-panel">
       <OutreachAssignmentControl
         memberHandle={workspace.handle}
         memberName={workspace.displayName}
@@ -181,7 +181,7 @@ export default async function OutreachEmployeePage({ params, searchParams }: { p
         canDelete={workspace.activeDirectAssignmentCount > 0}
         returnHref={returnHref}
       />
-    </SectionCard> : null}
+    </DisclosureCard> : null}
 
     <SectionCard className="member360-open-work" title="Current outreach work" description="Counts of active assignments, open follow-ups, active campaigns, and action responses recorded for this person. These are not performance scores.">
       <section className="metrics-grid" aria-label="Open work summary">

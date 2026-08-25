@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Engaging Local 801 icon">
+  <rect width="512" height="512" rx="72" fill="#134D8C"/>
+  <path d="M96 328h320v42H96z" fill="#ffffff"/>
+  <path d="M114 280c38-78 88-118 150-118 54 0 96 28 126 84l-38 20c-22-42-52-63-90-63-42 0-80 32-113 96z" fill="#97002E"/>
+  <text x="256" y="268" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="112" font-weight="800" fill="#ffffff">801</text>
+</svg>

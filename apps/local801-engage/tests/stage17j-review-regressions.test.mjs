@@ -132,7 +132,7 @@ test("mobile queues keep current work ahead of setup except for requested upload
   const documents = source("src/app/documents/page.tsx");
   const team = source("src/app/team/page.tsx");
 
-  assert.ok(campaigns.indexOf('title="Campaign work records"') < campaigns.indexOf('title="Create a draft campaign"'));
+  assert.equal((campaigns.match(/<CampaignCreateForm/g) ?? []).length, 1);
   assert.ok(actions.indexOf('title="CAT Action work records"') < actions.indexOf('title="Create a CAT Action"'));
   assert.ok(documents.indexOf("<DocumentUploadForm") < documents.indexOf('title="Document library"'));
   assert.ok(team.indexOf('title="Current users"') < team.indexOf('title="What each role can do"'));
