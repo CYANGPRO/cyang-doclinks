@@ -1,5 +1,7 @@
 # Engaging Local 801 deployment environment checklist
 
+> Member email broadcasts remain Preview-only. See `MEMBER_EMAIL_BROADCASTS_PREVIEW.md`. Do not add provider credentials, DNS, or webhook configuration to Production as part of Preview acceptance.
+
 Do not record secret values in this file. Track configured/not configured status in the hosting provider.
 
 | Variable | Purpose | Preview | Production |

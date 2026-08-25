@@ -137,6 +137,34 @@ async function seed(transaction) {
         verified_at = EXCLUDED.verified_at,
         archived_at = NULL
     `;
+    const syntheticHomeEmails = new Map([
+      ["avery-morgan", "avery.member@example.test"],
+      ["casey-woods", "shared.household@example.test"],
+      ["skyler-james", "shared.household@example.test"],
+      ["emery-lane", "emery.member@example.test"],
+    ]);
+    const homeEmail = syntheticHomeEmails.get(key);
+    if (homeEmail) {
+      await transaction`
+        INSERT INTO local801.person_contact_methods (
+          id, organization_id, person_id, contact_type, contact_value, is_primary,
+          visibility, verified_at, contact_label
+        ) VALUES (
+          ${stableId(`contact:home-email:${key}`)}, ${organizationId}, ${personId}, 'personal_email',
+          ${homeEmail}, true, 'authorized_directory', now(), 'home'
+        )
+        ON CONFLICT (id) DO UPDATE SET
+          organization_id = EXCLUDED.organization_id,
+          person_id = EXCLUDED.person_id,
+          contact_type = EXCLUDED.contact_type,
+          contact_value = EXCLUDED.contact_value,
+          is_primary = EXCLUDED.is_primary,
+          visibility = EXCLUDED.visibility,
+          verified_at = EXCLUDED.verified_at,
+          contact_label = EXCLUDED.contact_label,
+          archived_at = NULL
+      `;
+    }
   }
 
   const snapshotKey = isoDate(currentMonthStart);

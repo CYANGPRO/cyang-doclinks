@@ -5,11 +5,11 @@ import { activeNavigationHref, can, mobileNavForRole, navForRole, navGroupsForRo
 
 const expectedNavigation = {
   system_owner: [
-    "/", "/membership", "/directory", "/new-hires", "/outreach", "/action-readiness", "/workload", "/follow-ups", "/notifications", "/campaigns", "/cat-actions",
+    "/", "/membership", "/directory", "/new-hires", "/outreach", "/action-readiness", "/workload", "/follow-ups", "/notifications", "/campaigns", "/email-broadcasts", "/cat-actions",
     "/imports", "/membership/data-quality", "/membership/contact-corrections", "/documents", "/reports", "/audit", "/team", "/settings",
   ],
   local_admin: [
-    "/", "/membership", "/directory", "/new-hires", "/outreach", "/action-readiness", "/workload", "/follow-ups", "/notifications", "/campaigns", "/cat-actions",
+    "/", "/membership", "/directory", "/new-hires", "/outreach", "/action-readiness", "/workload", "/follow-ups", "/notifications", "/campaigns", "/email-broadcasts", "/cat-actions",
     "/imports", "/membership/data-quality", "/membership/contact-corrections", "/documents", "/reports", "/audit", "/team", "/settings",
   ],
   membership_data_manager: [

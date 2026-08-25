@@ -39,6 +39,11 @@ const EVENT_LABELS: Record<string, string> = {
   "config.change": "Changed configuration",
   "record.archive": "Archived record",
   "record.restore": "Restored record",
+  "broadcast.create": "Created Preview email broadcast",
+  "broadcast.submit": "Submitted Preview email broadcast",
+  "broadcast.approve": "Approved Preview email broadcast",
+  "broadcast.test_simulated": "Simulated email broadcast test",
+  "broadcast.send_simulated": "Simulated email broadcast delivery",
 };
 
 const SUBJECT_LABELS: Record<string, string> = {
@@ -56,6 +61,7 @@ const SUBJECT_LABELS: Record<string, string> = {
   report: "Report",
   configuration: "Configuration",
   policy_acknowledgement: "Policy acknowledgment",
+  member_email_broadcast: "Preview email broadcast",
 };
 
 export const auditEventFilterOptions = Object.entries(EVENT_LABELS)

@@ -19,8 +19,10 @@ const context = {
 test("audit activity has human-readable labels with safe fallback", () => {
   assert.equal(auditEventLabel("import.execute"), "Executed import");
   assert.equal(auditEventLabel("role.change"), "Changed user role");
+  assert.equal(auditEventLabel("broadcast.approve"), "Approved Preview email broadcast");
   assert.equal(auditEventLabel("future.event_name"), "Future event name");
   assert.equal(auditSubjectLabel("engagement_followup"), "Follow-up");
+  assert.equal(auditSubjectLabel("member_email_broadcast"), "Preview email broadcast");
   assert.equal(auditSubjectLabel("future_subject"), "Future subject");
   assert.equal(auditSubjectLabel(null), "General activity");
   assert.equal(auditEventFilterOptions.some((option) => option.value === "import.execute" && option.label === "Executed import"), true);

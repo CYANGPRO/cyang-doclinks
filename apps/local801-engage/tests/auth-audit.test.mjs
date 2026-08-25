@@ -11,6 +11,13 @@ test("role permissions enforce read-only users cannot mutate imports", () => {
   assert.equal(access.can("cat_member", "manageImports"), false);
 });
 
+test("member-wide email is restricted to the two administrative approver roles", () => {
+  assert.equal(access.can("system_owner", "sendMemberEmail"), true);
+  assert.equal(access.can("local_admin", "sendMemberEmail"), true);
+  assert.equal(access.can("cat_admin", "sendMemberEmail"), false);
+  assert.equal(access.can("membership_data_manager", "sendMemberEmail"), false);
+});
+
 test("audit payload redacts sensitive fields", () => {
   const event = audit.buildAuditEvent({
     eventType: "import.preview",

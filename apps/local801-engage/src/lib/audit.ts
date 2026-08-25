@@ -30,7 +30,12 @@ export type AuditEventType =
   | "export.generate"
   | "config.change"
   | "record.archive"
-  | "record.restore";
+  | "record.restore"
+  | "broadcast.create"
+  | "broadcast.submit"
+  | "broadcast.approve"
+  | "broadcast.test_simulated"
+  | "broadcast.send_simulated";
 
 export type AuditEvent = {
   eventType: AuditEventType;

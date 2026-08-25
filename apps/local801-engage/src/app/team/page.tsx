@@ -21,6 +21,7 @@ const permissionLabels: Record<Permission, string> = {
   assignOutreach: "Assign member outreach to CAT organizers",
   manageActionCatalog: "Manage the Action Readiness catalog",
   manageCampaigns: "Manage campaigns",
+  sendMemberEmail: "Create and approve Preview member email broadcasts",
   manageCatActions: "Manage CAT actions",
   manageDocuments: "Manage document metadata and deletion",
   uploadDocuments: "Upload documents",

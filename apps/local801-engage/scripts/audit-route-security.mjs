@@ -19,6 +19,7 @@ const authenticationPatterns = [
   /authorizeCatActionMutation\(/,
   /authorizeTeamMutation\(/,
   /authorizeWorkPreferenceMutation\(/,
+  /authorizeMemberEmailMutation\(/,
   /verifyPreviewCsrfToken\(/,
 ];
 const originPatterns = [
@@ -28,6 +29,7 @@ const originPatterns = [
   /authorizeCatActionMutation\(/,
   /authorizeTeamMutation\(/,
   /authorizeWorkPreferenceMutation\(/,
+  /authorizeMemberEmailMutation\(/,
   /verifyPreviewCsrfToken\(/,
 ];
 
