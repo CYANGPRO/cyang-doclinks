@@ -17,7 +17,8 @@ test("Stage 8B Directory offers employee workspace navigation only to engagement
   assert.match(directoryPage, /const canOpenEmployee = can\(user\.role, "recordEngagement"\)/);
   assert.match(directoryPage, /href=\{`\/outreach\/\$\{person\.handle\}`\}/);
   assert.match(directoryPage, />Outreach record <span aria-hidden="true">→<\/span><\/Link>/);
-  assert.match(directoryPage, /canOpenEmployee \? <td className="directory-action-cell">/);
+  assert.match(directoryPage, /canOpenEmployee \? <Link href=\{`\/outreach\/\$\{person\.handle\}`\}/);
+  assert.doesNotMatch(directoryPage, /directory-action-cell|directory-member360-button/);
 });
 
 test("Stage 8B successful follow-up edits use success feedback rather than error styling", () => {

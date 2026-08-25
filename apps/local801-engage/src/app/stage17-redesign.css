@@ -447,7 +447,11 @@ body {
 .data-table { min-width: 0; width: 100%; }
 .data-table th,
 .data-table td { min-width: 0; overflow-wrap: anywhere; }
-.data-table .button { white-space: normal; }
+.data-table .button {
+  overflow-wrap: normal;
+  white-space: normal;
+  word-break: normal;
+}
 .data-table th { background: #f3f6f8; color: #657783; }
 .data-table tbody tr:hover,
 .data-table tbody tr:focus-within { background: #f7fafc; }

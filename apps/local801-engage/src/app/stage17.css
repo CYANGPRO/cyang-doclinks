@@ -169,18 +169,6 @@
   padding-block: 6px;
 }
 
-.directory-action-cell {
-  white-space: nowrap;
-  width: 1%;
-}
-
-.directory-member360-button {
-  font-size: .78rem;
-  min-height: 36px;
-  padding: 6px 10px;
-  white-space: nowrap;
-}
-
 .directory-mobile-results {
   display: none;
 }

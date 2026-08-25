@@ -101,7 +101,7 @@ export default async function DirectoryPage({ searchParams }: { searchParams: Se
         </div> : null}
 
         <div className="directory-desktop-results">
-          <DataTable caption="Directory results" headers={canOpenEmployee ? ["Person", "Hire Date", "Work", "Contact", "Action"] : ["Person", "Hire Date", "Work", "Contact"]}>
+          <DataTable caption="Directory results" headers={["Person", "Hire Date", "Work", "Contact"]}>
             {results.people.map((person) => <tr key={person.handle}>
               <td>
                 <div className="person-membership-stack">
@@ -119,7 +119,6 @@ export default async function DirectoryPage({ searchParams }: { searchParams: Se
                 <div>{person.workEmail ? <a href={`mailto:${person.workEmail}`}>{person.workEmail}</a> : <span className="muted">Work email not recorded</span>}</div>
                 <div>{person.workPhone ? <a href={`tel:${person.workPhone}`}>{person.workPhone}</a> : <span className="muted">Work phone not recorded</span>}</div>
               </td>
-              {canOpenEmployee ? <td className="directory-action-cell"><Link className="button secondary directory-member360-button" href={`/outreach/${person.handle}`}>Outreach record <span aria-hidden="true">→</span></Link></td> : null}
             </tr>)}
           </DataTable>
         </div>
