@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { DataTable, EmptyState, FilterBar, PageHeader, Pagination, SectionCard, StatusBadge, UnavailableState } from "@/components/DesignSystem";
+import { AppliedFilterSummary, DataTable, DisclosureCard, EmptyState, FilterBar, PageHeader, Pagination, SectionCard, StatusBadge, UnavailableState } from "@/components/DesignSystem";
 import { ProtectedPage } from "@/components/ProtectedPage";
+import { QueueDensity } from "@/components/QueueDensity";
 import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
 import { formatCatDate } from "@/lib/date-format";
@@ -54,10 +55,18 @@ export default async function DirectoryPage({ searchParams }: { searchParams: Se
   const advancedFilterCount = [results.filters.department, results.filters.classification, results.filters.workLocation].filter(Boolean).length;
   const peopleLabel = `${results.total} ${results.total === 1 ? "person" : "people"}`;
   const paginationLabel = `Showing ${results.people.length} of ${results.total} people`;
+  const filterSummary = [
+    results.term ? `Search: ${results.term}` : "",
+    results.requestedScope === "authorized" ? "Everyone I can access" : "",
+    results.filters.membershipStatus ? `Membership: ${membershipStatusLabel(results.filters.membershipStatus)}` : "",
+    results.filters.department ? `Department: ${results.filters.department}` : "",
+    results.filters.classification ? `Classification: ${results.filters.classification}` : "",
+    results.filters.workLocation ? `Section: ${results.filters.workLocation}` : "",
+  ].filter(Boolean);
 
   return <ProtectedPage permission="viewDirectory"><div className="content directory-page">
     <PageHeader eyebrow="Members" title="Directory" description="Find people by name, workplace, classification, membership status, or work email." />
-    <SectionCard className="directory-filter-card" title="Find someone">
+    <DisclosureCard className="directory-filter-card queue-filter-panel" title="Find someone" description={filterSummary.length ? `${filterSummary.length} filter${filterSummary.length === 1 ? "" : "s"} applied. Open to change the current view.` : "Search by name, workplace, classification, membership status, or work email."} defaultOpen={filterSummary.length === 0}>
       <form className="directory-search-form" action="/directory" method="get">
         <FilterBar>
           <div className="field directory-search-field"><label htmlFor="directory-search">Search</label><input id="directory-search" name="q" type="search" maxLength={100} defaultValue={results.term} placeholder="Name, department, section, classification, or work email" /></div>
@@ -75,7 +84,7 @@ export default async function DirectoryPage({ searchParams }: { searchParams: Se
         </FilterBar>
       </form>
       {constrained ? <p className="muted">Your CAT role only shows people in your current primary or backup assignments.</p> : null}
-    </SectionCard>
+    </DisclosureCard>
     <SectionCard
       className="directory-results-card"
       title="Directory matches"
@@ -84,6 +93,7 @@ export default async function DirectoryPage({ searchParams }: { searchParams: Se
         ? null
         : protectedReadEnabled ? <StatusBadge tone="info">Protected PII</StatusBadge> : null}
     >
+      {!unavailable ? <AppliedFilterSummary items={filterSummary} clearHref="/directory" /> : null}
       {unavailable ? <UnavailableState title="Directory unavailable" description="We couldn’t load the directory safely, so no member details are shown." /> : results.people.length === 0 ? <EmptyState title="No matches" description="No one matches the search and filters you chose." /> : <>
         {results.total > 25 ? <div className="directory-results-toolbar">
           <form className="directory-page-size" action="/directory" method="get">
@@ -123,7 +133,7 @@ export default async function DirectoryPage({ searchParams }: { searchParams: Se
           </DataTable>
         </div>
 
-        <div className="directory-mobile-results" aria-label="Directory results">
+        <QueueDensity label="Directory results"><div className="directory-mobile-results" aria-label="Directory results">
           {results.people.map((person) => <article className="directory-person-card" key={person.handle}>
             <div className="directory-person-heading">
               <h3>{canOpenEmployee ? <Link href={`/outreach/${person.handle}`}>{person.firstName} {person.lastName}</Link> : `${person.firstName} ${person.lastName}`}</h3>
@@ -140,7 +150,7 @@ export default async function DirectoryPage({ searchParams }: { searchParams: Se
             </div>
             {canOpenEmployee ? <Link className="directory-member360-link" href={`/outreach/${person.handle}`}>Outreach record <span aria-hidden="true">→</span></Link> : null}
           </article>)}
-        </div>
+        </div></QueueDensity>
 
         {(results.previousCursor || results.nextCursor) ? <Pagination previousHref={results.previousCursor ? href(results, results.previousCursor) : null} nextHref={results.nextCursor ? href(results, results.nextCursor) : null} label={paginationLabel} /> : null}
       </>}

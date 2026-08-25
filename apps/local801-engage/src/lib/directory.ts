@@ -6,7 +6,7 @@ import { outreachHandle } from "./outreach.ts";
 import { getPiiProtectedReadMode } from "./pii-protected-read.ts";
 import type { WorkspaceContext } from "./workspace-context.ts";
 
-export const DEFAULT_DIRECTORY_PAGE_SIZE = 50;
+export const DEFAULT_DIRECTORY_PAGE_SIZE = 25;
 export const MAX_DIRECTORY_PAGE_SIZE = 100;
 export const DIRECTORY_PAGE_SIZES = [25, 50, 100] as const;
 export const MAX_DIRECTORY_SEARCH_LENGTH = 100;

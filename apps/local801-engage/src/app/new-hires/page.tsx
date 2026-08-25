@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   DataTable,
+  AppliedFilterSummary,
   DisclosureCard,
   EmptyState,
   FilterBar,
@@ -15,6 +16,7 @@ import {
 } from "@/components/DesignSystem";
 import { NewHireAssignmentControl } from "@/components/NewHireAssignmentControl";
 import { ProtectedPage } from "@/components/ProtectedPage";
+import { QueueDensity } from "@/components/QueueDensity";
 import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
 import { formatCatDate, formatCatDateTime } from "@/lib/date-format";
@@ -97,6 +99,13 @@ function membershipStatusLabel(status: string) {
   return status;
 }
 
+function contactFilterLabel(value: NewHireQueuePage["contact"]) {
+  if (value === "never-engaged") return "No conversation yet";
+  if (value === "follow-up-open") return "Open follow-up";
+  if (value === "engaged") return "Contacted, no open follow-up";
+  return "";
+}
+
 export default async function NewHiresPage({ searchParams }: { searchParams: SearchParams }) {
   const user = await getPreviewUser();
   if (!user) redirect("/sign-in");
@@ -147,6 +156,13 @@ export default async function NewHiresPage({ searchParams }: { searchParams: Sea
   const paginationLabel = results.total > results.people.length
     ? `Showing ${results.people.length} of ${results.total} hires`
     : `Showing ${results.people.length} ${results.people.length === 1 ? "hire" : "hires"}`;
+  const filterSummary = [
+    results.term ? `Search: ${results.term}` : "",
+    results.contact !== "all" ? `Contact: ${contactFilterLabel(results.contact)}` : "",
+    results.assignment !== "all" ? `Assignment: ${results.assignment === "assigned" ? "Assigned" : "Unassigned"}` : "",
+    results.membershipStatus ? `Membership: ${membershipStatusLabel(results.membershipStatus)}` : "",
+    results.daysWithin ? `Hired within ${results.daysWithin} days` : "",
+  ].filter(Boolean);
 
   return <ProtectedPage permission="assignNewHires"><div className="content new-hires-page">
     <PageHeader
@@ -155,7 +171,7 @@ export default async function NewHiresPage({ searchParams }: { searchParams: Sea
       description="Track new Local 801 hires from assignment through first conversation and membership resolution."
     />
 
-    <SectionCard className="new-hires-filter-card" title="Find new hires" description="Narrow the list by contact, assignment, membership status, or hire date.">
+    <DisclosureCard className="new-hires-filter-card queue-filter-panel" title="Find new hires" description={filterSummary.length ? `${filterSummary.length} filter${filterSummary.length === 1 ? "" : "s"} applied. Open to change the current view.` : "Narrow the list by contact, assignment, membership status, or hire date."} defaultOpen={filterSummary.length === 0}>
       <form className="new-hire-search-form" action="/new-hires" method="get">
         <FilterBar>
           <div className="field new-hire-search-field">
@@ -206,7 +222,9 @@ export default async function NewHiresPage({ searchParams }: { searchParams: Sea
           </details>
         </FilterBar>
       </form>
-    </SectionCard>
+    </DisclosureCard>
+
+    {!unavailable ? <AppliedFilterSummary items={filterSummary} clearHref="/new-hires" /> : null}
 
     {!unavailable ? <section className="metrics-grid new-hire-summary" aria-label="New-hire summary">
       <StatCard label="New hires" value={results.total} detail="People in this view" tone="brand" />
@@ -281,7 +299,7 @@ export default async function NewHiresPage({ searchParams }: { searchParams: Sea
             </DataTable>
           </div>
 
-          <div className="new-hire-mobile-results" aria-label="New hires">
+          <QueueDensity label="New-hire results"><div className="new-hire-mobile-results" aria-label="New hires">
             {results.people.map((person) => {
               const contact = contactPresentation(person.contactState);
               return <article className="new-hire-person-row" key={`${person.hireDate}:${person.handle}`}>
@@ -320,7 +338,7 @@ export default async function NewHiresPage({ searchParams }: { searchParams: Sea
                 </div>
               </article>;
             })}
-          </div>
+          </div></QueueDensity>
 
           {(hasCursor || results.nextCursor || results.total > results.people.length) ? <Pagination label={paginationLabel} historyBackFallbackHref={hasCursor ? href(results, null) : null} nextHref={results.nextCursor ? href(results, results.nextCursor) : null} /> : null}
         </>}

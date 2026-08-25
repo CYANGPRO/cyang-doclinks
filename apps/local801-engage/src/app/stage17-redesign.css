@@ -455,6 +455,35 @@ body {
 .data-table th { background: #f3f6f8; color: #657783; }
 .data-table tbody tr:hover,
 .data-table tbody tr:focus-within { background: #f7fafc; }
+.table-density-controls {
+  align-items: center;
+  border-top: 1px solid var(--border-soft);
+  color: var(--text-muted);
+  display: flex;
+  font-size: .78rem;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 10px;
+}
+.table-density-controls .button { min-height: 38px; }
+.queue-density-toggle { display: none; }
+.outreach-contact-summary > div { display: grid; gap: 4px; }
+.applied-filter-summary {
+  align-items: center;
+  background: var(--brand-blue-soft);
+  border: 1px solid #b9d9ed;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+}
+.applied-filter-summary > div { display: grid; gap: 2px; min-width: 0; }
+.applied-filter-summary strong { color: var(--brand-navy-deep); font-size: .78rem; }
+.applied-filter-summary span { font-size: .8rem; overflow-wrap: anywhere; }
+.applied-filter-summary .button { flex: 0 0 auto; min-height: 38px; }
 
 /* Mobile navigation is a real modal destination sheet. */
 .mobile-more-trigger {
@@ -669,6 +698,46 @@ body {
   .responsive-table td,
   .responsive-table td a { overflow-wrap: anywhere; }
   .table-scroll:focus-visible { outline-offset: 2px; }
+  .table-density-controls { align-items: stretch; flex-direction: column; gap: 8px; }
+  .table-density-controls .button { width: 100%; }
+  .queue-density-toggle {
+    align-items: center;
+    color: var(--text-muted);
+    display: flex;
+    font-size: .74rem;
+    gap: 6px;
+    justify-content: flex-end;
+    margin-bottom: 10px;
+  }
+  .queue-density-toggle .button { min-height: 40px; padding: 7px 10px; }
+  .queue-density-toggle .button[aria-pressed="true"] {
+    background: var(--brand-blue-soft);
+    border-color: var(--brand-blue);
+    color: var(--brand-blue);
+  }
+  .applied-filter-summary { align-items: stretch; flex-direction: column; gap: 8px; }
+  .applied-filter-summary .button { width: 100%; }
+  .queue-density-compact .directory-person-card,
+  .queue-density-compact .new-hire-person-row { padding-block: 10px; }
+  .queue-density-compact .directory-person-work,
+  .queue-density-compact .directory-person-contact,
+  .queue-density-compact .new-hire-mobile-work,
+  .queue-density-compact .new-hire-mobile-detail,
+  .queue-density-compact .new-hire-person-email { margin-top: 7px; }
+  .queue-density-compact .directory-member360-link { margin-top: 7px; min-height: 38px; }
+  .queue-density-compact .outreach-person-card { padding: 12px; }
+  .queue-density-compact .outreach-person-fields { gap: 7px; }
+  .queue-density-compact .outreach-person-fields > div { padding: 8px 9px; }
+  .queue-density-compact .outreach-card-actions { margin-top: 12px; }
+
+  .route-audit-page .responsive-table tbody,
+  .membership-data-quality-page .responsive-table tbody,
+  .membership-page .responsive-table tbody,
+  .reports-workspace-page .responsive-table tbody { gap: 7px; }
+  .route-audit-page .responsive-table td,
+  .membership-data-quality-page .responsive-table td,
+  .membership-page .responsive-table td,
+  .reports-workspace-page .responsive-table td { padding: 8px 10px; }
 
   .expandable-card > summary { align-items: flex-start; gap: 10px; min-height: 66px; padding: 14px 16px; }
   .expandable-meta { flex: 0 1 55%; justify-content: flex-end; max-width: 55%; }

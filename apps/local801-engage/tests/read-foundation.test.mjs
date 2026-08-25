@@ -355,7 +355,7 @@ test("Directory pagination and search inputs are normalized to hard bounds", () 
   assert.equal(normalized.requestedScope, "assigned");
 
   const invalid = normalizeDirectorySearch({ pageSize: "NaN" });
-  assert.equal(invalid.pageSize, 50);
+  assert.equal(invalid.pageSize, 25);
 });
 
 test("Directory keyset pagination is bounded and deterministic", async () => {

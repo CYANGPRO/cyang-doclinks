@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { DataQualityFixControls } from "@/components/DataQualityFixControls";
-import { DataTable, DisclosureCard, EmptyState, FilterBar, PageHeader, Pagination, SectionCard, StatusBadge, UnavailableState } from "@/components/DesignSystem";
+import { AppliedFilterSummary, DataTable, DisclosureCard, EmptyState, FilterBar, PageHeader, Pagination, SectionCard, StatusBadge, UnavailableState } from "@/components/DesignSystem";
 import { ProtectedPage } from "@/components/ProtectedPage";
 import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
@@ -101,7 +101,7 @@ export default async function MembershipDataQualityPage({ searchParams }: { sear
         </Link>
       </nav>
 
-      <SectionCard className="data-quality-filter-card" title="Filter records by data issue" description="Choose one recorded data gap or review every active record with a known issue." badge={<StatusBadge tone="info">Protected PII</StatusBadge>}>
+      <DisclosureCard className="data-quality-filter-card queue-filter-panel" title="Filter records by data issue" description={results.issue === "all" ? "Choose one recorded data gap or review every active record with a known issue." : `Issue filter applied: ${labels.get(results.issue) ?? "Selected issue"}. Open to change the current view.`} badge={<StatusBadge tone="info">Protected PII</StatusBadge>} defaultOpen={results.issue === "all"}>
         <form action="/membership/data-quality" method="get" className="data-quality-filter-form">
           <FilterBar>
             <div className="field"><label htmlFor="issue">Issue</label><select id="issue" name="issue" defaultValue={results.issue}><option value="all">All issues ({results.summary.flaggedPeople.toLocaleString()})</option>{DATA_QUALITY_ISSUES.map((item) => <option key={item.code} value={item.code}>{item.label} ({issueCount(results.summary, item.code).toLocaleString()})</option>)}</select></div>
@@ -110,9 +110,10 @@ export default async function MembershipDataQualityPage({ searchParams }: { sear
           </FilterBar>
         </form>
         <p className="muted data-quality-method-note">These flags come only from information already on file and the latest approved roster. The app does not use fuzzy name matching, hidden rankings, or guesses about whether someone left.</p>
-      </SectionCard>
+      </DisclosureCard>
 
       <SectionCard className="data-quality-review-queue" title="Records matching this data issue" description={results.people.length ? `${peopleLabel(issueCount(results.summary, results.issue))} ${issueCount(results.summary, results.issue) === 1 ? "needs" : "need"} review.` : "No active records match the selected issue."} badge={<StatusBadge tone="info">Protected PII</StatusBadge>}>
+        <AppliedFilterSummary items={results.issue === "all" ? [] : [`Issue: ${labels.get(results.issue) ?? "Selected issue"}`]} clearHref="/membership/data-quality" />
         {results.people.length === 0 ? <EmptyState title="No matching issues" description="No active records match the issue you selected." /> : <>
           {issueCount(results.summary, results.issue) > 25 ? <div className="data-quality-results-toolbar">
             <form action="/membership/data-quality" method="get" className="data-quality-page-size">

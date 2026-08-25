@@ -17,14 +17,16 @@ function sortableValue(node: ReactNode) {
   return text !== "" && Number.isFinite(numeric) ? numeric : text;
 }
 
-export function SortableDataTable({ caption, headers, children }: {
+export function SortableDataTable({ caption, headers, children, initialRows }: {
   caption: string;
   headers: string[];
   children: ReactNode;
+  initialRows?: number;
 }) {
   const [sort, setSort] = useState<SortState>(null);
+  const [showAll, setShowAll] = useState(false);
   const rows = useMemo(() => Children.toArray(children), [children]);
-  const displayedRows = useMemo(() => {
+  const sortedRows = useMemo(() => {
     if (!sort) return rows;
     return rows.map((row, originalIndex) => ({ row, originalIndex })).toSorted((left, right) => {
       const leftCells = isValidElement<{ children?: ReactNode }>(left.row) ? Children.toArray(left.row.props.children) : [];
@@ -37,6 +39,9 @@ export function SortableDataTable({ caption, headers, children }: {
       return (sort.direction === "ascending" ? comparison : -comparison) || left.originalIndex - right.originalIndex;
     }).map((item) => item.row);
   }, [rows, sort]);
+  const boundedInitialRows = initialRows && initialRows > 0 ? Math.min(initialRows, sortedRows.length) : sortedRows.length;
+  const canExpand = boundedInitialRows < sortedRows.length;
+  const displayedRows = canExpand && !showAll ? sortedRows.slice(0, boundedInitialRows) : sortedRows;
 
   const labelledRows = displayedRows.map((row) => {
     if (!isValidElement<{ children?: ReactNode }>(row)) return row;
@@ -70,5 +75,11 @@ export function SortableDataTable({ caption, headers, children }: {
         <tbody>{labelledRows}</tbody>
       </table>
     </div>
+    {canExpand ? <div className="table-density-controls">
+      <span aria-live="polite">Showing {displayedRows.length} of {sortedRows.length}</span>
+      <button className="button secondary" type="button" onClick={() => setShowAll((current) => !current)}>
+        {showAll ? `Show first ${boundedInitialRows}` : `Show all ${sortedRows.length}`}
+      </button>
+    </div> : null}
   </div>;
 }

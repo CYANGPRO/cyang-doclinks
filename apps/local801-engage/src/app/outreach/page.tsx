@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AlertBanner, EmptyState, FilterBar, PageHeader, Pagination, SectionCard, StatusBadge, UnavailableState } from "@/components/DesignSystem";
+import { AlertBanner, AppliedFilterSummary, DisclosureCard, EmptyState, FilterBar, PageHeader, Pagination, SectionCard, StatusBadge, UnavailableState } from "@/components/DesignSystem";
 import { FieldConnectionStatus } from "@/components/FieldConnectionStatus";
 import { ProtectedPage } from "@/components/ProtectedPage";
+import { QueueDensity } from "@/components/QueueDensity";
 import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
 import { formatCatDateTime } from "@/lib/date-format";
@@ -67,6 +68,13 @@ function membershipStatusLabel(status: OutreachQueuePage["people"][number]["memb
   return "Unknown";
 }
 
+function focusLabel(focus: OutreachQueuePage["focus"]) {
+  if (focus === "attention") return "Needs attention";
+  if (focus === "never-engaged") return "No conversation recorded";
+  if (focus === "stale") return "90+ days since contact";
+  return "";
+}
+
 export default async function OutreachPage({ searchParams }: { searchParams: SearchParams }) {
   const user = await getPreviewUser();
   if (!user) redirect("/sign-in");
@@ -104,6 +112,11 @@ export default async function OutreachPage({ searchParams }: { searchParams: Sea
   };
   const startFieldHref = fieldQueueHref(canonicalFieldContext);
   const currentQueueHref = href(results, typeof parameters.cursor === "string" ? parameters.cursor : null, fieldMode);
+  const filterSummary = [
+    !fieldMode && results.term ? `Search: ${results.term}` : "",
+    results.focus !== "all" ? `Focus: ${focusLabel(results.focus)}` : "",
+    !fieldMode && results.requestedScope === "authorized" ? "Everyone I can access" : "",
+  ].filter(Boolean);
 
   return <ProtectedPage permission="recordEngagement"><div className={`content outreach-page ${fieldMode ? "outreach-field-queue-page" : "outreach-plan-page"}`}>
     <PageHeader
@@ -124,7 +137,7 @@ export default async function OutreachPage({ searchParams }: { searchParams: Sea
       </AlertBanner>
     </> : null}
 
-    <SectionCard className="outreach-filter-card" title={fieldMode ? "Choose this field pass" : "Choose what to work on"} description={fieldMode ? "Pick the focus for this pass. Search is turned off in field view so names and search text are not carried from person to person." : "Use these filters to narrow your list. Your role and assignments still control who you can see."}>
+    <DisclosureCard className="outreach-filter-card queue-filter-panel" title={fieldMode ? "Choose this field pass" : "Choose what to work on"} description={fieldMode ? "Pick the focus for this pass. Search is turned off in field view so names and search text are not carried from person to person." : filterSummary.length ? `${filterSummary.length} filter${filterSummary.length === 1 ? "" : "s"} applied. Open to change the current view.` : "Use these filters to narrow your list. Your role and assignments still control who you can see."} defaultOpen={fieldMode || filterSummary.length === 0}>
       <form action="/outreach" method="get">
         <FilterBar>
           {fieldMode ? <input type="hidden" name="field" value="1" /> : <div className="field"><label htmlFor="outreach-search">Search</label><input id="outreach-search" name="q" type="search" maxLength={100} defaultValue={results.term} placeholder="Name, department, location, classification, or work email" /></div>}
@@ -135,12 +148,13 @@ export default async function OutreachPage({ searchParams }: { searchParams: Sea
         </FilterBar>
       </form>
       {constrained ? <p className="muted">Your CAT role only shows people where you’re a current primary or backup organizer.</p> : null}
-    </SectionCard>
+    </DisclosureCard>
 
     <SectionCard className="outreach-primary-queue" title={fieldMode ? "People in this field pass" : "People assigned for outreach"} description={unavailable ? undefined : peopleCountLabel(results.total)} badge={protectedReadMode === "protected" && !unavailable ? <StatusBadge tone="info">Protected PII</StatusBadge> : null}>
+      {!fieldMode && !unavailable ? <AppliedFilterSummary items={filterSummary} clearHref="/outreach" /> : null}
       {unavailable ? <UnavailableState title="Your list is unavailable" description="We couldn’t load this list safely. Try again after the database connection and protected member-data checks are available." />
         : results.people.length === 0 ? <EmptyState title="No one matches this view" description="Try a different focus, scope, or search." />
-        : <div className="stack">
+        : <QueueDensity label="Outreach results"><div className="stack">
           {results.people.map((person) => {
             const state = priority(person.priority);
             const employeeHref = fieldMode ? fieldPersonHref(person.handle, canonicalFieldContext) : member360Href(person.handle, currentQueueHref);
@@ -150,7 +164,7 @@ export default async function OutreachPage({ searchParams }: { searchParams: Sea
               { label: "Work phone", value: person.workPhone, href: person.workPhone ? `tel:${person.workPhone}` : null },
               { label: "Home email", value: person.homeEmail, href: person.homeEmail ? `mailto:${person.homeEmail}` : null },
               { label: "Work email", value: person.workEmail, href: person.workEmail ? `mailto:${person.workEmail}` : null },
-            ];
+            ].filter((contact) => contact.href);
             return <article className="section-card outreach-person-card" key={person.handle}>
               <div className="section-heading">
                 <div><h3>{person.displayName}</h3><p>{person.classification || "Classification unavailable"}{person.department ? ` · ${person.department}` : ""}{person.workLocation ? ` · ${person.workLocation}` : ""}</p></div>
@@ -162,15 +176,12 @@ export default async function OutreachPage({ searchParams }: { searchParams: Sea
                 <div><strong>Last conversation</strong><div>{dateTime(person.latestEngagementAt)}{person.latestOutcome ? ` · ${person.latestOutcome}` : ""}</div></div>
                 <div><strong>Follow-up</strong><div>{person.overdueFollowupCount ? `${person.overdueFollowupCount} overdue` : person.openFollowupCount ? `${person.openFollowupCount} open · next ${dateTime(person.nextFollowupAt)}` : "No open follow-up"}</div></div>
                 <div><strong>Action readiness</strong><div>{readiness(person)}</div></div>
-                {contactOptions.map((contact) => <div key={contact.label}>
-                  <strong>{contact.label}</strong>
-                  <div>{contact.href ? <a href={contact.href}>{contact.value}</a> : <span className="muted">Not recorded</span>}</div>
-                </div>)}
+                <div className="outreach-contact-summary"><strong>Available contact</strong><div>{contactOptions.length ? contactOptions.map((contact) => <span key={contact.label}><span className="muted">{contact.label}: </span><a href={contact.href!}>{contact.value}</a></span>) : <span className="muted">No phone or email recorded</span>}</div></div>
               </div>
               <div className="page-actions outreach-card-actions"><Link className="button outreach-card-primary-action" href={employeeHref}>{fieldMode ? "Open and record" : "Open outreach record"}</Link></div>
             </article>;
           })}
-        </div>}
+        </div></QueueDensity>}
       {!unavailable && results.people.length ? <Pagination previousHref={results.previousCursor ? href(results, results.previousCursor, fieldMode) : null} historyBackFallbackHref={hasCursor && !results.previousCursor ? href(results, null, fieldMode) : null} nextHref={results.nextCursor ? href(results, results.nextCursor, fieldMode) : null} label={`Showing up to ${results.pageSize} of ${results.total}`} /> : null}
     </SectionCard>
   </div></ProtectedPage>;

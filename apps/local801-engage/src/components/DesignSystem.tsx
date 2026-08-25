@@ -128,6 +128,14 @@ export function FilterBar({ children }: { children: ReactNode }) {
   return <div className="filter-bar">{children}</div>;
 }
 
+export function AppliedFilterSummary({ items, clearHref }: { items: string[]; clearHref: string }) {
+  if (items.length === 0) return null;
+  return <aside className="applied-filter-summary" aria-label="Applied filters">
+    <div><strong>Current view</strong><span>{items.join(" · ")}</span></div>
+    <Link className="button secondary" href={clearHref}>Clear filters</Link>
+  </aside>;
+}
+
 export function Pagination({ nextHref, previousHref, historyBackFallbackHref, label }: {
   nextHref?: string | null;
   previousHref?: string | null;
@@ -147,12 +155,13 @@ export function Pagination({ nextHref, previousHref, historyBackFallbackHref, la
   );
 }
 
-export function DataTable({ caption, headers, children }: {
+export function DataTable({ caption, headers, children, initialRows }: {
   caption: string;
   headers: string[];
   children: ReactNode;
+  initialRows?: number;
 }) {
-  return <SortableDataTable caption={caption} headers={headers}>{children}</SortableDataTable>;
+  return <SortableDataTable caption={caption} headers={headers} initialRows={initialRows}>{children}</SortableDataTable>;
 }
 
 export function ReviewSummary({ children }: { children: ReactNode }) {

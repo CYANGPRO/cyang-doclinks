@@ -127,10 +127,11 @@ function membershipStatusDrilldown(status?: "member" | "nonmember" | "unknown") 
 }
 
 function breakdownTable(title: string, dimension: "classification" | "department" | "workLocation", rows: MembershipBreakdown[], canDrilldown: boolean) {
+  const initialRows = rows.length > 10 ? 10 : undefined;
   return (
-    <SectionCard title={title} description={`Showing ${Math.min(rows.length, 50)} group${Math.min(rows.length, 50) === 1 ? "" : "s"}.`}>
+    <SectionCard title={title} description={initialRows ? `Showing the first ${initialRows} of ${rows.length} groups. Reveal the complete list when needed.` : `Showing ${rows.length} group${rows.length === 1 ? "" : "s"}.`}>
       {rows.length === 0 ? <EmptyState title={`No ${title.toLowerCase()} data`} description="No membership totals are available for this organization." /> : (
-        <DataTable caption={title} headers={[dimension === "classification" ? "Classification" : dimension === "department" ? "Department" : "Work location", "Represented", "Members", "Nonmembers", "Other / unknown", "Member rate"]}>
+        <DataTable caption={title} initialRows={initialRows} headers={[dimension === "classification" ? "Classification" : dimension === "department" ? "Department" : "Work location", "Represented", "Members", "Nonmembers", "Other / unknown", "Member rate"]}>
           {rows.map((row) => (
             <tr key={row.label}>
               <td><strong>{canDrilldown && row.label !== "Unspecified" ? <Link href={directoryDrilldown(dimension, row.label)}>{row.label}</Link> : row.label}</strong></td>

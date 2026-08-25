@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { DataTable, DisclosureCard, EmptyState, FilterBar, PageHeader, Pagination, SectionCard, StatusBadge, UnavailableState } from "@/components/DesignSystem";
+import { AppliedFilterSummary, DataTable, DisclosureCard, EmptyState, FilterBar, PageHeader, Pagination, SectionCard, StatusBadge, UnavailableState } from "@/components/DesignSystem";
 import { ProtectedPage } from "@/components/ProtectedPage";
 import { can } from "@/lib/access";
 import { auditEventFilterOptions, getAuditDisplayPage } from "@/lib/audit-display";
@@ -52,7 +52,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
       actions={<a className="button" href={exportHref(page?.eventType ?? "")}>Download Excel</a>}
     />
 
-    <DisclosureCard title="Filter activity" description="Choose an activity type or show everything. Excel downloads include up to 5,000 matching events and use the selected activity filter." defaultOpen={Boolean(page?.eventType)} className="route-secondary-panel queue-filter-panel">
+    <DisclosureCard title="Filter activity" description={page?.eventType ? "One activity filter is applied. Open to change the current view. Excel downloads use the same filter." : "Choose an activity type or show everything. Excel downloads include up to 5,000 matching events."} defaultOpen={!page?.eventType} className="route-secondary-panel queue-filter-panel">
       <form action="/audit" method="get">
         <FilterBar>
           <div className="field">
@@ -65,7 +65,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
           </div>
           <div className="field">
             <label htmlFor="audit-limit">Results per page</label>
-            <select id="audit-limit" name="limit" defaultValue={String(page?.pageSize ?? 50)}>
+            <select id="audit-limit" name="limit" defaultValue={String(page?.pageSize ?? 25)}>
               <option value="25">25</option>
               <option value="50">50</option>
               <option value="100">100</option>
@@ -81,6 +81,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
       description="Review the filtered security and workflow events below. Actor names appear only when your admin access permits a protected read; internal event payloads remain hidden."
       badge={page?.protectedActorNames ? <StatusBadge tone="info">Protected PII</StatusBadge> : null}
     >
+      {page ? <AppliedFilterSummary items={page.eventType ? [`Activity: ${auditEventFilterOptions.find((option) => option.value === page?.eventType)?.label ?? page.eventType.replaceAll("_", " ").replaceAll(".", " ")}`] : []} clearHref="/audit" /> : null}
       {!page ? <UnavailableState title="Audit activity unavailable" description="We couldn’t load the protected audit view. No internal error details are shown." />
         : page.events.length === 0 ? <EmptyState title="No matching activity" description="No audit events match the filter you chose." />
         : <>

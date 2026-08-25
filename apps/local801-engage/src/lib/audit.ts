@@ -233,7 +233,7 @@ export async function getAuditPage(
   requireAuditRead(context);
   const eventType = normalizeAuditEventType(input.eventType);
   const requested = Number(input.pageSize);
-  const pageSize = [25, 50, 100].includes(requested) ? requested : 50;
+  const pageSize = [25, 50, 100].includes(requested) ? requested : 25;
   const cursor = auditCursor(input.cursor);
   const rows = await query<AuditDisplayDatabaseRow>(`
     /* audit:keyset-page */

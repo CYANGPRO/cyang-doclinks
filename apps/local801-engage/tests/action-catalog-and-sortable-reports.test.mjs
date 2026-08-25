@@ -43,6 +43,49 @@ test("all DataTable consumers receive accessible client-side column sorting", as
   assert.match(table, /localeCompare/);
 });
 
+test("dense report tables progressively reveal complete sortable results", async () => {
+  const design = await read("../src/components/DesignSystem.tsx");
+  const table = await read("../src/components/SortableDataTable.tsx");
+  const reports = await read("../src/app/reports/page.tsx");
+  assert.match(design, /initialRows/);
+  assert.match(table, /Showing \{displayedRows\.length\} of \{sortedRows\.length\}/);
+  assert.match(table, /Show all \$\{sortedRows\.length\}/);
+  assert.match(table, /aria-live="polite"/);
+  assert.match(reports, /initialRows=\{initialRows\}/);
+  assert.match(reports, /Reveal the complete list when needed/);
+});
+
+test("dense operational queues default to compact, bounded views", async () => {
+  const density = await read("../src/components/QueueDensity.tsx");
+  const outreach = await read("../src/app/outreach/page.tsx");
+  const audit = await read("../src/lib/audit.ts");
+  const auditPage = await read("../src/app/audit/page.tsx");
+  assert.match(density, /useState<Density>\("compact"\)/);
+  assert.match(density, /aria-pressed/);
+  assert.match(outreach, /Available contact/);
+  assert.match(outreach, /filter\(\(contact\) => contact\.href\)/);
+  assert.match(audit, /\? requested : 25/);
+  assert.match(auditPage, /pageSize \?\? 25/);
+});
+
+test("applied queue filters collapse into a visible current-view summary", async () => {
+  const design = await read("../src/components/DesignSystem.tsx");
+  const pages = await Promise.all([
+    read("../src/app/directory/page.tsx"),
+    read("../src/app/outreach/page.tsx"),
+    read("../src/app/new-hires/page.tsx"),
+    read("../src/app/membership/data-quality/page.tsx"),
+    read("../src/app/audit/page.tsx"),
+  ]);
+  assert.match(design, /function AppliedFilterSummary/);
+  assert.match(design, /aria-label="Applied filters"/);
+  for (const page of pages) {
+    assert.match(page, /AppliedFilterSummary/);
+    assert.match(page, /defaultOpen=/);
+    assert.match(page, /clearHref=/);
+  }
+});
+
 test("membership classification and report group results link to authorized person drilldowns", async () => {
   const membership = await read("../src/app/membership/page.tsx");
   const reports = await read("../src/app/reports/page.tsx");
