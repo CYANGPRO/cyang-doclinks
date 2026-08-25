@@ -234,8 +234,7 @@ export function EngagementRecorder({
                   </select>
                 </div>
                 <div className="field action-readiness-submit">
-                  <label htmlFor={`${fieldId}-save`}>Save</label>
-                  <button id={`${fieldId}-save`} className="button secondary" type="button" disabled={Boolean(actionBusy) || !selected || selected === current} onClick={() => selected && updateAction(action.handle, selected)}>{actionBusy === action.handle ? "Saving…" : "Update response"}</button>
+                  <button className="button secondary" type="button" disabled={Boolean(actionBusy) || !selected || selected === current} onClick={() => selected && updateAction(action.handle, selected)}>{actionBusy === action.handle ? "Saving…" : "Update response"}</button>
                 </div>
               </div>
             </article>;
