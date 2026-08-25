@@ -23,7 +23,7 @@ const SUPPORT_REFERENCE_RE = /^IMPORT_EXECUTION_[0-9A-F]{12}$/;
 function failureMessage(payload: ExecutionResponse) {
   const message = typeof payload.message === "string" && payload.message.trim()
     ? payload.message.trim()
-    : "The authoritative import was not committed. No roster changes were applied.";
+    : "CAT did not apply the import. No roster changes were saved.";
   const recovery = Array.isArray(payload.recovery)
     ? payload.recovery.filter((step): step is string => typeof step === "string" && step.trim().length > 0).slice(0, 2)
     : [];
@@ -39,7 +39,7 @@ export function ImportExecutionControl({ batchId, fingerprint, fingerprintShort,
   const [pending, setPending] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(null);
   const protectedMode = mode === "protected";
-  const noun = protectedMode ? "protected authoritative import" : "Preview import";
+  const noun = protectedMode ? "approved roster import" : "Preview import";
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -47,7 +47,7 @@ export function ImportExecutionControl({ batchId, fingerprint, fingerprintShort,
       setFeedback({ tone: "error", message: `Type ${fingerprintShort} exactly to confirm this execution set.` });
       return;
     }
-    if (!window.confirm(`Execute this ${noun} now? All authoritative writes, the approval record, and audit event must commit together or the transaction will roll back.`)) return;
+    if (!window.confirm(`Apply this ${noun} now? CAT will save the roster changes, approval record, and audit event together—or save none of them.`)) return;
 
     setPending(true);
     setFeedback(null);
@@ -59,11 +59,11 @@ export function ImportExecutionControl({ batchId, fingerprint, fingerprintShort,
       });
       const payload = await response.json().catch(() => ({})) as ExecutionResponse;
       if (!response.ok) throw new Error(failureMessage(payload));
-      setFeedback({ tone: "success", message: protectedMode ? "Protected authoritative import executed atomically." : "Preview import executed atomically." });
+      setFeedback({ tone: "success", message: protectedMode ? "The approved roster changes were applied." : "The Preview import was applied." });
       setConfirmation("");
       router.refresh();
     } catch (error) {
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "Authoritative import execution failed." });
+      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "CAT could not apply the import. No roster changes were saved." });
     } finally {
       setPending(false);
     }
@@ -72,7 +72,7 @@ export function ImportExecutionControl({ batchId, fingerprint, fingerprintShort,
   return <form className="stack execution-confirmation" onSubmit={submit}>
     <div className="form-grid">
       <div className="field">
-        <label htmlFor="execution-confirmation">Type execution fingerprint {fingerprintShort}</label>
+        <label htmlFor="execution-confirmation">Type confirmation code {fingerprintShort}</label>
         <input
           id="execution-confirmation"
           value={confirmation}

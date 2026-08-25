@@ -127,7 +127,7 @@ export default async function HomePage() {
         : null}
 
       {metrics.source === "unavailable" ? (
-        <SectionCard><UnavailableState title="Operational metrics unavailable" description="The protected Local 801 database could not provide aggregate metrics. No static values are substituted." /></SectionCard>
+        <SectionCard><UnavailableState title="Workspace totals unavailable" description="CAT couldn’t load the current Local 801 totals, so it is not showing old or estimated numbers." /></SectionCard>
       ) : (
         <>
           {(membershipRole || organizingRole) ? <div className="dashboard-layout">

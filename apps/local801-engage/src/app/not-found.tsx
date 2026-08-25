@@ -4,15 +4,15 @@ import { PageHeader, SectionCard, UnavailableState } from "@/components/DesignSy
 export default function NotFoundPage() {
   return (
     <div className="content">
-      <PageHeader eyebrow="Page not found" title="We couldn’t find that page" description="The address may be old, incomplete, or no longer part of the workspace. A missing page does not expose protected information." />
+      <PageHeader eyebrow="Page not found" title="We couldn’t find that page" description="The link may be incomplete, out of date, or for a page that has moved." />
       <SectionCard>
         <UnavailableState
           title="There’s nothing to show at this address"
-          description="Return home and use the navigation shown for your assigned role. If a coworker sent this link, confirm that it is complete and intended for your role."
+          description="Go home and use the navigation available to your role. If someone sent you this link, ask them to check that it is complete and still current."
           action={<Link className="button" href="/">Go home</Link>}
         />
       </SectionCard>
-      <SectionCard title="Why this can happen" description="The workspace uses safe, role-based routes">
+      <SectionCard title="Why this can happen" description="A link can stop working even when your CAT account is fine">
         <ul className="sign-in-help-list">
           <li>The link was copied incompletely or points to an item that no longer exists.</li>
           <li>The workflow moved to a different page after an update.</li>

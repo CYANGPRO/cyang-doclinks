@@ -84,8 +84,8 @@ test("latest-roster discrepancy stays review-only and never becomes an automatic
   const page = readFileSync(new URL("../src/app/membership/data-quality/page.tsx", import.meta.url), "utf8");
   const corrections = readFileSync(new URL("../src/lib/data-quality-corrections.ts", import.meta.url), "utf8");
   assert.match(source, /This does not infer a drop, separation, or archive/);
-  assert.match(page, /not treated as a drop, separation, archive, or membership change/);
-  assert.match(page, /correct the roster through Data Imports/);
+  assert.match(page, /does not assume the person separated, dropped membership, or should be archived/);
+  assert.match(page, /use Data Imports to correct an approved source file/);
   assert.doesNotMatch(corrections, /employment_events[\s\S]*separation|membership_events[\s\S]*'drop'|archived_at\s*=\s*now\(\)/i);
 });
 
@@ -105,13 +105,13 @@ test("data-quality action queue remains manageImports-only while Stage 17J adds 
   assert.match(membership, /href="\/membership\/data-quality"/);
 });
 
-test("legacy Reports data-quality navigation redirects to aggregate protected-safe semantics", () => {
+test("legacy Reports data-quality navigation redirects to aggregate protected semantics", () => {
   const config = readFileSync(new URL("../next.config.ts", import.meta.url), "utf8");
   const report = readFileSync(new URL("../src/app/reports/data-quality/page.tsx", import.meta.url), "utf8");
   assert.match(config, /key: "view", value: "data-quality"/);
   assert.match(config, /destination: "\/reports\/data-quality"/);
-  assert.match(report, /aggregate, protected-safe indicators/i);
-  assert.match(report, /does not expose names, emails, identifiers, or person-level rows/);
+  assert.match(report, /Review totals for common data problems/i);
+  assert.match(report, /does not show names, emails, identifiers, or person-level rows/);
   assert.match(report, /getDataQualitySummary/);
   assert.match(report, /recordReportAccess\(context, "data-quality"\)/);
   assert.match(report, /enforceAuthenticatedRateLimit/);

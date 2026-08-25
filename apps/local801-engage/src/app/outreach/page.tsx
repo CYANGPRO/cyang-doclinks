@@ -160,7 +160,7 @@ export default async function OutreachPage({ searchParams }: { searchParams: Sea
 
     <SectionCard className="outreach-primary-queue" title={fieldMode ? "People in this field pass" : "People assigned for outreach"} description={unavailable ? undefined : peopleCountLabel(results.total)} badge={protectedReadMode === "protected" && !unavailable ? <StatusBadge tone="info">Protected PII</StatusBadge> : null}>
       {!fieldMode && !unavailable ? <AppliedFilterSummary items={filterSummary} clearHref={standardView ? "/outreach?view=standard" : "/outreach"} /> : null}
-      {unavailable ? <UnavailableState title="Your list is unavailable" description="We couldn’t load this list safely. Try again after the database connection and protected member-data checks are available." />
+      {unavailable ? <UnavailableState title="Your list is unavailable" description="We couldn’t load your outreach list. Check your connection and try again; CAT will not show partial member information." />
         : results.people.length === 0 ? <EmptyState title="No one matches this view" description="Try a different focus, scope, or search." />
         : <QueueDensity label="Outreach results"><div className="stack">
           {results.people.map((person) => {

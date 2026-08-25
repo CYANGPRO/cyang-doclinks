@@ -328,7 +328,7 @@ test("production NextAuth route and server authorization keep Preview cookies se
   assert.doesNotMatch(authz, /sessionAuth\.email/);
   assert.match(authz, /productionAuthRuntimeEnabled\(\)/);
   assert.doesNotMatch(authz, /process\.env\.LOCAL801_PRODUCTION_AUTH_ENABLED === "1"/);
-  assert.match(signIn, /does not create an account, change Production access, or connect to Production member records/);
+  assert.match(signIn, /Preview stays separate from Production and never connects to Production member records/);
   assert.match(signIn, /isolated Preview records/);
   assert.match(signIn, /ProductionSignInButton/);
   assert.match(signIn, /production\.enabled && productionAuthRuntimeEnabled\(\)/);

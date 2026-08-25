@@ -30,9 +30,9 @@ const blockerLabels: Record<ProductionLaunchBlocker, string> = {
   DISTRIBUTED_RATE_LIMITS_DISABLED: "The production PostgreSQL distributed rate limiter has not been enabled and accepted.",
   SECURITY_REVIEW_NOT_APPROVED: "The final production security review has not been approved.",
   SECURITY_REVIEW_ID_MISSING: "A production security-review/change reference has not been recorded.",
-  PREVIEW_ONLY_IMPORT_EXECUTION_ENABLED: "The Preview-only authoritative import execution gate must be off.",
-  PREVIEW_ONLY_DURABLE_IMPORTS_ENABLED: "The Preview-only durable import gate must be off.",
-  PROTECTED_DURABLE_IMPORTS_DISABLED: "The protected scanner-backed durable import worker must be enabled.",
+  PREVIEW_ONLY_IMPORT_EXECUTION_ENABLED: "The Preview-only import approval setting must be off.",
+  PREVIEW_ONLY_DURABLE_IMPORTS_ENABLED: "The Preview-only background import setting must be off.",
+  PROTECTED_DURABLE_IMPORTS_DISABLED: "Protected background import processing must be enabled.",
   RATE_LIMIT_CONFIG_INVALID: "One or more production request-rate limits are missing or outside the approved safety range.",
   SYNTHETIC_SEED_ENABLED: "Test-data seeding must not be enabled in Production.",
   SYNTHETIC_PRODUCTION_PILOT_ENABLED: "Production pilot mode must be disabled before launch.",
@@ -42,16 +42,16 @@ const blockerLabels: Record<ProductionLaunchBlocker, string> = {
 export default function SettingsPage() {
   const launch = getProductionLaunchState();
   return <ProtectedPage permission="manageUsers"><div className="content">
-    <PageHeader eyebrow="Administration" title="Settings" description="Review environment and security posture without exposing secrets or presenting inactive controls as functional." />
+    <PageHeader eyebrow="Administration" title="Settings" description="Review CAT’s Production security checks. Credentials, keys, and connection details are never shown here." />
     {launch.ready
-      ? <AlertBanner title="Production operations enabled">The approved Production runtime is active with Entra authentication and the required server-side security controls.</AlertBanner>
-      : <AlertBanner title="Production launch remains locked" tone="preview">Preview can continue normally. Production authentication and operational data remain fail-closed until every production security gate is satisfied.</AlertBanner>}
+      ? <AlertBanner title="Production is enabled">CAT is running in Production with Microsoft Entra sign-in and the required server protections.</AlertBanner>
+      : <AlertBanner title="Production launch remains locked" tone="preview">Preview can continue. Production sign-in and member data will stay unavailable until every required security check passes.</AlertBanner>}
     <SectionCard title="Security defaults" badge={<StatusBadge tone="ready">Fail closed</StatusBadge>}>
-      <p className="page-copy">Dedicated database configuration, encrypted private storage, organization scoping, same-origin mutation checks, server authorization, MFA-backed production identity, and malware scanning remain enforced by server-side boundaries. Configuration values are never rendered.</p>
+      <p className="page-copy">CAT uses a dedicated database, encrypted private storage, organization and role checks, same-site change protection, Microsoft MFA, and malware scanning. These protections are enforced on the server, and their secret settings are never displayed.</p>
     </SectionCard>
     <SectionCard title="Production launch gate" badge={<StatusBadge tone={launch.ready ? "ready" : "blocked"}>{launch.ready ? "Ready" : "Locked"}</StatusBadge>}>
-      <p className="page-copy">Credentials, encryption keys, connection strings, identity-provider subjects, and scanner secrets are never displayed. This view reports only safe readiness states and blocker names.</p>
-      {launch.ready ? <p className="page-copy"><strong>All coded launch gates are satisfied.</strong> Production features remain subject to role, tenant, origin, rate-limit, audit, PII, scanner, and storage enforcement.</p> : (
+      <p className="page-copy">This page shows whether each launch check passed and names anything still blocking launch. It never displays credentials, encryption keys, connection strings, Microsoft identifiers, or scanner secrets.</p>
+      {launch.ready ? <p className="page-copy"><strong>All automated launch checks passed.</strong> CAT still checks the user’s organization, role, request origin, rate limits, audit rules, protected data, file scans, and storage access during normal use.</p> : (
         <ul>
           {launch.blockers.map((blocker) => <li key={blocker}>{blockerLabels[blocker]}</li>)}
         </ul>

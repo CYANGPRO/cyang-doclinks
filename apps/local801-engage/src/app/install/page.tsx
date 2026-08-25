@@ -4,9 +4,9 @@ import { DisclosureCard, PageHeader, SectionCard } from "@/components/DesignSyst
 export default function InstallPage() {
   return (
     <div className="content">
-      <PageHeader eyebrow="This device" title="Install the Local 801 app" description="Add the workspace to this device for faster access. Member and work data still requires a secure connection." />
+      <PageHeader eyebrow="This device" title="Add CAT to this device" description="Install a shortcut for faster access. Member and work data still require a secure connection." />
 
-      <SectionCard title="Install on this device" description="Use the install button when this browser supports it. If it does not appear, follow the browser-specific steps below.">
+      <SectionCard title="Install the shortcut" description="Use the install button if it appears. Otherwise, open the instructions for your device below.">
         <InstallPrompt />
       </SectionCard>
 
@@ -33,8 +33,8 @@ export default function InstallPage() {
         </ol>
       </DisclosureCard>
 
-      <DisclosureCard title="Private by design" description="What remains online-only">
-        <p className="muted">Only the app frame may be available without a connection. Member records, notes, assignments, documents, and reports always require secure online access.</p>
+      <DisclosureCard title="What still needs an internet connection" description="The shortcut does not store member information offline">
+        <p className="muted">The CAT frame may open without a connection, but member records, notes, assignments, documents, and reports will not. Reconnect before continuing the work.</p>
       </DisclosureCard>
     </div>
   );

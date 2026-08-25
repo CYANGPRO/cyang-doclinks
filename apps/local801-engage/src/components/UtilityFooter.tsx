@@ -14,7 +14,7 @@ export function UtilityFooter({ signedIn }: { signedIn: boolean }) {
     <div className="utility-footer-inner">
       <div className="utility-footer-copy">
         <strong>Engaging Local 801</strong>
-        <span>Private workspace for authorized MAPE Local 801 work.</span>
+        <span>Private workspace for approved MAPE Local 801 work.</span>
       </div>
       <nav aria-label="Site information" className="utility-footer-nav">
         {informationLinks.map((item) => <Link href={item.href} key={item.href}>{item.label}</Link>)}

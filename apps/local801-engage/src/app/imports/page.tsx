@@ -121,7 +121,7 @@ export default async function ImportsPage({
     <SectionCard
       className="imports-queue-card"
       title="Import history"
-      description={unavailable ? "The import history could not be loaded safely." : `${queue.length} ${queue.length === 1 ? "batch is" : "batches are"} shown on this page, with processing and review status.`}
+      description={unavailable ? "We couldn’t load the import history." : `${queue.length} ${queue.length === 1 ? "batch is" : "batches are"} shown on this page, with processing and review status.`}
       badge={!unavailable && protectedReadMode !== "legacy" ? <StatusBadge tone="info">Protected PII</StatusBadge> : null}
     >
       {unavailable ? (

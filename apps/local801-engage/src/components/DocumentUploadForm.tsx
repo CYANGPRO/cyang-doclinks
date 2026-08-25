@@ -28,16 +28,16 @@ export function DocumentUploadForm({ visibilityOptions }: { visibilityOptions: r
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
-        setMessage(typeof body.message === "string" ? body.message : "The document could not be uploaded securely.");
+        setMessage(typeof body.message === "string" ? body.message : "CAT couldn’t upload the document.");
         return;
       }
       setSuccess(true);
-      setMessage("Document uploaded successfully. It was scanned, encrypted, and is ready for approval by an authorized viewer.");
+      setMessage("Upload complete. CAT scanned and encrypted the file, and it’s ready for review.");
       formElement.reset();
       setSelectedVisibility(visibilityOptions[0]?.value ?? "");
       router.refresh();
     } catch {
-      setMessage("The document could not be uploaded securely. Nothing was shared. Try again.");
+      setMessage("CAT couldn’t upload the document. Nothing was shared. Try again.");
     } finally {
       setBusy(false);
     }

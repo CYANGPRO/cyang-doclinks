@@ -91,7 +91,7 @@ export default async function NotificationsPage() {
     <PageHeader
       eyebrow="My work"
       title="To Do"
-      description={unavailable ? "Your deadlines, review requests, and saved work views could not be loaded safely." : `${notifications.length} current ${notifications.length === 1 ? "item is" : "items are"} ordered by urgency; ${urgent.length} ${urgent.length === 1 ? "requires" : "require"} action today.`}
+      description={unavailable ? "We couldn’t load your deadlines, review requests, and saved views." : `${notifications.length} current ${notifications.length === 1 ? "item is" : "items are"} ordered by urgency; ${urgent.length} ${urgent.length === 1 ? "requires" : "require"} action today.`}
     />
 
     <DisclosureCard title="Browser notifications" description={push.enabled ? "Allow this browser to receive private, generic alerts that never include member names or protected details." : "Browser push is unavailable until an administrator completes the deployment configuration."}>
@@ -100,9 +100,9 @@ export default async function NotificationsPage() {
 
     <MobileDeviceControl urgentCount={urgent.length} totalCount={notifications.length} />
 
-    {unavailable ? <SectionCard><UnavailableState title="To Do is unavailable" description="We couldn’t safely load your current work reminders or saved views, so no substitute data is shown." /></SectionCard> : <>
+    {unavailable ? <SectionCard><UnavailableState title="To Do is unavailable" description="We couldn’t load your current reminders or saved views, so CAT is not showing partial results." /></SectionCard> : <>
       {notifications.length === 0 ? <SectionCard>
-        <EmptyState title="Your To Do list is clear" description="There are no current reminders, or you’ve already dismissed the current versions." />
+        <EmptyState title="Your To Do list is clear" description="Nothing needs your attention here right now." />
       </SectionCard> : <>
         <SectionCard title="Overdue or due today" description={`${urgent.length} ${urgent.length === 1 ? "item requires" : "items require"} attention now.`}>
           {urgent.length ? <NotificationItems items={urgent} /> : <EmptyState title="Nothing urgent" description="No work is overdue or due today." />}

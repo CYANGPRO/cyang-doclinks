@@ -125,7 +125,7 @@ export default async function WorkloadPage({ searchParams }: { searchParams: Sea
       What you see here follows the same access rules as the rest of the app. Campaign and CAT Action dates appear only if your role already gives you access to them.
     </AlertBanner>
 
-    {unavailable || !result || !metrics ? <SectionCard><UnavailableState title="Work planner unavailable" description="We couldn’t load your planning view safely. No member data is substituted when that happens." /></SectionCard> : <>
+    {unavailable || !result || !metrics ? <SectionCard><UnavailableState title="Work planner unavailable" description="We couldn’t load your planning view, so CAT is not showing partial member data." /></SectionCard> : <>
       <section className="metrics-grid" aria-label="Work planner summary">
         <StatCard label="Overdue follow-ups" value={metrics.overdueFollowups} detail={result.scopeLabel} tone={metricNumber(metrics.overdueFollowups) > 0 ? "attention" : "default"} />
         <StatCard label="Due today" value={metrics.followupsDueToday} detail={result.scopeLabel} tone={metricNumber(metrics.followupsDueToday) > 0 ? "attention" : "default"} />

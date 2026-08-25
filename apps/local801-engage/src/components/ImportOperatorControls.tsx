@@ -14,7 +14,7 @@ export function ImportOperatorControls({ batchId, state, cancellationRequestedAt
   const active = state === "queued" || state === "running";
   const retryable = state === "failed" || state === "cancelled";
   async function cancel() {
-    if (!window.confirm("Cancel this import? No authoritative roster changes have been made by background processing.")) return;
+    if (!window.confirm("Cancel this import? Background processing has not changed the roster.")) return;
     setPending(true); setMessage("");
     try { await operate(batchId, { action: "cancel", reason }); setMessage(state === "running" ? "Cancellation requested. The worker will stop at the next safe boundary." : "Queued import cancelled."); router.refresh(); }
     catch (error) { setMessage(error instanceof Error ? error.message : "Cancellation failed."); }
@@ -22,8 +22,8 @@ export function ImportOperatorControls({ batchId, state, cancellationRequestedAt
   }
   async function requeue() {
     setPending(true); setMessage("");
-    try { await operate(batchId, { action: "requeue" }); setMessage("Import requeued in a new durable workflow run."); router.refresh(); }
-    catch (error) { setMessage(error instanceof Error ? error.message : "Requeue failed."); }
+    try { await operate(batchId, { action: "requeue" }); setMessage("The import was queued for processing again."); router.refresh(); }
+    catch (error) { setMessage(error instanceof Error ? error.message : "CAT could not queue the import again."); }
     finally { setPending(false); }
   }
   return <div className="grid">

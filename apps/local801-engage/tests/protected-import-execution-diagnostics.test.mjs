@@ -66,9 +66,9 @@ test("protected import recovery messaging explains rollback and preserves the su
   const problem = actionProblemFor(
     "The protected import was not committed. No roster changes were applied. Support reference: IMPORT_EXECUTION_A1B2C3D4E5F6",
   );
-  assert.equal(problem.title, "The protected import was safely rolled back");
+  assert.equal(problem.title, "CAT reversed the import before it changed the roster");
   assert.equal(problem.reference, "IMPORT_EXECUTION_A1B2C3D4E5F6");
-  assert.match(problem.description, /committed no roster changes/i);
+  assert.match(problem.description, /no roster changes were saved/i);
   assert.ok(problem.steps.some((step) => /Do not upload the file again/i.test(step)));
 });
 
@@ -76,8 +76,8 @@ test("protected roster count mismatches use a specific safe reconciliation messa
   const problem = actionProblemFor(
     "The protected import was not committed because the applied roster did not exactly match the reviewed set. No roster changes were applied.",
   );
-  assert.equal(problem.title, "The reviewed roster did not reconcile");
+  assert.equal(problem.title, "The applied roster did not match the review");
   assert.equal(problem.reference, "ATOMIC_RECONCILIATION_FAILED");
-  assert.match(problem.description, /rolled back the entire transaction/i);
+  assert.match(problem.description, /reversed the whole update/i);
   assert.doesNotMatch(JSON.stringify(problem), /division|SQLSTATE/i);
 });

@@ -37,8 +37,8 @@ test("recommended public information pages are present and link to support", asy
   ]);
 
   assert.match(about, /export const metadata/);
-  assert.match(about, /There is no public registration/);
-  assert.match(terms, /Authorized use only/);
+  assert.match(about, /does not offer public sign-up/);
+  assert.match(terms, /Use CAT only for approved Local 801 work/);
   assert.match(terms, /href="\/legal\/privacy"/);
   assert.match(accessibility, /Report an accessibility barrier/);
   assert.match(accessibility, /href="\/support"/);

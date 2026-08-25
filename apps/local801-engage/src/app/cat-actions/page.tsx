@@ -118,8 +118,8 @@ export default async function CatActionsPage({
       <StatCard label="Overdue tasks" value={page.summary.overdueTasks} detail="Open and past due" tone={page.summary.overdueTasks ? "danger" : "default"} />
     </section> : null}
 
-    <SectionCard title="CAT Action work records" description={page ? `${page.total} ${page.total === 1 ? "action matches" : "actions match"} the current filters.` : "The action list could not be loaded safely."}>
-      {!page ? <UnavailableState title="CAT Actions unavailable" description="We couldn’t load CAT Action or task details safely." action={<Link className="button secondary" href="/cat-actions">Try again</Link>} />
+    <SectionCard title="CAT Action work records" description={page ? `${page.total} ${page.total === 1 ? "action matches" : "actions match"} the current filters.` : "We couldn’t load the action list."}>
+      {!page ? <UnavailableState title="CAT Actions unavailable" description="We couldn’t load the CAT Actions and their tasks." action={<Link className="button secondary" href="/cat-actions">Try again</Link>} />
         : page.actions.length === 0 ? <EmptyState title={page.term || page.status ? "No matching CAT Actions" : "No CAT Actions yet"} description={page.term || page.status ? "No CAT Actions match the filters you chose." : "Create the first CAT Action to start assigning and tracking work."} action={page.term || page.status ? <Link className="button secondary" href="/cat-actions">Clear filters</Link> : <a className="button" href="#create-cat-action">Create first CAT Action</a>} />
         : <>
           <DataTable caption="CAT Actions" headers={["Action", "Cycle", "Workload", "Completed", "Next due"]}>

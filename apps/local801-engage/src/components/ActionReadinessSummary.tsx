@@ -14,8 +14,8 @@ export function ActionReadinessSummary({
     title="Action readiness"
     description={`See how people currently responded to the actions connected to this ${subject}. These are recorded responses—not campaign completion and not a hidden member score.`}
   >
-    {unavailable || !summary ? <UnavailableState title="Action readiness unavailable" description="We couldn’t load this summary safely. No person-level details are shown in its place." />
-      : summary.actionCount === 0 ? <EmptyState title="No actions connected yet" description={`There are no Action Readiness items connected to this ${subject} right now.`} />
+    {unavailable || !summary ? <UnavailableState title="Action readiness unavailable" description="We couldn’t load this summary, so CAT is not showing partial or substitute results." />
+      : summary.actionCount === 0 ? <EmptyState title="No actions connected yet" description={`No action responses have been connected to this ${subject} yet.`} />
       : <>
         <section className="metrics-grid" aria-label={`${subject} action readiness summary`}>
           <StatCard label="Actions" value={summary.actionCount} detail={`Connected to this ${subject}`} tone="brand" />

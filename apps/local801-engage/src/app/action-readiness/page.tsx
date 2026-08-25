@@ -17,16 +17,16 @@ export default async function ActionReadinessCatalogPage() {
   const actions = await listEmployeeActionDefinitions(context);
 
   return <ProtectedPage permission="manageActionCatalog"><div className="content action-catalog-page">
-    <PageHeader eyebrow="Programs" title="Action Readiness catalog" description="Maintain the escalating actions CATs use to record a member’s current willingness, consideration, decline, or completion." />
+    <PageHeader eyebrow="Programs" title="Action Readiness catalog" description="Manage the actions CATs can discuss with members and record each member’s current response." />
     <SectionCard title="Action catalog" description="Actions are ordered from the lowest commitment to the highest. Earlier responses remain in history when a current response changes.">
       {actions.length === 0 ? <EmptyState title="No actions configured" description="Add the first organization-wide action below." /> : <DataTable caption="Action Readiness catalog" headers={["Order", "Action", "Available responses"]}>
         {actions.map((action, index) => <tr key={action.handle}>
           <td>{index + 1}</td>
-          <td><strong>{action.label}</strong><div className="muted">Escalation level {action.engagementLevel}</div></td>
+          <td><strong>{action.label}</strong><div className="muted">Commitment level {action.engagementLevel}</div></td>
           <td><div className="page-actions compact-actions">{responseStates.map((state) => <StatusBadge key={state} tone={state === "Completed" || state === "Willing" ? "ready" : state === "Declined" ? "warning" : "pending"}>{state}</StatusBadge>)}</div></td>
         </tr>)}
       </DataTable>}
-      <p className="muted">“Not recorded” means no current response exists. “Declines all actions” remains available on the member outreach record as a separate overall posture.</p>
+      <p className="muted">“Not recorded” means no response has been entered yet. Use “Declines all actions” on the outreach record when that describes the member’s overall response.</p>
     </SectionCard>
     <SectionCard title="Add a custom action" description="CATs, LCATs, Membership Data Managers, 801 Administrators, Local Administrators, and System Owners can extend this catalog.">
       <ActionCatalogManager />

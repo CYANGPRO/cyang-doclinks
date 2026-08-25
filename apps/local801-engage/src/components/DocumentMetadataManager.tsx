@@ -30,13 +30,13 @@ export function DocumentMetadataManager({ documentHandle, tags, relationships, t
     const [targetKind, targetHandle] = String(data.get("target") ?? "").split(":", 2);
     setPending(true); setMessage("");
     try { await change(`/api/documents/${documentHandle}/metadata`, "PATCH", { action: "add_relationship", targetKind, targetHandle, relationshipType: String(data.get("relationshipType") ?? "related") }); form.reset(); setMessage("Relationship added."); router.refresh(); }
-    catch (error) { setMessage(error instanceof Error ? error.message : "Relationship could not be added."); }
+    catch (error) { setMessage(error instanceof Error ? error.message : "CAT couldn’t link the record."); }
     finally { setPending(false); }
   }
   async function remove(handle: string) {
     setPending(true); setMessage("");
     try { await change(`/api/document-relationships/${handle}`, "DELETE"); setMessage("Relationship removed."); router.refresh(); }
-    catch (error) { setMessage(error instanceof Error ? error.message : "Relationship could not be removed."); }
+    catch (error) { setMessage(error instanceof Error ? error.message : "CAT couldn’t remove the link."); }
     finally { setPending(false); }
   }
   const kindLabel = (kind: string) => kind === "cat_action" ? "CAT Action" : kind[0]?.toUpperCase() + kind.slice(1);

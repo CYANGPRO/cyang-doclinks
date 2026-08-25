@@ -13,8 +13,8 @@ function source(path) {
 test("authentication errors use fixed safe guidance without reflecting unknown query values", () => {
   const denied = authenticationProblemFor("AccessDenied");
   assert.equal(denied?.reference, "SIGN_IN_ACCESS_DENIED");
-  assert.match(denied?.description ?? "", /does not confirm which account check failed/);
-  assert.match(denied?.steps.join(" ") ?? "", /assigned one role/);
+  assert.match(denied?.description ?? "", /does not identify which access check failed/);
+  assert.match(denied?.steps.join(" ") ?? "", /one role/);
 
   const callback = authenticationProblemFor("OAuthCallback");
   assert.equal(callback?.reference, "SIGN_IN_CALLBACK_FAILED");
@@ -40,10 +40,10 @@ test("action errors classify safe recovery guidance for conflicts, permissions, 
 test("sign-in clearly explains approval, MFA, server roles, and common failure recovery", () => {
   const signIn = source("src/app/sign-in/page.tsx");
   const signInButton = source("src/components/ProductionSignInButton.tsx");
-  assert.match(signIn, /private, approval-only workspace/i);
-  assert.match(signIn, /There is no public registration or automatic access/);
-  assert.match(signIn, /assigned exactly one role/);
-  assert.match(signIn, /browser or Microsoft token cannot choose or elevate it/);
+  assert.match(signIn, /private workspace for approved Local 801 users/i);
+  assert.match(signIn, /does not offer public sign-up/);
+  assert.match(signIn, /give it one role/);
+  assert.match(signIn, /cannot choose a Production role during sign-in/);
   assert.doesNotMatch(signIn, /What each role can access/);
   assert.doesNotMatch(signIn, /roleSummaries/);
   assert.match(signIn, /Having trouble signing in/);
@@ -77,9 +77,9 @@ test("route and root failures provide screens with safe recovery and support ref
   const routeError = source("src/app/error.tsx");
   const globalError = source("src/app/global-error.tsx");
   const notFound = source("src/app/not-found.tsx");
-  assert.match(routeError, /verify the current status before repeating any action/);
+  assert.match(routeError, /check the current record before repeating an action/);
   assert.match(routeError, /UserFacingErrorDialog/);
-  assert.match(globalError, /The workspace could not start/);
+  assert.match(globalError, /CAT couldn’t start/);
   assert.match(globalError, /APPLICATION_START_FAILED/);
-  assert.match(notFound, /A missing page does not expose protected information/);
+  assert.match(notFound, /There’s nothing to show at this address/);
 });

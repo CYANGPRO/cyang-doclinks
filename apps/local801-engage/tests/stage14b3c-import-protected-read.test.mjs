@@ -249,6 +249,6 @@ test("Data Imports detail wires cutover-aware filename, review rows, and protect
   assert.match(page, /LOCAL801_PROTECTED_IMPORT_PREPARATION_ENABLED/);
   assert.match(page, /LOCAL801_PROTECTED_IMPORT_EXECUTION_ENABLED/);
   assert.match(page, /mode=\{executionMode\}/);
-  assert.match(page, /Import detail unavailable/);
+  assert.match(page, /Import details unavailable/);
   assert.match(page, /batch = null/);
 });

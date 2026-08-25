@@ -60,8 +60,8 @@ export default async function ImportDetailPage({ params, searchParams }: { param
   if (!batchFound && !unavailable) notFound();
   if (!batch) {
     return <ProtectedPage permission="manageImports"><div className="content import-detail-page import-detail-unavailable-page">
-      <PageHeader eyebrow="Data imports" title="Import batch unavailable" description="The batch file, processing state, and protected review rows could not be loaded safely." actions={<Link className="button secondary" href="/imports">Back to imports</Link>} />
-      <SectionCard><UnavailableState title="Import detail unavailable" description={unavailable ? "The batch and protected import-PII context could not be loaded." : "The import batch is unavailable."} /></SectionCard>
+      <PageHeader eyebrow="Data imports" title="Import batch unavailable" description="We couldn’t load the file, processing status, and protected review rows for this import." actions={<Link className="button secondary" href="/imports">Back to imports</Link>} />
+      <SectionCard><UnavailableState title="Import details unavailable" description={unavailable ? "CAT could not load the import and its protected matching information." : "This import batch is not available."} /></SectionCard>
     </div></ProtectedPage>;
   }
   const reviewReady = summary && summary.blockers === 0 && summary.decisions.proposedNew && summary.decisions.existingChanges && !summary.decisions.migrationPending;
@@ -86,14 +86,14 @@ export default async function ImportDetailPage({ params, searchParams }: { param
 
   return <ProtectedPage permission="manageImports"><div className="content import-detail-page">
     <ImportProcessingRefresh active={processingActive} batchId={batchId} />
-    <PageHeader eyebrow="Data imports" title={batch.original_filename ?? "Import batch"} description="Review validation exceptions, approve the current decision sets, and verify the exact execution plan before applying authorized roster changes." actions={<div className="page-actions import-detail-header-actions"><Link className="button secondary import-detail-return-action" href="/imports">Back to imports</Link><a className="button secondary import-detail-errors-action" href={`/api/imports/${batch.id}/errors.csv`}>Download errors</a></div>} />
+    <PageHeader eyebrow="Data imports" title={batch.original_filename ?? "Import batch"} description="Review the problems CAT found, decide how to handle each row, and confirm the exact roster changes before applying them." actions={<div className="page-actions import-detail-header-actions"><Link className="button secondary import-detail-return-action" href="/imports">Back to imports</Link><a className="button secondary import-detail-errors-action" href={`/api/imports/${batch.id}/errors.csv`}>Download errors</a></div>} />
     {processing ? <SectionCard className="import-processing-status" title="Batch processing" description={`Current state: ${processing.label}.`}>
-      <p>{stage === "failed" ? importProcessingSafeFailureMessage(batch.processing_error_code) : stage === "cancelled" ? "Processing was cancelled safely. No authoritative roster changes were made." : processing.detail ?? "The encrypted source and progress are tracked in the database. You may close this page safely."}</p>
+      <p>{stage === "failed" ? importProcessingSafeFailureMessage(batch.processing_error_code) : stage === "cancelled" ? "Processing was cancelled. The roster was not changed." : processing.detail ?? "CAT will keep processing the encrypted file if you close this page."}</p>
       {operatorState ? <ImportOperatorControls batchId={batchId} state={operatorState.state} cancellationRequestedAt={operatorState.cancellationRequestedAt} /> : null}
     </SectionCard> : null}
-    {!summary ? <SectionCard>{processingActive ? <EmptyState title="Review is being prepared" description="This page refreshes from Neon-backed processing state. Closing the browser does not stop the worker." /> : <UnavailableState title="Review summary unavailable" description={stage === "failed" ? "Processing failed safely. No authoritative roster data was changed." : stage === "cancelled" ? "Processing was cancelled. Requeue it when the source is ready." : "The batch remains unchanged."} />}</SectionCard> : <>
+    {!summary ? <SectionCard>{processingActive ? <EmptyState title="CAT is preparing the review" description="You can close this page. Processing will continue in the background." /> : <UnavailableState title="Review summary unavailable" description={stage === "failed" ? "Processing failed before the roster changed." : stage === "cancelled" ? "Processing was cancelled. Queue it again when the source file is ready." : "The import has not changed."} />}</SectionCard> : <>
       <section className="metrics-grid" aria-label="Import classification summary">
-        <StatCard label={summary.counts.metadataComplete ? "Total source rows" : "Persisted review rows"} value={summary.counts.total} detail={summary.counts.metadataComplete ? "Included plus excluded" : "Legacy batch · excluded count unavailable"} tone="brand" />
+        <StatCard label={summary.counts.metadataComplete ? "Total source rows" : "Rows available for review"} value={summary.counts.total} detail={summary.counts.metadataComplete ? "Included plus excluded" : "Older import · excluded count unavailable"} tone="brand" />
         <StatCard label="Unchanged existing" value={summary.counts.unchangedExisting} detail="Zero manual confirmations" />
         <StatCard label="Existing with changes" value={summary.counts.existingWithChanges} detail="One set acknowledgement" tone="attention" />
         <StatCard label="Proposed new" value={summary.counts.proposedNew} detail="One set decision" tone="attention" />
@@ -120,7 +120,7 @@ export default async function ImportDetailPage({ params, searchParams }: { param
       </DisclosureCard>
 
       {summary.snapshot ? <DisclosureCard className="import-snapshot-disclosure" title="Roster snapshot comparison" description={summary.snapshot.percentChange == null ? "This is the first approved roster snapshot available for comparison." : `The proposed roster changes the approved snapshot by ${summary.snapshot.percentChange.toFixed(1)}%.`} defaultOpen={shrink}>
-        {shrink ? <AlertBanner title="Large roster shrink requires explicit acknowledgement" tone="danger">Absence from this file is not a membership drop, employment separation, archive, or deletion. The acknowledgement is bound to the exact current execution fingerprint.</AlertBanner> : null}
+        {shrink ? <AlertBanner title="Review this large roster decrease carefully" tone="danger">A person missing from this file is not automatically a membership drop, separation, archive, or deletion. Your acknowledgement applies only to this exact set of changes.</AlertBanner> : null}
         <ReviewSummary>
           <StatCard label="Previous" value={summary.snapshot.previous} detail={summary.snapshot.previousDate ?? "No approved snapshot"} />
           <StatCard label="Proposed" value={summary.snapshot.proposed} detail="Eligible current set" />
@@ -140,11 +140,11 @@ export default async function ImportDetailPage({ params, searchParams }: { param
       </SectionCard>
 
       <DisclosureCard className="import-execution-disclosure" title="Final approval and apply" description={preflight?.ready ? "The reviewed changes are ready for final confirmation and application." : "Complete each listed requirement before applying the reviewed changes."} defaultOpen={Boolean(preflight?.ready)}>
-        {!preflight ? <UnavailableState title="Execution preflight unavailable" description="No authoritative changes are enabled when the current execution set cannot be fingerprinted safely." /> : <div className="grid">
+        {!preflight ? <UnavailableState title="Final safety check unavailable" description="CAT will not enable Apply until it can verify this exact set of reviewed changes." /> : <div className="grid">
           {preflight.plan.migrationPending ? <AlertBanner title="Execution-plan migration must be applied" tone="warning">The shrink-acknowledgement columns are not available in the connected database. Execution remains blocked.</AlertBanner> : null}
           <div className="grid two-grid">
-            <div className="section-card"><h3>Execution fingerprint</h3><p><strong>{preflight.fingerprintShort ?? "Unavailable"}</strong></p><p className="muted">Derived from the immutable source hash, persisted row hashes, current identity-review sets, counts, import kind, and execution dates. The write transaction recomputes the protected source/review/mutation state before any authoritative mutation can commit.</p></div>
-            <div className="section-card"><h3>Source gate</h3><p>{preflight.source.fileCount} source file · malware {preflight.source.malwareStatus ?? "unknown"}</p><p className="muted">{preflight.source.duplicateApprovedSource ? "Matches a previously approved source." : "No previously approved source with this SHA-256 was found."}</p></div>
+            <div className="section-card"><h3>Confirmation code</h3><p><strong>{preflight.fingerprintShort ?? "Unavailable"}</strong></p><p className="muted">This code identifies the source file, review decisions, counts, import type, and dates you are about to apply. CAT checks the same set again before changing the roster.</p></div>
+            <div className="section-card"><h3>Source file check</h3><p>{preflight.source.fileCount} source file · malware scan {preflight.source.malwareStatus ?? "unknown"}</p><p className="muted">{preflight.source.duplicateApprovedSource ? "This matches a source file that was approved before." : "CAT did not find this exact source file in an earlier approved import."}</p></div>
           </div>
           <ImportExecutionPreflightControls
             batchId={batchId}
@@ -161,8 +161,8 @@ export default async function ImportDetailPage({ params, searchParams }: { param
           {preflight.ready && preflight.fingerprint && preflight.fingerprintShort ? (
             executionMode ? (
               <div className="section-card">
-                <h3>{executionMode === "protected" ? "Protected authoritative execution" : "Preview execution"}</h3>
-                <p className="muted">The server independently rechecks organization, role, clean scan, review decisions, dates, duplicate acknowledgement, shrink acknowledgement, idempotency, and the exact current fingerprints. In protected mode it additionally prepares target-bound encrypted mutations and applies them under row locks in one transaction.</p>
+                <h3>{executionMode === "protected" ? "Apply approved roster changes" : "Apply Preview changes"}</h3>
+                <p className="muted">Before changing the roster, CAT rechecks your role, the clean malware scan, review decisions, dates, duplicate-file acknowledgement, large-decrease acknowledgement, and confirmation code. It saves the roster changes and audit record together—or saves none of them.</p>
                 <ImportExecutionControl batchId={batchId} fingerprint={preflight.fingerprint} fingerprintShort={preflight.fingerprintShort} mode={executionMode} />
               </div>
             ) : (

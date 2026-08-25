@@ -96,7 +96,7 @@ export default async function DirectoryPage({ searchParams }: { searchParams: Se
         : protectedReadEnabled ? <StatusBadge tone="info">Protected PII</StatusBadge> : null}
     >
       {!unavailable ? <AppliedFilterSummary items={filterSummary} clearHref="/directory" /> : null}
-      {unavailable ? <UnavailableState title="Directory unavailable" description="We couldn’t load the directory safely, so no member details are shown." /> : results.people.length === 0 ? <EmptyState title="No matches" description="No one matches the search and filters you chose." /> : <>
+      {unavailable ? <UnavailableState title="Directory unavailable" description="We couldn’t load the directory, so CAT is not showing partial member details." /> : results.people.length === 0 ? <EmptyState title="No matches" description="No one matches the search and filters you chose." /> : <>
         {results.total > 25 ? <div className="directory-results-toolbar">
           <form className="directory-page-size" action="/directory" method="get">
             {results.term ? <input type="hidden" name="q" value={results.term} /> : null}

@@ -17,6 +17,7 @@ export default async function UnauthorizedPage({
   const recoveryHref = user?.role === "report_viewer" ? "/reports" : "/";
   const recoveryLabel = user?.role === "report_viewer" ? "Go to reports" : "Go home";
   const signInHref = `/sign-in?next=${encodeURIComponent(requestedDestination)}`;
+  const title = user ? "This page isn’t available for your role" : "Sign in to open this page";
   const description = !user
     ? "Sign in to continue. After authentication, you’ll return to the requested Local 801 page when your role allows it."
     : isPreview
@@ -25,19 +26,19 @@ export default async function UnauthorizedPage({
 
   return (
     <div className="content">
-      <PageHeader eyebrow="Access restricted" title="This page isn’t available for your role" description={description} />
+      <PageHeader eyebrow="Access restricted" title={title} description={description} />
       <SectionCard>
         <UnavailableState
-          title="No protected information was shown"
-          description="Your current permissions were checked before this page could load."
+          title={user ? "CAT stopped before showing the page" : "CAT needs to verify your account first"}
+          description={user ? "Your current role was checked before any protected information could load." : "Sign in, and CAT will check whether your account and role can open this page."}
           action={<div className="page-actions">
             {user ? <Link className="button" href={recoveryHref}>{recoveryLabel}</Link> : <Link className="button" href={signInHref}>Sign in</Link>}
             {isPreview && user ? <Link className="button secondary" href={signInHref}>Switch Preview role</Link> : null}
           </div>}
         />
       </SectionCard>
-      <DisclosureCard title="Why you saw this" description="Access is limited by your current Local 801 role">
-        <p className="muted">Direct links do not bypass role checks. {isPreview ? "In Preview, you can switch to another role and safely return to the requested page." : "Production roles are assigned inside CAT and cannot be selected at sign-in. If you expected access, use the account and session menu to sign out, or contact a Local 801 administrator to review your production role."}</p>
+      <DisclosureCard title="Why you saw this" description="A link cannot give you access that your CAT role does not include">
+        <p className="muted">{isPreview ? "In Preview, you can switch to another role and return to the requested page." : "Production roles are assigned inside CAT and cannot be selected at sign-in. If you expected access, sign out from the account menu or ask a Local 801 administrator to review your role."}</p>
         <p className="muted">An administrator should change the role only when the person’s approved duties require it. Signing in with another account is not a substitute for correct access assignment.</p>
       </DisclosureCard>
     </div>

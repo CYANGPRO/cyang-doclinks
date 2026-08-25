@@ -88,15 +88,15 @@ export function MobileDeviceControl({ urgentCount, totalCount }: { urgentCount: 
   return <SectionCard
     title="Native device controls"
     description={deviceHandle
-      ? "This signed device is verified for native notifications, biometric unlock, private reminders, and safe work-count widgets."
-      : "Verify the signed iOS or Android app before enabling native notifications, biometric unlock, private reminders, or safe work-count widgets."}
+      ? "This device is verified for notifications, biometric unlock, private reminders, and work-count widgets."
+      : "Verify the signed iOS or Android app before turning on notifications, biometric unlock, private reminders, or work-count widgets."}
   >
     <AlertBanner title="Protected records stay online">
       Biometric unlock protects the signed app. Widgets, calendars, and notification previews receive only generic counts and links—never member names, contact details, notes, or records.
     </AlertBanner>
     <div className="page-actions">
       <button className="button" type="button" disabled={Boolean(busy) || !capabilities?.attestation} onClick={() => void run("verify", verifyDevice)}>{busy === "verify" ? "Verifying…" : "Verify signed app & device"}</button>
-      <button className="button secondary" type="button" disabled={Boolean(busy) || !capabilities?.biometric} onClick={() => void run("unlock", async () => { await Local801Native.authenticate({ reason: "Unlock Engaging Local 801" }); return "Biometric step-up succeeded."; })}>{busy === "unlock" ? "Checking…" : "Test biometric unlock"}</button>
+      <button className="button secondary" type="button" disabled={Boolean(busy) || !capabilities?.biometric} onClick={() => void run("unlock", async () => { await Local801Native.authenticate({ reason: "Unlock Engaging Local 801" }); return "Biometric check complete."; })}>{busy === "unlock" ? "Checking…" : "Test biometric unlock"}</button>
       <button className="button secondary" type="button" disabled={Boolean(busy) || !deviceHandle} onClick={() => void run("push", enablePush)}>{busy === "push" ? "Registering…" : "Enable native notifications"}</button>
       <button className="button secondary" type="button" disabled={Boolean(busy)} onClick={() => void run("local", scheduleLocalReminder)}>Schedule private reminder</button>
       <button className="button secondary" type="button" disabled={Boolean(busy) || !capabilities?.calendar} onClick={() => void run("calendar", async () => { await Local801Native.addCalendarReminder({ title: "Review Local 801 work", startsAt: new Date(Date.now() + 3_600_000).toISOString(), route: "/notifications" }); return "The device calendar editor opened with a generic reminder."; })}>Add calendar reminder</button>

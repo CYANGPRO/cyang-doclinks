@@ -59,7 +59,7 @@ export default async function FieldOutreachPersonPage({ params, searchParams }: 
     return <ProtectedPage permission="recordEngagement"><div className="content member360-field-page member360-field-unavailable-page">
       <PageHeader eyebrow="Member outreach · Field view" title="Outreach record unavailable" description="We couldn’t load this person for field work." actions={<Link className="button secondary" href={returnHref}>Back to my list</Link>} />
       <FieldConnectionStatus />
-      <SectionCard><UnavailableState title="Member unavailable" description={unavailable ? "We couldn’t safely load the protected member information. Reconnect and return to your list." : "This person is no longer in your current assignment scope."} /></SectionCard>
+      <SectionCard><UnavailableState title="Member unavailable" description={unavailable ? "We couldn’t load the protected member information. Reconnect, then return to your list." : "This person is no longer part of the work currently assigned to you."} /></SectionCard>
     </div></ProtectedPage>;
   }
 

@@ -60,6 +60,6 @@ test("outreach record derives completeness only after protected hydration and ke
   assert.match(source, /title="What we have on file"/);
   assert.match(source, /title="Campaigns"/);
   assert.match(source, /title="Campaign & action readiness"/);
-  assert.match(source, /not treated as a commitment to something else/);
+  assert.match(source, /does not reuse them as a commitment to different work/);
   assert.match(source, /approved roster or import correction process/);
 });

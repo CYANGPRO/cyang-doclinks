@@ -71,8 +71,8 @@ export function ImportResolutionControl({
         <strong>Resolution saved</strong>
         <div className="muted">
           {savedResolution.resolutionType === "confirm_existing"
-            ? "Confirm the persisted exact existing-person match."
-            : "Create a new person only when a later approval is executed."}
+            ? "Keep the exact match CAT already found."
+            : "Create a new person only when the approved import is applied."}
         </div>
         <div className="form-actions compact-actions">
           <button className="button secondary" disabled={busy} onClick={() => mutate("DELETE")} type="button">
@@ -90,7 +90,7 @@ export function ImportResolutionControl({
     <div className="section review-control">
       <strong>Resolution</strong>
       {status === "conflicting_match" ? (
-        <p className="muted">Blocked. Authoritative identifiers conflict; correct and re-upload the source.</p>
+        <p className="muted">CAT found conflicting employee or member IDs. Correct the source file and upload it again.</p>
       ) : rejected ? (
         <p className="muted">Blocked. A validation issue must be corrected and re-uploaded.</p>
       ) : status === "exact_match" ? (
@@ -227,7 +227,7 @@ export function ImportApprovalPanel({ batchId, review }: { batchId: string; revi
             ))}
           </div>
         )}
-        {preview.fingerprint ? <p className="muted">Approval fingerprint: {preview.fingerprint}</p> : null}
+        {preview.fingerprint ? <p className="muted">Review confirmation code: {preview.fingerprint}</p> : null}
       </section>
 
       <section className="section card">

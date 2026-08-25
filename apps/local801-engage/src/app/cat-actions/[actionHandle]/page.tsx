@@ -153,7 +153,7 @@ export default async function CatActionDetailPage({
       actions={<div className="page-actions"><Link className="button secondary" href="/cat-actions">Back to CAT Actions</Link>{sourceCampaign ? <Link className="button secondary" href={`/campaigns/${sourceCampaign.handle}`}>Back to {sourceCampaign.name}</Link> : null}</div>}
     />
 
-    {unavailable || !action || !tasks ? <SectionCard><UnavailableState title="CAT Action unavailable" description="We couldn’t safely load this action, its tasks, and the protected user details needed to manage it." /></SectionCard> : <>
+    {unavailable || !action || !tasks ? <SectionCard><UnavailableState title="CAT Action unavailable" description="We couldn’t load this action and its tasks, so no protected user details are shown." /></SectionCard> : <>
       <section className="metrics-grid" aria-label="CAT action summary">
         <StatCard label="Status" value={action.status} detail="Current action state" tone="brand" />
         <StatCard label="Tasks" value={action.taskCount} detail="All tasks" />
@@ -231,8 +231,8 @@ export default async function CatActionDetailPage({
 
       <ActionReadinessSummary summary={readiness} unavailable={readinessUnavailable} subject="CAT action" />
 
-      <DisclosureCard title="Linked campaigns" description={`${linkedCampaigns.length} ${linkedCampaigns.length === 1 ? "campaign has" : "campaigns have"} a durable relationship to this CAT Action. Member records and campaign assignments are not copied.`} className="route-secondary-panel">
-        {linkedCampaigns.length ? <DataTable caption="Campaigns linked to this CAT Action" headers={["Campaign", "Open"]}>{linkedCampaigns.map((link) => <tr key={link.handle}><td><strong>{link.campaignName}</strong></td><td><Link className="button secondary" href={`/campaigns/${link.campaignHandle}`}>Open campaign</Link></td></tr>)}</DataTable> : <EmptyState title="No linked campaign" description="Create the durable relationship from a campaign workspace." />}
+      <DisclosureCard title="Linked campaigns" description={`${linkedCampaigns.length} ${linkedCampaigns.length === 1 ? "campaign is" : "campaigns are"} linked to this CAT Action. Member records and campaign assignments are not copied.`} className="route-secondary-panel">
+        {linkedCampaigns.length ? <DataTable caption="Campaigns linked to this CAT Action" headers={["Campaign", "Open"]}>{linkedCampaigns.map((link) => <tr key={link.handle}><td><strong>{link.campaignName}</strong></td><td><Link className="button secondary" href={`/campaigns/${link.campaignHandle}`}>Open campaign</Link></td></tr>)}</DataTable> : <EmptyState title="No linked campaign" description="Open a campaign to link it to this CAT Action." />}
       </DisclosureCard>
 
       {fromCampaign ? <DisclosureCard

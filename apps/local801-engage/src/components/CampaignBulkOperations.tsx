@@ -50,7 +50,7 @@ async function postJson(url: string, body: Record<string, unknown>) {
     body: JSON.stringify(body),
   });
   const payload = await response.json().catch(() => ({})) as Record<string, unknown> & { message?: string };
-  if (!response.ok) throw new Error(payload.message || "The campaign operation could not be completed safely.");
+  if (!response.ok) throw new Error(payload.message || "CAT could not finish the campaign update. Check the current campaign before trying again.");
   return payload;
 }
 
@@ -123,10 +123,10 @@ function PopulationBuilder({ campaignHandle }: { campaignHandle: string }) {
     try {
       const payload = await postJson(`/api/campaigns/${campaignHandle}/population/bulk/preview`, request);
       const result = payload.preview as PopulationPreview | undefined;
-      if (!result || typeof result.confirmationToken !== "string") throw new Error("The population preview was incomplete.");
+      if (!result || typeof result.confirmationToken !== "string") throw new Error("CAT couldn’t prepare a complete preview. Try again.");
       setPrepared({ request, preview: result });
     } catch (error) {
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "The population preview failed." });
+      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "CAT couldn’t preview the population change." });
     } finally {
       setPending(false);
     }
@@ -146,7 +146,7 @@ function PopulationBuilder({ campaignHandle }: { campaignHandle: string }) {
       router.refresh();
     } catch (error) {
       setPrepared(null);
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "The population update failed." });
+      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "CAT couldn’t update the campaign population." });
     } finally {
       setPending(false);
     }
@@ -155,15 +155,15 @@ function PopulationBuilder({ campaignHandle }: { campaignHandle: string }) {
   return <details className="campaign-operation" open>
     <summary>Build or adjust the draft population</summary>
     <div className="stack campaign-operation-content">
-      <p className="muted">Criteria are combined on the server. Preview returns counts only; the roster never enters the browser.</p>
+      <p className="muted">Choose who should be included. The preview shows counts only, so names and roster details stay protected.</p>
       <form className="stack" onSubmit={preview}>
-        <div className="field"><label htmlFor="population-operation">Operation</label><select id="population-operation" name="operation" defaultValue="add"><option value="add">Add matching people</option><option value="remove">Remove safe matching people</option></select></div>
+        <div className="field"><label htmlFor="population-operation">Change</label><select id="population-operation" name="operation" defaultValue="add"><option value="add">Add matching people</option><option value="remove">Remove eligible matching people</option></select></div>
         <CriteriaFields prefix="population" includeSearch />
         <details className="inline-disclosure">
-          <summary>Explicit opaque-handle exceptions</summary>
+          <summary>Include or exclude specific people</summary>
           <div className="form-grid inline-disclosure-content">
-            <div className="field"><label htmlFor="population-includes">Always include</label><textarea id="population-includes" name="includeHandles" maxLength={3300} rows={3} placeholder="Up to 50 opaque handles, separated by spaces or commas" /></div>
-            <div className="field"><label htmlFor="population-excludes">Always exclude</label><textarea id="population-excludes" name="excludeHandles" maxLength={3300} rows={3} placeholder="Up to 50 opaque handles, separated by spaces or commas" /></div>
+            <div className="field"><label htmlFor="population-includes">Always include</label><textarea id="population-includes" name="includeHandles" maxLength={3300} rows={3} placeholder="Paste up to 50 CAT person IDs, separated by spaces or commas" /></div>
+            <div className="field"><label htmlFor="population-excludes">Always exclude</label><textarea id="population-excludes" name="excludeHandles" maxLength={3300} rows={3} placeholder="Paste up to 50 CAT person IDs, separated by spaces or commas" /></div>
           </div>
         </details>
         <div className="form-actions"><button className="button" type="submit" disabled={pending}>{pending ? "Calculating…" : "Preview population change"}</button></div>
@@ -201,10 +201,10 @@ function BulkAssignment({ campaignHandle, assignees }: { campaignHandle: string;
     try {
       const payload = await postJson(`/api/campaigns/${campaignHandle}/assignments/bulk/preview`, request);
       const result = payload.preview as AssignmentPreview | undefined;
-      if (!result || typeof result.confirmationToken !== "string") throw new Error("The assignment preview was incomplete.");
+      if (!result || typeof result.confirmationToken !== "string") throw new Error("CAT couldn’t prepare a complete assignment preview. Try again.");
       setPrepared({ request, preview: result });
     } catch (error) {
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "The assignment preview failed." });
+      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "CAT couldn’t preview the assignment." });
     } finally {
       setPending(false);
     }
@@ -224,7 +224,7 @@ function BulkAssignment({ campaignHandle, assignees }: { campaignHandle: string;
       router.refresh();
     } catch (error) {
       setPrepared(null);
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "The bulk assignment failed." });
+      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "CAT couldn’t assign the matching people." });
     } finally {
       setPending(false);
     }
@@ -233,11 +233,11 @@ function BulkAssignment({ campaignHandle, assignees }: { campaignHandle: string;
   return <details className="campaign-operation">
     <summary>Assign an unassigned group</summary>
     <div className="stack campaign-operation-content">
-      <p className="muted">Choose one eligible organizer explicitly. Stage 18 does not infer, rank, or score organizers.</p>
+      <p className="muted">Choose the organizer who will own this work. CAT will not select or rank an organizer for you.</p>
       <form className="stack" onSubmit={preview}>
         <div className="field"><label htmlFor="bulk-assignee">Organizer</label><select id="bulk-assignee" name="assigneeHandle" required defaultValue=""><option value="" disabled>Choose an organizer</option>{assignees.map((option) => <option key={option.handle} value={option.handle}>{option.label}{option.detail ? ` · ${option.detail}` : ""}</option>)}</select></div>
         <CriteriaFields prefix="assignment" />
-        <div className="field"><label htmlFor="assignment-workflow">Workflow state</label><select id="assignment-workflow" name="workflowState" defaultValue="all"><option value="all">Any factual state</option><option value="not_contacted">Not contacted</option><option value="contacted">Contacted</option><option value="not_completed">Not completed</option></select></div>
+        <div className="field"><label htmlFor="assignment-workflow">Contact status</label><select id="assignment-workflow" name="workflowState" defaultValue="all"><option value="all">Any status</option><option value="not_contacted">Not contacted</option><option value="contacted">Contacted</option><option value="not_completed">Not completed</option></select></div>
         <div className="form-actions"><button className="button" type="submit" disabled={pending}>{pending ? "Calculating…" : "Preview bulk assignment"}</button></div>
       </form>
       {prepared ? <div className="confirmation-panel" aria-live="polite">

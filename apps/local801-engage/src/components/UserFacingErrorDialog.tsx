@@ -30,7 +30,7 @@ export function UserFacingErrorDialog({ problem, onClose, onRetry }: {
     >
       <div className={`problem-dialog-accent problem-${problem.category}`} aria-hidden="true" />
       <div className="problem-dialog-body">
-        <p className="problem-dialog-kicker">We can help you recover</p>
+        <p className="problem-dialog-kicker">Here’s what happened</p>
         <h2 id={titleId}>{problem.title}</h2>
         <p id={descriptionId}>{problem.description}</p>
         <h3>What to do</h3>

@@ -8,7 +8,7 @@ function genericExplanation(category: ImportReviewDetail["rows"][number]["catego
   switch (category) {
     case "unchanged_existing": return "Exact identity match; no imported changes detected.";
     case "existing_with_changes": return "Existing person matched; one or more imported fields differ.";
-    case "proposed_new": return "No exact authoritative identity match was found.";
+    case "proposed_new": return "CAT did not find an exact employee or member ID match.";
     case "needs_attention": return "Manual review is required before this row can proceed.";
     case "rejected": return "The row was rejected during validation.";
   }

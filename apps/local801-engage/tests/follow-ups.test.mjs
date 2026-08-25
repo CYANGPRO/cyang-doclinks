@@ -15,7 +15,7 @@ test("follow-up queue requires recordEngagement permission", () => {
 test("CAT roles cannot broaden follow-up scope", () => {
   assert.match(service, /organizationWideRoles = new Set<Role>\(\["system_owner", "local_admin", "cat_admin", "cat_lead"\]\)/);
   assert.match(service, /return organizationWideRoles\.has\(role\) \? requested : "mine"/);
-  assert.match(page, /Your CAT role only shows follow-ups assigned to you for people in your current assignment scope/);
+  assert.match(page, /Your CAT role shows only follow-ups assigned to you for people you are allowed to work with/);
 });
 
 test("CAT follow-up scope requires current open employee assignments", () => {

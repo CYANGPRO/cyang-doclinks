@@ -17,7 +17,7 @@ export default async function DocumentMetadataPage({ params }: { params: Promise
   try { workspace = await getDocumentMetadataWorkspace(await resolveWorkspaceContext(user), handle); }
   catch (error) { if (error && typeof error === "object" && (error as { code?: string }).code === "DOCUMENT_NOT_FOUND") notFound(); unavailable = true; }
   return <ProtectedPage permission="manageDocuments"><div className="content record-workspace-page">
-    <PageHeader eyebrow="Information · Documents" title={workspace?.document.title ?? "Document metadata"} description="Organize this encrypted document with tenant-scoped tags and typed record relationships." actions={<Link className="button secondary" href="/documents">Back to documents</Link>} />
+    <PageHeader eyebrow="Information · Documents" title={workspace?.document.title ?? "Document details"} description="Add tags and connect this encrypted document to the Local 801 work it belongs with." actions={<Link className="button secondary" href="/documents">Back to documents</Link>} />
     <SectionCard title="Document tags and relationships" description="Organize this document with audited tags and links to related Local 801 work records.">
       {unavailable || !workspace ? <UnavailableState title="Document metadata unavailable" description="No metadata changes were made." /> : <DocumentMetadataManager documentHandle={handle} tags={workspace.tags} relationships={workspace.relationships} targets={workspace.targets} />}
     </SectionCard>

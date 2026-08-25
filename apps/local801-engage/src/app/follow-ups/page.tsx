@@ -162,7 +162,7 @@ export default async function FollowUpsPage({ searchParams }: { searchParams: Se
           <button className="button" type="submit">Apply filters</button>
         </FilterBar>
       </form>
-      {constrained ? <p className="muted">Your CAT role only shows follow-ups assigned to you for people in your current assignment scope.</p> : null}
+      {constrained ? <p className="muted">Your CAT role shows only follow-ups assigned to you for people you are allowed to work with.</p> : null}
     </DisclosureCard>
 
     <SectionCard
@@ -170,7 +170,7 @@ export default async function FollowUpsPage({ searchParams }: { searchParams: Se
       description={results.focus === "completed" ? `${results.total} completed follow-up${results.total === 1 ? "" : "s"} retained for 14 days.` : `${results.total} follow-up${results.total === 1 ? "" : "s"}; overdue items appear first, followed by today and upcoming work. Changes are recorded in the audit log.`}
       badge={protectedReadEnabled && !unavailable ? <StatusBadge tone="info">Protected PII</StatusBadge> : null}
     >
-      {unavailable ? <UnavailableState title="Follow-ups are unavailable" description="We couldn’t load the follow-up list safely. No member details are shown when the protected data checks fail." />
+      {unavailable ? <UnavailableState title="Follow-ups are unavailable" description="We couldn’t load the follow-up list, so no member details are shown." />
         : results.items.length === 0 ? <EmptyState title="No follow-ups here" description="Nothing matches the filters you chose." />
         : <div className="stack">
           {results.items.map((item) => {

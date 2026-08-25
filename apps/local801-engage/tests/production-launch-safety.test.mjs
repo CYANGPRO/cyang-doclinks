@@ -263,7 +263,7 @@ test("Stage 14A/14B1 are integrated into auth, settings, environment defaults, a
   assert.match(settings, /getProductionLaunchState\(\)/);
   assert.match(settings, /PII_KEY_CONFIG_INVALID/);
   assert.match(settings, /Secret configuration values are never shown here/);
-  assert.match(settings, /Credentials, encryption keys, connection strings, identity-provider subjects, and scanner secrets are never displayed/);
+  assert.match(settings, /It never displays credentials, encryption keys, connection strings, Microsoft identifiers, or scanner secrets/);
   for (const variable of [
     "LOCAL801_PRODUCTION_LAUNCH_ENABLED=0",
     "LOCAL801_DATABASE_PII_PROTECTION_ENABLED=0",

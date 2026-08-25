@@ -173,7 +173,7 @@ export default async function CampaignDetailPage({
 
     {unavailable || !campaign || !population || !options ? (
       <SectionCard>
-        <UnavailableState title="Campaign unavailable" description="We couldn’t safely load this campaign and its protected member information." />
+        <UnavailableState title="Campaign unavailable" description="We couldn’t load this campaign, so no protected member information is shown." />
       </SectionCard>
     ) : <>
       {timingAlert ? <AlertBanner title="Campaign end date passed" tone="warning">{timingAlert}</AlertBanner> : null}
@@ -276,7 +276,7 @@ export default async function CampaignDetailPage({
 
       {campaign.status !== "draft" ? <DisclosureCard
         title="Campaign-linked CAT Actions"
-        description="Create a durable relationship to the CAT Actions that carry this campaign into action planning. This does not copy people, assignments, responses, or commitments."
+        description="Link this campaign to the CAT Actions used for planning the next work. Linking does not copy people, assignments, responses, or commitments."
         className="route-secondary-panel campaign-handoff-panel"
       >
         {handoffUnavailable ? <UnavailableState title="CAT Action handoff unavailable" description="We couldn’t load the CAT Actions you can use. This campaign has not changed." />
@@ -332,7 +332,7 @@ export default async function CampaignDetailPage({
           </form>
 
           {candidateUnavailable ? (
-            <UnavailableState title="Search unavailable" description="We couldn’t complete the protected member search safely, so no results are shown." />
+            <UnavailableState title="Search unavailable" description="We couldn’t complete the member search, so no partial results are shown." />
           ) : candidateTerm && candidates?.candidates.length === 0 ? (
             <EmptyState title="No available matches" description="No active person matching that search is available to add to this draft campaign." />
           ) : candidates && candidates.candidates.length > 0 ? (

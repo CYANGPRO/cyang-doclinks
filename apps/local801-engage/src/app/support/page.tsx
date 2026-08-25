@@ -18,24 +18,24 @@ export default function SupportPage() {
   return <div className="content sign-in-content">
     <PageHeader
       eyebrow="Engaging Local 801"
-      title="Application support"
-      description="Get help with an approved account, Microsoft Entra sign-in, MFA, an assigned role, or the iOS and Android applications."
+      title="Get help with CAT"
+      description="Start here for sign-in, MFA, account access, role, browser, or mobile-app problems."
     />
     <AlertBanner title="Never send credentials or member records" tone="warning">
       Support will never ask for your password, MFA code, recovery code, client secret, encryption key, or a screenshot containing protected member information.
     </AlertBanner>
-    <SectionCard title="Before contacting support" description="These steps resolve most access problems without sharing protected information.">
+    <SectionCard title="Try these sign-in steps first" description="Most access problems can be fixed without sending protected information.">
       <ol className="step-list">
-        <li>Use the exact Microsoft account named in your Local 801 invitation.</li>
+        <li>Use the Microsoft account named in your Local 801 invitation.</li>
         <li>On the sign-in page, choose <strong>Sign out and reset sign-in</strong>, then complete Microsoft MFA in the same window.</li>
         <li>Confirm with a Local 801 administrator that your CAT account is active and has one assigned role.</li>
-        <li>Record only the non-sensitive support reference displayed by the application.</li>
+        <li>Write down the non-sensitive support reference shown by CAT.</li>
       </ol>
     </SectionCard>
-    <SectionCard title="Contact" description="Include the device type, operating-system version, time of the problem, and any non-sensitive support reference.">
+    <SectionCard title="Contact support" description="Tell us the device, browser or app, approximate time, what you expected, what happened, and any non-sensitive support reference.">
       {supportEmail
         ? <p><a className="button" href={`mailto:${supportEmail}?subject=Engaging%20Local%20801%20support`}>Email application support</a></p>
-        : <p>Contact the Local 801 administrator named in your invitation.</p>}
+        : <p>Contact the Local 801 administrator named in your invitation and ask them to route the problem to application support.</p>}
       <p className="muted">Do not attach a member roster, protected document, member contact information, password, MFA code, or recovery code.</p>
     </SectionCard>
     <div className="page-actions">

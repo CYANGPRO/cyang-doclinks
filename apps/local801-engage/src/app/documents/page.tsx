@@ -123,7 +123,7 @@ export default async function DocumentsPage({
     {uploadOptions.length > 0 ? <MobileDocumentIntake visibilityOptions={uploadOptions} /> : null}
     <SectionCard
       title="Document library"
-      description={page ? `${page.documents.length} ${page.documents.length === 1 ? "document is" : "documents are"} shown on this page.` : "The encrypted document index could not be loaded safely."}
+      description={page ? `${page.documents.length} ${page.documents.length === 1 ? "document is" : "documents are"} shown on this page.` : "We couldn’t load the document list."}
     >
       {!page ? (
         <UnavailableState

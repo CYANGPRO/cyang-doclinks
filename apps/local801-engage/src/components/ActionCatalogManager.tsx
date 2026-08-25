@@ -33,14 +33,14 @@ export function ActionCatalogManager() {
       });
       const body = await response.json().catch(() => ({})) as { message?: unknown };
       if (!response.ok) {
-        setError(typeof body.message === "string" ? body.message : "The custom action could not be created.");
+        setError(typeof body.message === "string" ? body.message : "CAT couldn’t add the custom action.");
         return;
       }
       form.reset();
       setMessage("Custom action added to the catalog.");
       router.refresh();
     } catch {
-      setError("The custom action could not be created. Try again.");
+      setError("CAT couldn’t add the custom action. Try again.");
     } finally {
       setBusy(false);
     }

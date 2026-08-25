@@ -14,32 +14,32 @@ export default function PublicPrivacyPage() {
       title="How Engaging Local 801 handles information"
       description="This notice applies to the Engaging Local 801 website and its iOS and Android applications. Last updated August 20, 2026."
     />
-    <SectionCard title="Private, approval-only service" description="Engaging Local 801 is not a public registration service.">
-      <p>Local 801 administrators approve accounts and assign roles. Microsoft Entra ID verifies identity and multi-factor authentication. CAT then enforces the active account, role, current session, and acceptance of the privacy and acceptable-use agreement.</p>
+    <SectionCard title="A private service for approved users" description="Engaging Local 801 does not offer public sign-up.">
+      <p>Local 801 administrators approve accounts and assign roles. Microsoft Entra ID verifies identity and MFA. CAT then checks that the account is active, has one role, has a current session, and has accepted the privacy and acceptable-use agreement.</p>
     </SectionCard>
-    <SectionCard title="Information processed" description="The service uses only information needed for authorized Local 801 work.">
+    <SectionCard title="Information CAT uses" description="CAT uses information needed for approved Local 801 work, security, and support.">
       <ul className="policy-list">
         <li>Account identity, verified email address, directory identifier, assigned role, sign-in status, and policy acceptance.</li>
         <li>Authorized membership and contact records, work assignments, outreach history, campaigns, reports, and audit events.</li>
-        <li>Documents, document metadata, and camera scans a user deliberately selects for protected upload.</li>
-        <li>Device attestation identifiers and push-notification tokens when native mobile features are enabled.</li>
-        <li>Limited server-side diagnostics needed to keep the service reliable and investigate security events.</li>
+        <li>Documents, details about those documents, and camera scans a user chooses to upload.</li>
+        <li>Device-verification identifiers and push-notification tokens when mobile features are turned on.</li>
+        <li>Limited technical diagnostics used to keep CAT reliable and investigate security events.</li>
       </ul>
     </SectionCard>
     <SectionCard title="Use, storage, and sharing" description="Information is used for Local 801 operations, security, and support—not advertising.">
       <ul className="policy-list">
-        <li>Access is restricted by role and recorded in tamper-evident audit events.</li>
-        <li>Protected data is encrypted in transit and at rest using owner-controlled application and storage controls.</li>
-        <li>Service providers support identity, hosting, database, object storage, malware scanning, notifications, and restricted error monitoring under the organization’s configuration.</li>
+        <li>Access is limited by role, and important activity is recorded in security audit records.</li>
+        <li>Protected data is encrypted while it moves and while it is stored.</li>
+        <li>Approved providers support identity, hosting, database and file storage, malware scanning, notifications, and limited error monitoring.</li>
         <li>The service does not sell personal information, run behavioral advertising, or permit cross-app tracking.</li>
         <li>Retention and deletion follow Local 801 operational, legal, security, and records requirements.</li>
       </ul>
     </SectionCard>
     <SectionCard title="Mobile privacy" description="Protected member records are not available for offline browsing.">
-      <p>The mobile applications may use the camera for a user-requested document or QR scan, biometrics for local device confirmation, the calendar for a generic reminder, and notifications for generic work alerts. Temporary upload files are protected and removed after completion or failure. The application does not create a persistent offline store of protected member records.</p>
+      <p>The mobile apps may use the camera when a user chooses to scan a document or QR code, biometrics to confirm the local device, the calendar for a generic reminder, and notifications for generic work alerts. Temporary upload files are protected and removed after the upload finishes or fails. The app does not keep a permanent offline copy of protected member records.</p>
     </SectionCard>
     <SectionCard title="Choices and questions" description="Administrators can review account access and respond to privacy requests.">
-      <p>Users may request correction of authorized records, notification preferences, account deactivation, or information about applicable retention by contacting Local 801 application support. Some records must be retained for legal, security, audit, or organizational requirements.</p>
+      <p>Users may ask to correct records they are allowed to see, change notification preferences, deactivate an account, or learn how long applicable information is kept. Contact Local 801 application support. Some records must be retained for legal, security, audit, or organizational requirements.</p>
       <div className="page-actions">
         <Link className="button" href="/support">Contact support</Link>
         <Link className="button secondary" href="/sign-in">Go to sign in</Link>

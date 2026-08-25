@@ -25,8 +25,8 @@ test("Stage 18 campaign page exposes bounded factual operations and strict keyse
   assert.match(component, /Preview population change/);
   assert.match(component, /Confirm this exact population change/);
   assert.match(component, /Preview bulk assignment/);
-  assert.match(component, /Choose one eligible organizer explicitly/);
-  assert.match(component, /does not infer, rank, or score organizers/);
+  assert.match(component, /Choose the organizer who will own this work/);
+  assert.match(component, /CAT will not select or rank an organizer for you/);
 });
 
 test("Stage 18 browser mutations send only criteria, bounded exceptions, opaque handles, and confirmation tokens", async () => {

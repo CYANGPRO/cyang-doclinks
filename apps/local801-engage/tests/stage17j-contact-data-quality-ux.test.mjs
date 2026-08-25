@@ -144,7 +144,7 @@ test("Data Quality is an actionable workspace without making roster absence an a
   assert.match(page, /People per page/);
   assert.match(page, /data-quality-desktop-results/);
   assert.match(page, /data-quality-mobile-results/);
-  assert.match(page, /not treated as a drop, separation, archive, or membership change/);
+  assert.match(page, /does not assume the person separated, dropped membership, or should be archived/);
   assert.match(controls, /missing_identifier/);
   assert.match(controls, /missing_work_email/);
   assert.match(controls, /missing_department/);

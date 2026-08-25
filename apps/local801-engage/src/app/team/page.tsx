@@ -127,7 +127,7 @@ export default async function TeamPage() {
           badge={page && protectedReadEnabled ? <StatusBadge tone="info">Protected PII</StatusBadge> : null}
         >
           {!page || !context ? (
-            <UnavailableState title="Users unavailable" description="We couldn’t safely load the current user list. Try again after the service is restored." />
+            <UnavailableState title="Users unavailable" description="We couldn’t load the current user list. Try again in a few minutes." />
           ) : page.members.length === 0 ? (
             <EmptyState title="No users yet" description="Add the first authorized user with the panel below." />
           ) : (

@@ -236,10 +236,10 @@ export default async function NewHiresPage({ searchParams }: { searchParams: Sea
     <SectionCard
       className="new-hires-results-card"
       title="New-hire records"
-      description={unavailable ? "The protected new-hire list could not be loaded safely." : `${hireCountLabel} Match the current hire-date, contact, assignment, and membership filters.`}
+      description={unavailable ? "We couldn’t load the new-hire list." : `${hireCountLabel} Match the current hire-date, contact, assignment, and membership filters.`}
       badge={!unavailable && protectedReadEnabled ? <StatusBadge tone="info">Protected PII</StatusBadge> : null}
     >
-      {unavailable ? <UnavailableState title="New hires are unavailable" description="We couldn’t load the protected new-hire list safely, so no member details are shown." />
+      {unavailable ? <UnavailableState title="New hires are unavailable" description="We couldn’t load the new-hire list, so no member details are shown." />
         : results.people.length === 0 ? <EmptyState title="No matching new hires" description="No active Local 801 hire records match the filters you chose." />
         : <>
           {results.total > 25 ? <div className="new-hire-results-toolbar">
@@ -344,7 +344,7 @@ export default async function NewHiresPage({ searchParams }: { searchParams: Sea
         </>}
     </SectionCard>
 
-    <DisclosureCard className="new-hires-journey-disclosure" title="How the new-hire journey works" description="Stages move forward from recorded work. They are progress markers, not scores.">
+    <DisclosureCard className="new-hires-journey-disclosure" title="How new-hire follow-up works" description="The stages come from recorded work. They show progress, not performance.">
       <div className="new-hire-journey">
         <div className="workflow-step-list" aria-label="New-hire stages">
           {[

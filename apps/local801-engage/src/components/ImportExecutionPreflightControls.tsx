@@ -71,12 +71,12 @@ export function ImportExecutionPreflightControls(props: Props) {
 
   async function acknowledgeShrink() {
     if (!props.fingerprint) return;
-    if (!window.confirm("Acknowledge that this current-roster execution would reduce the approved roster by at least 20%? This acknowledgement is bound to the exact current execution fingerprint.")) return;
+    if (!window.confirm("This import would reduce the approved roster by at least 20%. Confirm that you reviewed this exact set of changes.")) return;
     setPending("shrink");
     setFeedback(null);
     try {
       await jsonRequest(`/api/imports/${props.batchId}/large-shrink-ack`, "POST", { fingerprint: props.fingerprint });
-      setFeedback({ tone: "success", message: "Large roster shrink acknowledged for this fingerprint." });
+      setFeedback({ tone: "success", message: "The large roster decrease was acknowledged for this set of changes." });
       router.refresh();
     } catch (error) {
       setFeedback({ tone: "error", message: error instanceof Error ? error.message : "Acknowledgement failed." });
@@ -90,7 +90,7 @@ export function ImportExecutionPreflightControls(props: Props) {
       <form className="stack" onSubmit={savePlan}>
         <div className="form-grid">
           <div className="field">
-            <label htmlFor="execution-snapshot-date">Authoritative snapshot date</label>
+            <label htmlFor="execution-snapshot-date">Roster snapshot date</label>
             <input id="execution-snapshot-date" name="snapshotDate" type="date" defaultValue={props.snapshotDate ?? ""} required />
             <span className="field-help">Use the date represented by the roster, not the upload date.</span>
           </div>

@@ -39,7 +39,7 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
       <CampaignCreateForm />
     </SectionCard>
     <SectionCard title="Campaign portfolio" badge={<StatusBadge tone="info">Aggregate SQL</StatusBadge>}>
-      {!page ? <UnavailableState title="Campaigns unavailable" description="No placeholder campaign is presented as live." action={<Link className="button secondary" href="/campaigns">Try again</Link>} /> : page.campaigns.length === 0 ? <EmptyState title="No campaigns" description="Create a draft campaign to begin the organizing workflow." action={<a className="button" href="#create-campaign">Create first campaign</a>} /> : <>
+      {!page ? <UnavailableState title="Campaigns unavailable" description="We couldn’t load the campaign list, so CAT is not showing incomplete results." action={<Link className="button secondary" href="/campaigns">Try again</Link>} /> : page.campaigns.length === 0 ? <EmptyState title="No campaigns yet" description="Create a draft when you are ready to build a participant list and assign the work." action={<a className="button" href="#create-campaign">Create first campaign</a>} /> : <>
         <DataTable caption="Campaign summaries" headers={["Campaign", "Status", "Dates", "Population", "Contacted", "Completed"]}>
           {page.campaigns.map((campaign) => <tr key={campaign.handle}>
             <td><strong><Link href={`/campaigns/${campaign.handle}`}>{campaign.name}</Link></strong></td>

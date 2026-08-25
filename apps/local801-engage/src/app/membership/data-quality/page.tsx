@@ -113,7 +113,7 @@ export default async function MembershipDataQualityPage({ searchParams }: { sear
     <PageHeader eyebrow="Members" title="Data quality" description="Find member records with clear gaps that need review. Fix individual records here, or use Data Imports for bulk and roster-source corrections." actions={<Link className="button secondary data-quality-header-action" href="/imports">Open data imports</Link>} />
 
     <SectionCard className="import-data-issues-section" title="Import rows needing a decision" description="Review possible employee matches, attach a row, create a new employee on approval, or remove the row from this import." badge={<StatusBadge tone="info">Protected PII</StatusBadge>}>
-      {importIssuesUnavailable ? <UnavailableState title="Import issues unavailable" description="We couldn’t safely load protected import rows or possible employee matches." />
+      {importIssuesUnavailable ? <UnavailableState title="Import issues unavailable" description="We couldn’t load the protected import rows and possible employee matches." />
         : importIssues.length === 0 ? <EmptyState title="No import decisions waiting" description="No unresolved import rows are waiting. Exact work-email matches and possible employees will appear here when a row needs a decision." />
           : <>
             <p className="muted import-data-issues-intro">An exact active work-email match always wins and cannot be overridden. When there is no exact work-email match, CAT ranks a short list using full names and workplace details. An administrator must confirm every attachment.</p>
@@ -132,7 +132,7 @@ export default async function MembershipDataQualityPage({ searchParams }: { sear
           </>}
     </SectionCard>
 
-    {unavailable || !results ? <UnavailableState title="Current-record issues unavailable" description="We couldn’t safely load protected employee records with data gaps." /> : <>
+    {unavailable || !results ? <UnavailableState title="Employee record issues unavailable" description="We couldn’t load the protected employee records that need review." /> : <>
       <nav className="data-quality-summary" aria-label="Data quality issue views">
         <Link aria-current={results.issue === "all" ? "page" : undefined} className={`data-quality-summary-card${results.issue === "all" ? " active" : ""}`} href={filterHref("all", results.pageSize)}>
           <span>People needing review</span><strong>{results.summary.flaggedPeople.toLocaleString()}</strong><small>One person can have more than one issue.</small>
@@ -213,7 +213,7 @@ export default async function MembershipDataQualityPage({ searchParams }: { sear
       </SectionCard>
 
       <DisclosureCard className="data-quality-roster-reference" title="How missing roster matches are handled" description="A missing roster match is a review flag, not proof of a drop.">
-        <p>If someone is missing from the latest approved roster, this page treats it as something to review—not proof that they separated, dropped membership, or should be archived. It is not treated as a drop, separation, archive, or membership change. Review the outreach record when authorized, or correct the roster through Data Imports when the approved source is wrong.</p>
+        <p>If someone is missing from the latest approved roster, CAT flags the record for review. It does not assume the person separated, dropped membership, or should be archived. Review the outreach record when your role allows it, or use Data Imports to correct an approved source file.</p>
       </DisclosureCard>
     </>}
   </div></ProtectedPage>;
