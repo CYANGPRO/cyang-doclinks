@@ -1,7 +1,6 @@
 import { changeTeamMemberRole, preflightTeamMemberRemoval, removeTeamMemberFromCat, resolveTeamMemberOnboardingTarget, resolveTeamMemberRemovalTarget, revokeTeamMemberSessions, setTeamMemberActive, TeamAccessError } from "@/lib/team-access";
 import { deleteTeamMemberFromEntra, onboardTeamMemberWithEntra } from "@/lib/entra-user-onboarding";
 import { authorizeTeamMutation, readTeamJson, teamJson, teamMutationFailure } from "@/lib/team-mutation-http";
-import { resolveWorkspaceContext } from "@/lib/workspace-context";
 import { writeSecuritySignal } from "@/lib/security-signal";
 
 export const dynamic = "force-dynamic";
@@ -13,11 +12,11 @@ export async function PATCH(request: Request, { params }: RouteContext) {
   const authorized = await authorizeTeamMutation(request);
   if ("response" in authorized) return authorized.response;
   try {
-    const [{ userHandle }, body, context] = await Promise.all([
+    const [{ userHandle }, body] = await Promise.all([
       params,
       readTeamJson(request),
-      resolveWorkspaceContext(authorized.auth.user),
     ]);
+    const context = authorized.context;
     const action = typeof body.action === "string" ? body.action : "";
     let result: Record<string, unknown>;
     if (action === "role") result = await changeTeamMemberRole(context, userHandle, body.role);

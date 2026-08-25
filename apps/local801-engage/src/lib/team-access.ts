@@ -459,8 +459,8 @@ export async function changeTeamMemberRole(
         AND app_user.deactivated_at IS NULL
         AND ($3::text = 'system_owner' OR NOT EXISTS (
           SELECT 1 FROM local801.workspace_user_roles current_user_role
-          JOIN local801.workspace_roles current_role ON current_role.id = current_user_role.role_id AND current_role.organization_id = $1::uuid
-          WHERE current_user_role.user_id = app_user.id AND current_role.code IN ('system_owner','local_admin')
+          JOIN local801.workspace_roles target_role ON target_role.id = current_user_role.role_id AND target_role.organization_id = $1::uuid
+          WHERE current_user_role.user_id = app_user.id AND target_role.code IN ('system_owner','local_admin')
         ))
     ), selected_role AS (
       SELECT role.id FROM local801.workspace_roles role

@@ -140,6 +140,8 @@ test("role changes revoke sessions, recheck manager privilege in SQL, and are au
   assert.match(mutation.sql, /auth_session_version = auth_session_version \+ 1/);
   assert.match(mutation.sql, /role\.code = \$3::text/);
   assert.match(mutation.sql, /role\.code IN \('system_owner','local_admin'\)/);
+  assert.match(mutation.sql, /JOIN local801\.workspace_roles target_role/);
+  assert.doesNotMatch(mutation.sql, /\bcurrent_role\b/i);
   assert.deepEqual(mutation.parameters, [organizationId, actorId, "system_owner", targetId, "cat_admin"]);
   assert.match(state.transactions[0][1].sql, /local801\.audit_events/);
 });
@@ -268,6 +270,8 @@ test("Team APIs are same-origin, bounded, production-capable, and server-authori
   assert.match(updateRoute, /setTeamMemberActive/);
   assert.match(updateRoute, /revokeTeamMemberSessions/);
   assert.match(updateRoute, /remove_account/);
+  assert.match(updateRoute, /const context = authorized\.context/);
+  assert.doesNotMatch(updateRoute, /resolveWorkspaceContext/);
   assert.match(page, /CAT never creates or emails a password/);
   assert.match(page, /grants access to the Entra enterprise application/);
   assert.match(page, /System Owner required/);
