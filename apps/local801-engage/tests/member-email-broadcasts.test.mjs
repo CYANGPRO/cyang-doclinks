@@ -171,6 +171,12 @@ test("draft creation encrypts content and recipients and freezes only protected 
   assert.doesNotMatch(JSON.stringify(contentInsert.parameters), /Synthetic member update|Preview-only message/);
   assert.doesNotMatch(JSON.stringify(recipientInsert.parameters), /@example\.test|avery|riley|shared\.household/i);
   assert.match(String(contentInsert.parameters[2]), /^p1\./);
+  const frozenRecipients = JSON.parse(String(recipientInsert.parameters[2]));
+  assert.equal(frozenRecipients.length, audienceRows.length);
+  assert.equal(frozenRecipients[0].person_id, audienceRows[0].person_id);
+  assert.equal(frozenRecipients[0].contact_method_id, audienceRows[0].home_contact_id);
+  assert.equal(frozenRecipients[0].contact_kind, "home");
+  assert.equal(frozenRecipients[0].personId, undefined);
 });
 
 test("the broadcast creator cannot approve their own reviewed draft", async () => {

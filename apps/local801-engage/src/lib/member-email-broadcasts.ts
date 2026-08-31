@@ -361,16 +361,16 @@ export async function createMemberEmailBroadcast(
       { organizationId: context.organizationId, entity: "member-email-recipient", recordId: recipient.id, field: "email" }, keyConfig) : null;
     return {
       id: recipient.id,
-      personId: recipient.personId,
-      contactMethodId: recipient.contactMethodId,
-      contactKind: recipient.contactKind,
+      person_id: recipient.personId,
+      contact_method_id: recipient.contactMethodId,
+      contact_kind: recipient.contactKind,
       status: recipient.status,
-      duplicateOfRecipientId: recipient.duplicateOfRecipientId,
-      blindIndexKeyVersion: recipient.blindIndexKeyVersion,
-      blindIndex: recipient.blindIndex,
-      encryptedPayload: encrypted?.encryptedPayload ?? null,
-      encryptionKeyVersion: encrypted?.encryptionKeyVersion ?? null,
-      encryptionFormatVersion: encrypted?.encryptionFormatVersion ?? null,
+      duplicate_of_recipient_id: recipient.duplicateOfRecipientId,
+      blind_index_key_version: recipient.blindIndexKeyVersion,
+      blind_index: recipient.blindIndex,
+      encrypted_payload: encrypted?.encryptedPayload ?? null,
+      encryption_key_version: encrypted?.encryptionKeyVersion ?? null,
+      encryption_format_version: encrypted?.encryptionFormatVersion ?? null,
     };
   });
   const transaction = dependencies.transaction ?? withLocal801Transaction;
