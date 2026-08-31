@@ -34,6 +34,66 @@ export function memberEmailDeliveryBoundary(env: NodeJS.ProcessEnv = process.env
   });
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function singleEmail(value: string | undefined, label: string) {
+  const normalized = value?.trim() ?? "";
+  if (!normalized || normalized.includes(",") || normalized.includes(";") || !EMAIL_RE.test(normalized)) {
+    throw new MemberEmailPreviewPolicyError("REAL_TEST_CONFIG_INVALID", `${label} must contain exactly one valid email address.`, 503);
+  }
+  return normalized;
+}
+
+function senderEmail(value: string) {
+  const match = value.match(/<([^<>]+)>\s*$/);
+  return singleEmail(match?.[1] ?? value, "The Preview test sender");
+}
+
+export type MemberEmailRealTestBoundary = Readonly<{
+  mode: "preview_single_recipient";
+  provider: "resend";
+  recipient: string;
+  from: string;
+  apiKey: string;
+  maxRecipients: 1;
+  memberDeliveryAllowed: false;
+  webhookAllowed: false;
+}>;
+
+export function memberEmailRealTestBoundary(env: NodeJS.ProcessEnv = process.env): MemberEmailRealTestBoundary {
+  requireMemberEmailPreview(env);
+  if (env.LOCAL801_EMAIL_BROADCAST_REAL_TEST_ENABLED !== "1") {
+    throw new MemberEmailPreviewPolicyError("REAL_TEST_DISABLED", "The one-address Resend test is disabled.", 404);
+  }
+  const apiKey = env.RESEND_API_KEY?.trim();
+  if (!apiKey) throw new MemberEmailPreviewPolicyError("REAL_TEST_CONFIG_INVALID", "The CAT Preview Resend credential is unavailable.", 503);
+  const recipient = singleEmail(env.LOCAL801_EMAIL_BROADCAST_TEST_RECIPIENT, "The Preview test recipient");
+  const from = env.LOCAL801_EMAIL_BROADCAST_FROM?.trim() ?? "";
+  const fromEmail = senderEmail(from);
+  if (fromEmail.slice(fromEmail.lastIndexOf("@") + 1).toLowerCase() !== "cyang.io") {
+    throw new MemberEmailPreviewPolicyError("REAL_TEST_CONFIG_INVALID", "The Preview test sender must use the verified cyang.io domain.", 503);
+  }
+  return Object.freeze({
+    mode: "preview_single_recipient",
+    provider: "resend",
+    recipient,
+    from,
+    apiKey,
+    maxRecipients: 1,
+    memberDeliveryAllowed: false,
+    webhookAllowed: false,
+  });
+}
+
+export function memberEmailRealTestSummary(env: NodeJS.ProcessEnv = process.env) {
+  try {
+    const boundary = memberEmailRealTestBoundary(env);
+    return Object.freeze({ enabled: true as const, recipient: boundary.recipient, from: boundary.from });
+  } catch {
+    return Object.freeze({ enabled: false as const, recipient: null, from: null });
+  }
+}
+
 export function isSyntheticMemberEmail(value: string) {
   const at = value.lastIndexOf("@");
   return at > 0 && value.slice(at + 1).toLowerCase() === "example.test";

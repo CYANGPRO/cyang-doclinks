@@ -44,6 +44,7 @@ const EVENT_LABELS: Record<string, string> = {
   "broadcast.approve": "Approved Preview email broadcast",
   "broadcast.test_simulated": "Simulated email broadcast test",
   "broadcast.send_simulated": "Simulated email broadcast delivery",
+  "broadcast.real_test_sent": "Sent one-address Preview email test",
 };
 
 const SUBJECT_LABELS: Record<string, string> = {

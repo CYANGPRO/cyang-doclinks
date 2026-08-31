@@ -95,7 +95,7 @@ export function MemberEmailBroadcastComposer() {
 
   return <form className="stack" onSubmit={create}>
     <div className="callout neutral">
-      <strong>Preview simulation only.</strong> This screen cannot contact Resend or deliver email. Any non-<code>example.test</code> recipient locks the operation.
+      <strong>Member delivery stays simulated.</strong> Draft audiences remain locked to <code>example.test</code>. A separate action may send one configured external test through Resend, never the member list.
     </div>
     <div className="form-actions">
       <button className="button secondary" type="button" onClick={loadPreview} disabled={pending !== null}>
@@ -138,27 +138,38 @@ export function MemberEmailBroadcastActions({
   handle,
   status,
   requiresDifferentApprover,
+  realTestRecipient,
 }: {
   handle: string;
   status: "draft" | "review" | "approved" | "simulated" | "cancelled";
   requiresDifferentApprover: boolean;
+  realTestRecipient: string | null;
 }) {
   const router = useRouter();
   const [pending, setPending] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Feedback>(null);
 
-  async function act(action: "submit" | "approve" | "simulate_test" | "simulate_send") {
+  async function act(action: "submit" | "approve" | "simulate_test" | "simulate_send" | "real_test") {
     const warning = action === "approve"
       ? "Approve this frozen synthetic recipient list? No email will be delivered."
       : action === "simulate_send"
         ? "Record simulated delivery for every eligible synthetic recipient?"
+        : action === "real_test"
+          ? `Send one real external email through Resend to ${realTestRecipient}? No member email will be delivered.`
         : null;
     if (warning && !window.confirm(warning)) return;
     setPending(action);
     setFeedback(null);
     try {
       await post(`/api/email-broadcasts/${handle}/actions`, { action });
-      setFeedback({ tone: "success", message: action === "simulate_test" ? "Test simulation recorded." : "Preview workflow updated." });
+      setFeedback({
+        tone: "success",
+        message: action === "simulate_test"
+          ? "Test simulation recorded."
+          : action === "real_test"
+            ? "Resend accepted the one-address Preview test."
+            : "Preview workflow updated.",
+      });
       router.refresh();
     } catch (error) {
       setFeedback({ tone: "error", message: error instanceof Error ? error.message : "The Preview workflow could not be updated." });
@@ -174,6 +185,9 @@ export function MemberEmailBroadcastActions({
       {status === "review" ? <button className="button" type="button" onClick={() => act("approve")} disabled={pending !== null || requiresDifferentApprover}>Approve</button> : null}
       {status === "approved" ? <button className="button" type="button" onClick={() => act("simulate_send")} disabled={pending !== null}>Simulate delivery</button> : null}
       <button className="button secondary" type="button" onClick={() => act("simulate_test")} disabled={pending !== null}>Simulate test</button>
+      {realTestRecipient ? <button className="button secondary" type="button" onClick={() => act("real_test")} disabled={pending !== null}>
+        {pending === "real_test" ? "Sending…" : "Send real email test"}
+      </button> : null}
     </div>
     {status === "review" && requiresDifferentApprover ? <span className="muted">Switch to the other authorized administrator to approve.</span> : null}
     <FeedbackMessage value={feedback} />

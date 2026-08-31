@@ -20,6 +20,7 @@ test("audit activity has human-readable labels with safe fallback", () => {
   assert.equal(auditEventLabel("import.execute"), "Executed import");
   assert.equal(auditEventLabel("role.change"), "Changed user role");
   assert.equal(auditEventLabel("broadcast.approve"), "Approved Preview email broadcast");
+  assert.equal(auditEventLabel("broadcast.real_test_sent"), "Sent one-address Preview email test");
   assert.equal(auditEventLabel("future.event_name"), "Future event name");
   assert.equal(auditSubjectLabel("engagement_followup"), "Follow-up");
   assert.equal(auditSubjectLabel("member_email_broadcast"), "Preview email broadcast");

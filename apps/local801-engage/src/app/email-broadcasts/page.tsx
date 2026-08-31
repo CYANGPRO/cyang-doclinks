@@ -5,7 +5,7 @@ import { ProtectedPage } from "@/components/ProtectedPage";
 import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
 import { listMemberEmailBroadcasts } from "@/lib/member-email-broadcasts";
-import { memberEmailPreviewEnabled } from "@/lib/member-email-preview-policy";
+import { memberEmailPreviewEnabled, memberEmailRealTestSummary } from "@/lib/member-email-preview-policy";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +15,7 @@ export default async function EmailBroadcastsPage() {
   const user = await getPreviewUser();
   if (!user) redirect("/sign-in");
   if (!can(user.role, "sendMemberEmail")) redirect("/unauthorized");
+  const realTest = memberEmailRealTestSummary();
   let broadcasts: Awaited<ReturnType<typeof listMemberEmailBroadcasts>> | null = null;
   try {
     broadcasts = await listMemberEmailBroadcasts(await resolveWorkspaceContext(user));
@@ -26,9 +27,9 @@ export default async function EmailBroadcastsPage() {
     <PageHeader
       eyebrow="Programs · Preview only"
       title="Email broadcasts"
-      description="Build and approve an all-member communication against a frozen synthetic membership snapshot. Delivery is simulated and cannot reach a provider."
+      description="Build and approve an all-member communication against a frozen synthetic membership snapshot. Member delivery stays simulated; one configured test address can use Resend."
     />
-    <SectionCard title="Create Preview broadcast" description="Check the latest approved snapshot, then encrypt the draft and freeze its synthetic recipient population." badge={<StatusBadge tone="pending">Provider disabled</StatusBadge>}>
+    <SectionCard title="Create Preview broadcast" description="Check the latest approved snapshot, then encrypt the draft and freeze its synthetic recipient population." badge={<StatusBadge tone={realTest.enabled ? "info" : "pending"}>{realTest.enabled ? "One-address Resend test" : "Provider disabled"}</StatusBadge>}>
       <MemberEmailBroadcastComposer />
     </SectionCard>
     <SectionCard title="Preview workflow" description="The creator submits the draft; a different authorized administrator approves it; delivery remains simulated." badge={<StatusBadge tone="info">Two-person approval</StatusBadge>}>
@@ -41,7 +42,7 @@ export default async function EmailBroadcastsPage() {
               <td>{broadcast.snapshotDate}</td>
               <td>{broadcast.eligible} eligible<br /><span className="muted">{broadcast.missing} missing · {broadcast.duplicate} duplicate · {broadcast.suppressed} suppressed</span></td>
               <td>{broadcast.scheduledFor ? new Date(broadcast.scheduledFor).toLocaleString() : "Manual simulation"}</td>
-              <td><MemberEmailBroadcastActions handle={broadcast.handle} status={broadcast.status} requiresDifferentApprover={broadcast.requiresDifferentApprover} /></td>
+              <td><MemberEmailBroadcastActions handle={broadcast.handle} status={broadcast.status} requiresDifferentApprover={broadcast.requiresDifferentApprover} realTestRecipient={realTest.recipient} /></td>
             </tr>)}
           </DataTable>}
     </SectionCard>

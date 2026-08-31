@@ -5,8 +5,14 @@ import {
   approveMemberEmailBroadcast,
   createMemberEmailBroadcast,
   previewMemberEmailAudience,
+  sendMemberEmailRealTest,
 } from "../src/lib/member-email-broadcasts.ts";
-import { memberEmailDeliveryBoundary, memberEmailPreviewEnabled } from "../src/lib/member-email-preview-policy.ts";
+import {
+  memberEmailDeliveryBoundary,
+  memberEmailPreviewEnabled,
+  memberEmailRealTestBoundary,
+} from "../src/lib/member-email-preview-policy.ts";
+import { encryptPiiField } from "../src/lib/pii-protection.ts";
 
 const organizationId = "10000000-0000-4000-8000-000000000001";
 const creatorId = "10000000-0000-4000-8000-000000000002";
@@ -23,6 +29,14 @@ const previewEnv = {
   LOCAL801_EMAIL_BROADCAST_PREVIEW_ENABLED: "1",
   LOCAL801_DATABASE_PII_PROTECTION_ENABLED: "0",
   LOCAL801_PII_PROTECTED_READ_PREVIEW_ENABLED: "0",
+};
+
+const realTestEnv = {
+  ...previewEnv,
+  LOCAL801_EMAIL_BROADCAST_REAL_TEST_ENABLED: "1",
+  LOCAL801_EMAIL_BROADCAST_TEST_RECIPIENT: "owner@example.test",
+  LOCAL801_EMAIL_BROADCAST_FROM: "CAT Preview <cat@cyang.io>",
+  RESEND_API_KEY: "test-only-key",
 };
 
 const keyConfig = Object.freeze({
@@ -112,6 +126,115 @@ test("Preview gate is intrinsically denied in Production and under the launch in
     recipientDomain: "example.test",
   });
   assert.throws(() => memberEmailDeliveryBoundary({ ...previewEnv, VERCEL_ENV: "production" }), /unavailable/i);
+  assert.deepEqual(memberEmailRealTestBoundary(realTestEnv), {
+    mode: "preview_single_recipient",
+    provider: "resend",
+    recipient: "owner@example.test",
+    from: "CAT Preview <cat@cyang.io>",
+    apiKey: "test-only-key",
+    maxRecipients: 1,
+    memberDeliveryAllowed: false,
+    webhookAllowed: false,
+  });
+  assert.throws(() => memberEmailRealTestBoundary({ ...realTestEnv, VERCEL_ENV: "production" }), /unavailable/i);
+  assert.throws(() => memberEmailRealTestBoundary({ ...realTestEnv, LOCAL801_EMAIL_BROADCAST_REAL_TEST_ENABLED: "0" }), /disabled/i);
+  assert.throws(() => memberEmailRealTestBoundary({ ...realTestEnv, LOCAL801_EMAIL_BROADCAST_TEST_RECIPIENT: "one@example.test,two@example.test" }), /exactly one/i);
+  assert.throws(() => memberEmailRealTestBoundary({ ...realTestEnv, LOCAL801_EMAIL_BROADCAST_FROM: "CAT Preview <cat@cat.cyang.io>" }), /verified cyang\.io/i);
+});
+
+function realTestRow() {
+  const subject = encryptPiiField("Synthetic member update", {
+    organizationId,
+    entity: "member-email-broadcast",
+    recordId: broadcastId,
+    field: "subject",
+  }, keyConfig);
+  const body = encryptPiiField("This is a Preview-only message.", {
+    organizationId,
+    entity: "member-email-broadcast",
+    recordId: broadcastId,
+    field: "body",
+  }, keyConfig);
+  return {
+    id: broadcastId,
+    handle,
+    status: "draft",
+    source_snapshot_id: snapshotId,
+    snapshot_date: "2026-08-01",
+    eligible_count: 3,
+    missing_count: 1,
+    duplicate_count: 1,
+    suppressed_count: 0,
+    scheduled_for: null,
+    created_by: creatorId,
+    approved_by: null,
+    simulated_at: null,
+    created_at: "2026-08-25T12:00:00.000Z",
+    subject_encrypted_payload: subject.encryptedPayload,
+    subject_encryption_key_version: subject.encryptionKeyVersion,
+    subject_encryption_format_version: subject.encryptionFormatVersion,
+    body_encrypted_payload: body.encryptedPayload,
+    body_encryption_key_version: body.encryptionKeyVersion,
+    body_encryption_format_version: body.encryptionFormatVersion,
+  };
+}
+
+test("real Preview test sends exactly once to the configured address and never reads member recipients", async () => {
+  const sqlCalls = [];
+  const providerCalls = [];
+  const auditCalls = [];
+  const query = async (sql, parameters = []) => {
+    sqlCalls.push(sql);
+    if (sql.includes("member-email:real-test-broadcast")) return [realTestRow()];
+    if (sql.includes("member-email:real-test-audit-check")) return [];
+    throw new Error(`Unexpected SQL: ${sql.slice(0, 80)}`);
+  };
+  const transaction = async (callback) => callback(async (sql, parameters = []) => {
+    auditCalls.push({ sql, parameters });
+    if (sql.includes("SELECT event_hash")) return [];
+    if (sql.includes("INSERT INTO local801.audit_events")) return [{ audit_written: true }];
+    return [];
+  });
+  const result = await sendMemberEmailRealTest(context(), handle, {
+    env: realTestEnv,
+    keyConfig,
+    query,
+    transaction,
+    sendPreviewTest: async (input) => {
+      providerCalls.push(input);
+      return { providerMessageId: "provider-test-id" };
+    },
+  });
+  assert.deepEqual(result, { action: "real_test", status: "draft", alreadySent: false });
+  assert.equal(providerCalls.length, 1);
+  assert.equal(providerCalls[0].to, "owner@example.test");
+  assert.equal(providerCalls[0].from, "CAT Preview <cat@cyang.io>");
+  assert.match(providerCalls[0].subject, /^\[CAT Preview Test\]/);
+  assert.match(providerCalls[0].text, /No member broadcast was delivered/);
+  assert.equal(sqlCalls.some((sql) => sql.includes("member_email_broadcast_recipients")), false);
+  const auditInsert = auditCalls.find((call) => call.sql.includes("INSERT INTO local801.audit_events"));
+  assert.ok(auditInsert);
+  assert.doesNotMatch(JSON.stringify(auditInsert.parameters), /owner@example\.test|Synthetic member update|Preview-only message/);
+});
+
+test("a recorded real Preview test prevents another provider call", async () => {
+  let providerCalls = 0;
+  const result = await sendMemberEmailRealTest(context(), handle, {
+    env: realTestEnv,
+    keyConfig,
+    query: async (sql) => {
+      if (sql.includes("member-email:real-test-broadcast")) return [realTestRow()];
+      if (sql.includes("member-email:real-test-audit-check")) return [{ already_sent: true }];
+      throw new Error(`Unexpected SQL: ${sql.slice(0, 80)}`);
+    },
+    transaction: async () => { throw new Error("transaction should not run"); },
+    sendPreviewTest: async () => {
+      providerCalls += 1;
+      return { providerMessageId: "unexpected" };
+    },
+  });
+  assert.deepEqual(result, { action: "real_test", status: "draft", alreadySent: true });
+  assert.equal(providerCalls, 0);
 });
 
 test("recipient preview prefers home email, falls back to work, deduplicates, and exposes counts only", async () => {

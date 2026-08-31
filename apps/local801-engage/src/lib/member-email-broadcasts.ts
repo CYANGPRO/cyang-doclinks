@@ -1,10 +1,16 @@
 import "server-only";
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { can } from "./access.ts";
 import { prepareAtomicAuditStatement } from "./audit.ts";
 import { queryLocal801, withLocal801Transaction, type DatabaseQuery } from "./db.ts";
-import { memberEmailDeliveryBoundary, requireMemberEmailPreview, requireSyntheticMemberEmail } from "./member-email-preview-policy.ts";
+import { sendMemberEmailPreviewTest, type SendMemberEmailPreviewTestInput } from "./member-email-resend.ts";
+import {
+  memberEmailDeliveryBoundary,
+  memberEmailRealTestBoundary,
+  requireMemberEmailPreview,
+  requireSyntheticMemberEmail,
+} from "./member-email-preview-policy.ts";
 import {
   createPiiBlindIndex,
   createPiiIntegrityHash,
@@ -86,6 +92,12 @@ type BroadcastRow = {
   subject_encryption_format_version: number | string;
 };
 
+type RealTestBroadcastRow = BroadcastRow & {
+  body_encrypted_payload: string;
+  body_encryption_key_version: string;
+  body_encryption_format_version: number | string;
+};
+
 export type MemberEmailBroadcastSummary = {
   handle: string;
   subject: string;
@@ -107,6 +119,7 @@ type Dependencies = {
   env?: NodeJS.ProcessEnv;
   keyConfig?: PiiKeyConfiguration;
   now?: () => Date;
+  sendPreviewTest?: (input: SendMemberEmailPreviewTestInput) => Promise<{ providerMessageId: string }>;
 };
 
 export class MemberEmailBroadcastError extends Error {
@@ -441,6 +454,16 @@ function decryptSubject(row: BroadcastRow, organizationId: string, keyConfig: Pi
   }, { organizationId, entity: "member-email-broadcast", recordId: row.id, field: "subject" }, keyConfig);
 }
 
+function decryptBody(row: RealTestBroadcastRow, organizationId: string, keyConfig: PiiKeyConfiguration) {
+  const format = Number(row.body_encryption_format_version);
+  if (format !== 1) fail("CONTENT_UNAVAILABLE", "Protected broadcast content is unavailable.", 503);
+  return decryptPiiField({
+    encryptedPayload: row.body_encrypted_payload,
+    encryptionKeyVersion: row.body_encryption_key_version,
+    encryptionFormatVersion: 1,
+  }, { organizationId, entity: "member-email-broadcast", recordId: row.id, field: "body" }, keyConfig);
+}
+
 export async function listMemberEmailBroadcasts(context: WorkspaceContext, dependencies: Dependencies = {}) {
   const env = dependencies.env ?? process.env;
   requireAccess(context, env);
@@ -584,6 +607,82 @@ export function simulateMemberEmailTest(context: WorkspaceContext, handle: strin
 
 export function simulateMemberEmailSend(context: WorkspaceContext, handle: string, dependencies?: Dependencies) {
   return mutateStatus(context, handle, "simulate_send", dependencies);
+}
+
+export async function sendMemberEmailRealTest(context: WorkspaceContext, handle: string, dependencies: Dependencies = {}) {
+  const env = dependencies.env ?? process.env;
+  requireAccess(context, env);
+  const boundary = memberEmailRealTestBoundary(env);
+  if (!HANDLE_RE.test(handle)) fail("NOT_FOUND", "Preview broadcast not found.", 404);
+  const query = dependencies.query ?? queryLocal801;
+  const [row] = await query<RealTestBroadcastRow>(`
+    /* member-email:real-test-broadcast */
+    SELECT broadcast.id::text, ${broadcastHandleSql("broadcast")} AS handle, broadcast.status,
+      broadcast.source_snapshot_id::text, snapshot.snapshot_date, broadcast.eligible_count,
+      broadcast.missing_count, broadcast.duplicate_count, broadcast.suppressed_count,
+      broadcast.scheduled_for, broadcast.created_by::text, broadcast.approved_by::text,
+      broadcast.simulated_at, broadcast.created_at,
+      content.subject_encrypted_payload, content.subject_encryption_key_version, content.subject_encryption_format_version,
+      content.body_encrypted_payload, content.body_encryption_key_version, content.body_encryption_format_version
+    FROM local801.member_email_broadcasts broadcast
+    JOIN local801.membership_snapshots snapshot
+      ON snapshot.organization_id = broadcast.organization_id AND snapshot.id = broadcast.source_snapshot_id
+    JOIN local801.member_email_broadcast_content content
+      ON content.organization_id = broadcast.organization_id AND content.broadcast_id = broadcast.id
+    WHERE broadcast.organization_id = $1::uuid AND ${broadcastHandleSql("broadcast")} = $2::text
+  `, [context.organizationId, handle]);
+  if (!row) fail("NOT_FOUND", "Preview broadcast not found.", 404);
+  if (!new Set(["draft", "review", "approved"]).has(row.status)) {
+    fail("INVALID_STATE", "This broadcast cannot send a real Preview test.", 409);
+  }
+
+  const existing = await query<{ already_sent: boolean }>(`
+    /* member-email:real-test-audit-check */
+    SELECT true AS already_sent
+    FROM local801.audit_events
+    WHERE organization_id = $1::uuid AND event_type = 'broadcast.real_test_sent'
+      AND subject_type = 'member_email_broadcast' AND subject_id = $2::uuid
+    LIMIT 1
+  `, [context.organizationId, row.id]);
+  if (existing.length > 0) return { action: "real_test" as const, status: publicStatus(row.status), alreadySent: true };
+
+  const keyConfig = dependencies.keyConfig ?? getPiiKeyConfiguration(env);
+  const subject = decryptSubject(row, context.organizationId, keyConfig);
+  const body = decryptBody(row, context.organizationId, keyConfig);
+  const send = dependencies.sendPreviewTest ?? sendMemberEmailPreviewTest;
+  let providerMessageId: string;
+  try {
+    ({ providerMessageId } = await send({
+      apiKey: boundary.apiKey,
+      from: boundary.from,
+      to: boundary.recipient,
+      subject: `[CAT Preview Test] ${subject}`,
+      text: `${body}\n\n---\nCAT Preview one-address test. No member broadcast was delivered.`,
+      idempotencyKey: `cat-preview-test/${context.organizationId}/${row.id}`,
+    }));
+  } catch {
+    fail("PROVIDER_REJECTED", "Resend did not accept the CAT Preview test email.", 502);
+  }
+
+  const transaction = dependencies.transaction ?? withLocal801Transaction;
+  await transaction(async (transactionQuery) => {
+    const audit = await prepareAtomicAuditStatement({
+      eventType: "broadcast.real_test_sent",
+      actorId: context.userId,
+      organizationId: context.organizationId,
+      subjectType: "member_email_broadcast",
+      subjectId: row.id,
+      payload: {
+        provider: boundary.provider,
+        deliveryMode: boundary.mode,
+        recipientCount: 1,
+        memberDeliveryAllowed: false,
+        providerMessageHash: createHash("sha256").update(providerMessageId).digest("hex"),
+      },
+    }, transactionQuery);
+    await transactionQuery(audit.sql, audit.parameters);
+  });
+  return { action: "real_test" as const, status: publicStatus(row.status), alreadySent: false };
 }
 
 export const __testing = { content, schedule, MAX_RECIPIENTS, MAX_SUBJECT, MAX_BODY };

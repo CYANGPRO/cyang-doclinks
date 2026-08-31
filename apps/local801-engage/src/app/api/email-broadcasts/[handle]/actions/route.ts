@@ -1,5 +1,6 @@
 import {
   approveMemberEmailBroadcast,
+  sendMemberEmailRealTest,
   simulateMemberEmailSend,
   simulateMemberEmailTest,
   submitMemberEmailBroadcast,
@@ -30,6 +31,8 @@ export async function POST(request: Request, { params }: RouteContext) {
           ? await simulateMemberEmailTest(authorized.context, handle)
           : action === "simulate_send"
             ? await simulateMemberEmailSend(authorized.context, handle)
+            : action === "real_test"
+              ? await sendMemberEmailRealTest(authorized.context, handle)
             : null;
     if (!result) return memberEmailJson({ error: "INVALID_ACTION", message: "Choose a valid Preview broadcast action." }, 400);
     return memberEmailJson({ broadcast: "ok", ...result });
