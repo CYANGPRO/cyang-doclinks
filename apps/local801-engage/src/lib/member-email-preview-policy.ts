@@ -35,6 +35,7 @@ export function memberEmailDeliveryBoundary(env: NodeJS.ProcessEnv = process.env
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const CAT_EMAIL_SENDER_DOMAIN = "cat.cyang.io";
 
 function singleEmail(value: string | undefined, label: string) {
   const normalized = value?.trim() ?? "";
@@ -70,8 +71,12 @@ export function memberEmailRealTestBoundary(env: NodeJS.ProcessEnv = process.env
   const recipient = singleEmail(env.LOCAL801_EMAIL_BROADCAST_TEST_RECIPIENT, "The Preview test recipient");
   const from = env.LOCAL801_EMAIL_BROADCAST_FROM?.trim() ?? "";
   const fromEmail = senderEmail(from);
-  if (fromEmail.slice(fromEmail.lastIndexOf("@") + 1).toLowerCase() !== "cyang.io") {
-    throw new MemberEmailPreviewPolicyError("REAL_TEST_CONFIG_INVALID", "The Preview test sender must use the verified cyang.io domain.", 503);
+  if (fromEmail.slice(fromEmail.lastIndexOf("@") + 1).toLowerCase() !== CAT_EMAIL_SENDER_DOMAIN) {
+    throw new MemberEmailPreviewPolicyError(
+      "REAL_TEST_CONFIG_INVALID",
+      `The Preview test sender must use the verified ${CAT_EMAIL_SENDER_DOMAIN} domain.`,
+      503,
+    );
   }
   return Object.freeze({
     mode: "preview_single_recipient",

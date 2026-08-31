@@ -35,7 +35,7 @@ const realTestEnv = {
   ...previewEnv,
   LOCAL801_EMAIL_BROADCAST_REAL_TEST_ENABLED: "1",
   LOCAL801_EMAIL_BROADCAST_TEST_RECIPIENT: "owner@example.test",
-  LOCAL801_EMAIL_BROADCAST_FROM: "CAT Preview <cat@cyang.io>",
+  LOCAL801_EMAIL_BROADCAST_FROM: "CAT Notices <notices@cat.cyang.io>",
   RESEND_API_KEY: "test-only-key",
 };
 
@@ -130,7 +130,7 @@ test("Preview gate is intrinsically denied in Production and under the launch in
     mode: "preview_single_recipient",
     provider: "resend",
     recipient: "owner@example.test",
-    from: "CAT Preview <cat@cyang.io>",
+    from: "CAT Notices <notices@cat.cyang.io>",
     apiKey: "test-only-key",
     maxRecipients: 1,
     memberDeliveryAllowed: false,
@@ -139,7 +139,7 @@ test("Preview gate is intrinsically denied in Production and under the launch in
   assert.throws(() => memberEmailRealTestBoundary({ ...realTestEnv, VERCEL_ENV: "production" }), /unavailable/i);
   assert.throws(() => memberEmailRealTestBoundary({ ...realTestEnv, LOCAL801_EMAIL_BROADCAST_REAL_TEST_ENABLED: "0" }), /disabled/i);
   assert.throws(() => memberEmailRealTestBoundary({ ...realTestEnv, LOCAL801_EMAIL_BROADCAST_TEST_RECIPIENT: "one@example.test,two@example.test" }), /exactly one/i);
-  assert.throws(() => memberEmailRealTestBoundary({ ...realTestEnv, LOCAL801_EMAIL_BROADCAST_FROM: "CAT Preview <cat@cat.cyang.io>" }), /verified cyang\.io/i);
+  assert.throws(() => memberEmailRealTestBoundary({ ...realTestEnv, LOCAL801_EMAIL_BROADCAST_FROM: "CAT Preview <cat@cyang.io>" }), /verified cat\.cyang\.io/i);
 });
 
 function realTestRow() {
@@ -208,7 +208,7 @@ test("real Preview test sends exactly once to the configured address and never r
   assert.deepEqual(result, { action: "real_test", status: "draft", alreadySent: false });
   assert.equal(providerCalls.length, 1);
   assert.equal(providerCalls[0].to, "owner@example.test");
-  assert.equal(providerCalls[0].from, "CAT Preview <cat@cyang.io>");
+  assert.equal(providerCalls[0].from, "CAT Notices <notices@cat.cyang.io>");
   assert.match(providerCalls[0].subject, /^\[CAT Preview Test\]/);
   assert.match(providerCalls[0].text, /No member broadcast was delivered/);
   assert.equal(sqlCalls.some((sql) => sql.includes("member_email_broadcast_recipients")), false);
