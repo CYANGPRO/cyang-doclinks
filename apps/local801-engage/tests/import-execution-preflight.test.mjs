@@ -16,6 +16,7 @@ const proposedHash = "a".repeat(64);
 const changesHash = "b".repeat(64);
 const sourceHash = "c".repeat(64);
 const rowSetHash = "d".repeat(64);
+const archivedMissingHash = "e".repeat(64);
 
 function summaryRow(overrides = {}) {
   return {
@@ -38,6 +39,7 @@ function summaryRow(overrides = {}) {
     proposed_snapshot_count: "100",
     entering_snapshot: "10",
     leaving_snapshot: "10",
+    archived_missing_set_hash: archivedMissingHash,
     ...overrides,
   };
 }
@@ -94,14 +96,17 @@ test("execution preflight is ready only for the exact clean, reviewed, dated set
   assert.equal(preflight.source.malwareStatus, "clean");
   assert.equal(preflight.plan.snapshotDate, "2026-08-15");
   assert.equal(preflight.shrink.required, false);
+  assert.equal(preflight.review.archivedMissing, 10);
 });
 
 test("fingerprint changes when source rows or execution dates change", async () => {
   const first = await getImportExecutionPreflight(actor(), batchId, queryFor());
   const second = await getImportExecutionPreflight(actor(), batchId, queryFor({ meta: metaRow({ row_set_hash: "f".repeat(64) }) }));
   const third = await getImportExecutionPreflight(actor(), batchId, queryFor({ meta: metaRow({ snapshot_date: "2026-08-16" }) }));
+  const fourth = await getImportExecutionPreflight(actor(), batchId, queryFor({ summary: summaryRow({ archived_missing_set_hash: "9".repeat(64) }) }));
   assert.notEqual(first.fingerprint, second.fingerprint);
   assert.notEqual(first.fingerprint, third.fingerprint);
+  assert.notEqual(first.fingerprint, fourth.fingerprint);
 });
 
 test("preflight blocks dirty/missing sources, stale review decisions, dates, and duplicate approved sources", async () => {

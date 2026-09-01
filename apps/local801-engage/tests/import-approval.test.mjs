@@ -240,7 +240,7 @@ test("conflicting candidates, rejected rows, and batch-level errors block the wh
   assert.ok(codes.has("UNRESOLVED_ROWS"));
 });
 
-test("current roster preview compares snapshots without planning archive, drop, or separation", async () => {
+test("current roster preview identifies people omitted from the prior snapshot without inferring separation or nonmember status", async () => {
   const existing = row(1, {
     resolution_type: "confirm_existing", resolution_person_id: "person-current", candidate_person_count: 1,
     resolution_is_candidate: true, existing_person_active: true, existing_membership_status: "nonmember",
@@ -256,7 +256,7 @@ test("current roster preview compares snapshots without planning archive, drop, 
   assert.equal(result.preview.counts.snapshotRows, 1);
   assert.equal(result.preview.counts.leavingSnapshot, 1);
   assert.equal(result.preview.rows[0].eventAction, "correction");
-  assert.doesNotMatch(JSON.stringify(result.preview), /archive|separation|set_nonmember/);
+  assert.doesNotMatch(JSON.stringify(result.preview), /separation|set_nonmember/);
 });
 
 test("new-hire row dates override fallback and missing dates require a fallback", async () => {

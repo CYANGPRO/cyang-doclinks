@@ -151,6 +151,7 @@ type SummaryRow = {
   eligible_new_set_hash: string; existing_changes_set_hash: string;
   import_kind: string; previous_snapshot_date: string | Date | null; previous_snapshot_count: number | string;
   proposed_snapshot_count: number | string; entering_snapshot: number | string; leaving_snapshot: number | string;
+  archived_missing_set_hash: string;
 };
 type DecisionRow = { decision_type: ImportReviewDecisionType; set_hash: string; set_count: number | string; decided_at: string | Date };
 type DetailRow = { import_row_id: string; sheet_name: string; source_row_number: number; category: ImportReviewCategory;
@@ -163,7 +164,7 @@ export type ImportReviewSummary = {
   decisions: { proposedNew: boolean; existingChanges: boolean; migrationPending: boolean };
   clicksRequired: number;
   blockers: number;
-  snapshot: { previousDate: string | null; previous: number; proposed: number; entering: number; leaving: number; net: number; percentChange: number | null } | null;
+  snapshot: { previousDate: string | null; previous: number; proposed: number; entering: number; leaving: number; archivedMissingSetHash: string; net: number; percentChange: number | null } | null;
 };
 export type ImportReviewDetail = { rows: Array<Omit<DetailRow, "import_row_id" | "person_id">>; nextCursor: string | null; pageSize: number };
 
@@ -205,6 +206,10 @@ export async function getImportReviewSummary(actor: ImportReviewActor, batchId: 
     SELECT snapshot_row.person_id FROM previous_snapshot snapshot
     JOIN local801.membership_snapshot_rows snapshot_row
       ON snapshot_row.snapshot_id = snapshot.id AND snapshot_row.organization_id = $1
+  ), active_previous_people AS (
+    SELECT previous.person_id FROM previous_people previous
+    JOIN local801.people person
+      ON person.organization_id = $1 AND person.id = previous.person_id AND person.archived_at IS NULL
   ), proposed_people AS (
     SELECT DISTINCT person_id FROM categorized
     WHERE category IN ('unchanged_existing', 'existing_with_changes') AND person_id IS NOT NULL
@@ -214,7 +219,9 @@ export async function getImportReviewSummary(actor: ImportReviewActor, batchId: 
       (SELECT count(*) FROM previous_people) AS previous_snapshot_count,
       (SELECT count(*) FROM proposed_people) + aggregate.proposed_new AS proposed_snapshot_count,
       (SELECT count(*) FROM proposed_people proposed WHERE NOT EXISTS (SELECT 1 FROM previous_people previous WHERE previous.person_id = proposed.person_id)) + aggregate.proposed_new AS entering_snapshot,
-      (SELECT count(*) FROM previous_people previous WHERE NOT EXISTS (SELECT 1 FROM proposed_people proposed WHERE proposed.person_id = previous.person_id)) AS leaving_snapshot,
+      (SELECT count(*) FROM active_previous_people previous WHERE NOT EXISTS (SELECT 1 FROM proposed_people proposed WHERE proposed.person_id = previous.person_id)) AS leaving_snapshot,
+      (SELECT encode(public.digest(COALESCE(string_agg(previous.person_id::text, ':' ORDER BY previous.person_id), ''), 'sha256'), 'hex')
+        FROM active_previous_people previous WHERE NOT EXISTS (SELECT 1 FROM proposed_people proposed WHERE proposed.person_id = previous.person_id)) AS archived_missing_set_hash,
       errors.blocking_error_count, errors.unassociated_blocking_error_count, aggregate.*
     FROM local801.import_batches batch CROSS JOIN aggregate CROSS JOIN batch_error_counts errors
     WHERE batch.organization_id = $1 AND batch.id = $2`, [actor.organizationId, batchId]);
@@ -236,7 +243,7 @@ export async function getImportReviewSummary(actor: ImportReviewActor, batchId: 
   const included = count(row.included_rows) || classifiedTotal;
   const excluded = row.excluded_rows == null ? null : count(row.excluded_rows);
   const previous = count(row.previous_snapshot_count); const proposed = count(row.proposed_snapshot_count); const net = proposed - previous;
-  const snapshot = row.import_kind === "current_roster" ? { previousDate: row.previous_snapshot_date instanceof Date ? row.previous_snapshot_date.toISOString().slice(0, 10) : row.previous_snapshot_date?.slice(0, 10) ?? null, previous, proposed, entering: count(row.entering_snapshot), leaving: count(row.leaving_snapshot), net, percentChange: previous ? (net / previous) * 100 : null } : null;
+  const snapshot = row.import_kind === "current_roster" ? { previousDate: row.previous_snapshot_date instanceof Date ? row.previous_snapshot_date.toISOString().slice(0, 10) : row.previous_snapshot_date?.slice(0, 10) ?? null, previous, proposed, entering: count(row.entering_snapshot), leaving: count(row.leaving_snapshot), archivedMissingSetHash: row.archived_missing_set_hash, net, percentChange: previous ? (net / previous) * 100 : null } : null;
   const rejected = count(row.rejected_rows) || count(row.rejected);
   const blockingErrors = count(row.blocking_error_count);
   return { counts: { total: count(row.total_rows) || included + (excluded ?? 0), included, excluded, rejected, blockingErrors, unchangedExisting: count(row.unchanged_existing), existingWithChanges: existingChanges, proposedNew, needsAttention: count(row.needs_attention), metadataComplete: row.total_rows != null && row.included_rows != null && row.excluded_rows != null }, hashes: { proposedNew: row.eligible_new_set_hash, existingChanges: row.existing_changes_set_hash }, decisions: { proposedNew: proposedAccepted, existingChanges: changesAccepted, migrationPending }, clicksRequired: Number(proposedNew > 0) + Number(existingChanges > 0), blockers: count(row.needs_attention) + rejected + count(row.unassociated_blocking_error_count), snapshot };

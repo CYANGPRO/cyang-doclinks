@@ -7,6 +7,7 @@ type Props = {
   batchId: string;
   fingerprint: string;
   fingerprintShort: string;
+  removalCount?: number;
   mode?: "synthetic_preview" | "protected";
 };
 
@@ -33,7 +34,7 @@ function failureMessage(payload: ExecutionResponse) {
   return [message, ...recovery, supportReference ? `Support reference: ${supportReference}` : ""].filter(Boolean).join(" ");
 }
 
-export function ImportExecutionControl({ batchId, fingerprint, fingerprintShort, mode = "synthetic_preview" }: Props) {
+export function ImportExecutionControl({ batchId, fingerprint, fingerprintShort, removalCount = 0, mode = "synthetic_preview" }: Props) {
   const router = useRouter();
   const [confirmation, setConfirmation] = useState("");
   const [pending, setPending] = useState(false);
@@ -47,7 +48,10 @@ export function ImportExecutionControl({ batchId, fingerprint, fingerprintShort,
       setFeedback({ tone: "error", message: `Type ${fingerprintShort} exactly to confirm this execution set.` });
       return;
     }
-    if (!window.confirm(`Apply this ${noun} now? CAT will save the roster changes, approval record, and audit event together—or save none of them.`)) return;
+    const removalNotice = removalCount > 0
+      ? ` This will archive ${removalCount} active ${removalCount === 1 ? "person" : "people"} who no longer appear in the full roster.`
+      : "";
+    if (!window.confirm(`Apply this ${noun} now?${removalNotice} CAT will save the roster changes, approval record, and audit event together—or save none of them.`)) return;
 
     setPending(true);
     setFeedback(null);

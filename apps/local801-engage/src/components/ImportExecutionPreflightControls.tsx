@@ -12,6 +12,7 @@ type Props = {
   effectiveDate: string | null;
   duplicateSourceNeedsAck: boolean;
   largeShrinkNeedsAck: boolean;
+  removalCount: number;
   migrationPending: boolean;
   fingerprint: string | null;
 };
@@ -71,7 +72,7 @@ export function ImportExecutionPreflightControls(props: Props) {
 
   async function acknowledgeShrink() {
     if (!props.fingerprint) return;
-    if (!window.confirm("This import would reduce the approved roster by at least 20%. Confirm that you reviewed this exact set of changes.")) return;
+    if (!window.confirm(`This import would reduce the approved roster by at least 20% and archive ${props.removalCount} active ${props.removalCount === 1 ? "person" : "people"} who no longer appear. Confirm that you reviewed this exact set of changes.`)) return;
     setPending("shrink");
     setFeedback(null);
     try {
@@ -119,7 +120,7 @@ export function ImportExecutionPreflightControls(props: Props) {
 
       {props.largeShrinkNeedsAck ? (
         <button className="button secondary" type="button" onClick={acknowledgeShrink} disabled={pending !== null || props.migrationPending || !props.fingerprint}>
-          {pending === "shrink" ? "Acknowledging…" : "Acknowledge ≥20% roster decrease"}
+          {pending === "shrink" ? "Acknowledging…" : `Acknowledge ${props.removalCount} roster removals`}
         </button>
       ) : null}
     </div> : null}

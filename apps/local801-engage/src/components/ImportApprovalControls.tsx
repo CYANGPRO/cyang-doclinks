@@ -247,8 +247,8 @@ export function ImportApprovalPanel({ batchId, review }: { batchId: string; revi
           <div className="muted">
             <p>
               Snapshot {formatCatDate(preview.snapshotDate, "date not set")}: {preview.counts.snapshotRows} planned rows,
-              {` ${preview.counts.enteringSnapshot} entering and ${preview.counts.leavingSnapshot} leaving the snapshot.`}
-              {" "}Snapshot absence never plans a drop, separation, archive, or deletion.
+              {` ${preview.counts.enteringSnapshot} entering and ${preview.counts.leavingSnapshot} active people scheduled for recoverable archive.`}
+              {" "}Archived people leave the active roster while their history remains available.
             </p>
             <p>
               {preview.previousSnapshot

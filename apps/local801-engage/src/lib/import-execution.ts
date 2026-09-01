@@ -118,6 +118,22 @@ export const IMPORT_EXECUTION_SQL = `
     FROM previous_snapshot snapshot
     JOIN local801.membership_snapshot_rows snapshot_row
       ON snapshot_row.organization_id = $1::uuid AND snapshot_row.snapshot_id = snapshot.id
+  ), active_previous_people AS (
+    SELECT snapshot_row.person_id
+    FROM previous_snapshot snapshot
+    JOIN local801.membership_snapshot_rows snapshot_row
+      ON snapshot_row.organization_id = $1::uuid AND snapshot_row.snapshot_id = snapshot.id
+    JOIN local801.people person
+      ON person.organization_id = $1::uuid AND person.id = snapshot_row.person_id AND person.archived_at IS NULL
+  ), proposed_people AS (
+    SELECT DISTINCT person_id
+    FROM categorized
+    WHERE category IN ('unchanged_existing', 'existing_with_changes') AND person_id IS NOT NULL
+  ), archived_missing_set AS (
+    SELECT count(*)::int AS value,
+      encode(public.digest(COALESCE(string_agg(previous.person_id::text, ':' ORDER BY previous.person_id), ''), 'sha256'), 'hex') AS set_hash
+    FROM active_previous_people previous
+    WHERE NOT EXISTS (SELECT 1 FROM proposed_people proposed WHERE proposed.person_id = previous.person_id)
   ),
   proposed_snapshot_count AS (
     SELECT count(*)::int AS value
@@ -155,6 +171,8 @@ export const IMPORT_EXECUTION_SQL = `
       errors.blocking_error_count, errors.unassociated_blocking_error_count,
       COALESCE(previous.value, 0)::int AS previous_snapshot_count,
       proposed.value::int AS proposed_snapshot_count,
+      archived.value::int AS archived_missing_count,
+      archived.set_hash AS archived_missing_set_hash,
       organization.slug AS organization_slug,
       EXISTS (
         SELECT 1
@@ -180,6 +198,7 @@ export const IMPORT_EXECUTION_SQL = `
     CROSS JOIN batch_error_counts errors
     CROSS JOIN previous_snapshot_count previous
     CROSS JOIN proposed_snapshot_count proposed
+    CROSS JOIN archived_missing_set archived
     LEFT JOIN local801.import_approval_plans plan
       ON plan.organization_id = $1::uuid AND plan.import_batch_id = batch.id
     WHERE batch.organization_id = $1::uuid AND batch.id = $2::uuid
@@ -198,7 +217,8 @@ export const IMPORT_EXECUTION_SQL = `
   fingerprint_value AS (
     SELECT normalized.*,
       encode(public.digest(
-        '{"batchId":' || to_json(normalized.id::text)::text
+        '{"archivedMissingSetHash":' || to_json(normalized.archived_missing_set_hash)::text
+        || ',"batchId":' || to_json(normalized.id::text)::text
         || ',"counts":[' || normalized.fingerprint_total::text
           || ',' || normalized.unchanged_existing::text
           || ',' || normalized.existing_with_changes::text
@@ -301,6 +321,18 @@ export const IMPORT_EXECUTION_SQL = `
     CROSS JOIN guard
     WHERE categorized.category IN ('unchanged_existing','existing_with_changes','proposed_new')
       AND guard.ok = 1
+  ), omitted_active_people AS MATERIALIZED (
+    SELECT DISTINCT snapshot_row.person_id
+    FROM previous_snapshot snapshot
+    JOIN local801.membership_snapshot_rows snapshot_row
+      ON snapshot_row.organization_id = $1::uuid AND snapshot_row.snapshot_id = snapshot.id
+    JOIN local801.people person
+      ON person.organization_id = $1::uuid AND person.id = snapshot_row.person_id AND person.archived_at IS NULL
+    CROSS JOIN gate_facts batch
+    WHERE batch.import_kind = 'current_roster'
+      AND NOT EXISTS (
+        SELECT 1 FROM target_rows target WHERE target.target_person_id = snapshot_row.person_id
+      )
   ),
   inserted_people AS (
     INSERT INTO local801.people (
@@ -356,6 +388,15 @@ export const IMPORT_EXECUTION_SQL = `
     WHERE person.organization_id = $1::uuid
       AND person.id = target.target_person_id
       AND target.category IN ('unchanged_existing','existing_with_changes')
+      AND person.archived_at IS NULL
+    RETURNING person.id
+  ),
+  archived_omitted_people AS (
+    UPDATE local801.people person
+    SET archived_at = now(), updated_at = now()
+    FROM omitted_active_people omitted
+    WHERE person.organization_id = $1::uuid
+      AND person.id = omitted.person_id
       AND person.archived_at IS NULL
     RETURNING person.id
   ),
@@ -510,7 +551,9 @@ export const IMPORT_EXECUTION_SQL = `
     SELECT
       (SELECT count(*)::int FROM inserted_people) AS inserted_people,
       (SELECT count(*)::int FROM inserted_snapshot) AS inserted_snapshots,
-      (SELECT count(*)::int FROM inserted_snapshot_rows) AS inserted_snapshot_rows
+      (SELECT count(*)::int FROM inserted_snapshot_rows) AS inserted_snapshot_rows,
+      (SELECT count(*)::int FROM omitted_active_people) AS omitted_people,
+      (SELECT count(*)::int FROM archived_omitted_people) AS archived_omitted_people
   ),
   write_guard AS (
     SELECT CASE WHEN EXISTS (
@@ -520,6 +563,7 @@ export const IMPORT_EXECUTION_SQL = `
         AND (batch.import_kind <> 'current_roster' OR writes.inserted_snapshot_rows = batch.proposed_snapshot_count)
         AND (batch.import_kind = 'current_roster' OR writes.inserted_snapshots = 0)
         AND (batch.import_kind = 'current_roster' OR writes.inserted_snapshot_rows = 0)
+        AND writes.omitted_people = writes.archived_omitted_people
     ) THEN 1 ELSE 1 / 0 END AS ok
   ),
   inserted_approval AS (
@@ -593,6 +637,7 @@ export async function executeAuthoritativeImport(
       totalRows: preflight.review.total,
       existingChanges: preflight.review.existingWithChanges,
       proposedNew: preflight.review.proposedNew,
+      archivedMissing: preflight.review.archivedMissing,
     },
   }, query);
   await transaction([execution, audit]);
@@ -604,6 +649,7 @@ export async function executeAuthoritativeImport(
       total: preflight.review.total,
       existingChanges: preflight.review.existingWithChanges,
       proposedNew: preflight.review.proposedNew,
+      archivedMissing: preflight.review.archivedMissing,
     },
   };
 }

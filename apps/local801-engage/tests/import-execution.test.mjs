@@ -17,6 +17,7 @@ const proposedHash = "a".repeat(64);
 const changesHash = "b".repeat(64);
 const sourceHash = "c".repeat(64);
 const rowSetHash = "d".repeat(64);
+const archivedMissingHash = "e".repeat(64);
 const actor = (role = "membership_data_manager") => ({ organizationId, userId, role });
 
 function summaryRow(overrides = {}) {
@@ -40,6 +41,7 @@ function summaryRow(overrides = {}) {
     proposed_snapshot_count: "0",
     entering_snapshot: "0",
     leaving_snapshot: "0",
+    archived_missing_set_hash: archivedMissingHash,
     ...overrides,
   };
 }
@@ -144,6 +146,7 @@ test("ready execution submits exactly the set-based write statement plus audit i
     totalRows: 2,
     existingChanges: 1,
     proposedNew: 1,
+    archivedMissing: 0,
   });
 });
 
@@ -184,12 +187,15 @@ test("legacy execution performs roster work through SQL CTEs, not JavaScript per
   assert.doesNotMatch(service, /OFFSET/i);
 });
 
-test("current-roster absence is snapshot history only, never an inferred drop, separation, archive, or person deletion", () => {
+test("current-roster execution recoverably archives active people omitted from the reviewed full roster", () => {
   const sql = IMPORT_EXECUTION_SQL;
   assert.match(sql, /inserted_snapshot AS/);
   assert.match(sql, /inserted_snapshot_rows AS/);
   assert.doesNotMatch(sql, /DELETE FROM local801\.people/i);
-  assert.doesNotMatch(sql, /person\.archived_at\s*=\s*now/i);
+  assert.match(sql, /omitted_active_people AS MATERIALIZED/);
+  assert.match(sql, /archived_omitted_people AS[\s\S]*SET archived_at = now\(\), updated_at = now\(\)/i);
+  assert.match(sql, /batch\.import_kind = 'current_roster'/);
+  assert.match(sql, /writes\.omitted_people = writes\.archived_omitted_people/);
   assert.doesNotMatch(sql, /event_type[^\n]*'separation'/i);
   assert.doesNotMatch(sql, /leaving_snapshot[\s\S]*INSERT INTO local801\.membership_events/i);
 });

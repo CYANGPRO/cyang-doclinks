@@ -60,6 +60,7 @@ export type ImportExecutionPreflight = {
     needsAttention: number;
     rejected: number;
     blockingErrors: number;
+    archivedMissing: number;
   };
   shrink: {
     required: boolean;
@@ -234,6 +235,7 @@ export async function getImportExecutionPreflight(
     importKind: row.import_kind,
     sourceSha256: row.source_sha256,
     rowSetHash: row.row_set_hash,
+    archivedMissingSetHash: summary.snapshot?.archivedMissingSetHash ?? null,
     proposedNewSetHash: summary.hashes.proposedNew,
     existingChangesSetHash: summary.hashes.existingChanges,
     counts: [
@@ -310,6 +312,7 @@ export async function getImportExecutionPreflight(
       needsAttention: summary.counts.needsAttention,
       rejected: summary.counts.rejected,
       blockingErrors: summary.counts.blockingErrors,
+      archivedMissing: summary.snapshot?.leaving ?? 0,
     },
     shrink: {
       required: shrinkRequired,

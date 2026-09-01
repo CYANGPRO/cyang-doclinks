@@ -67,6 +67,10 @@ test("current-roster snapshots use the rows returned by insert and update CTEs",
   assert.doesNotMatch(PROTECTED_IMPORT_APPLY_SQL, /SELECT 1 \/ CASE/);
   assert.match(PROTECTED_IMPORT_APPLY_SQL, /counts\.applied_people_count = counts\.mutation_count/);
   assert.match(PROTECTED_IMPORT_APPLY_SQL, /counts\.snapshot_row_count = counts\.mutation_count/);
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /omitted_active_people AS MATERIALIZED/);
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /archived_omitted_people AS[\s\S]*SET archived_at = now\(\), updated_at = now\(\)/);
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /counts\.omitted_person_count = counts\.archived_omitted_count/);
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /counts\.omitted_person_set_hash = \$8::text/);
 });
 
 test("same-date current-roster replacement supersedes the prior snapshot atomically", () => {
@@ -76,7 +80,7 @@ test("same-date current-roster replacement supersedes the prior snapshot atomica
   assert.match(PROTECTED_IMPORT_APPLY_SQL, /supersession_barrier/);
 });
 
-function reconciledResult({ mutations, newPeople }) {
+function reconciledResult({ mutations, newPeople, archivedMissing = 0, archivedMissingSetHash = "e".repeat(64) }) {
   return {
     approved_batch_count: 1,
     executed_set_count: 1,
@@ -87,6 +91,9 @@ function reconciledResult({ mutations, newPeople }) {
     new_people_count: newPeople,
     snapshot_count: 1,
     snapshot_row_count: mutations,
+    omitted_person_count: archivedMissing,
+    omitted_person_set_hash: archivedMissingSetHash,
+    archived_omitted_count: archivedMissing,
     reconciliation_ok: true,
   };
 }
@@ -94,15 +101,25 @@ function reconciledResult({ mutations, newPeople }) {
 test("all-new current roster reconciles every applied and snapshot row", () => {
   assert.doesNotThrow(() => __testing.assertAtomicApplyReconciled(
     reconciledResult({ mutations: 787, newPeople: 787 }),
-    { mutationCount: 787, newPeopleCount: 787, importKind: "current_roster" },
+    { mutationCount: 787, newPeopleCount: 787, archivedMissingCount: 0, archivedMissingSetHash: "e".repeat(64), importKind: "current_roster" },
   ));
 });
 
 test("mixed new and existing current roster reconciles exact counts", () => {
   assert.doesNotThrow(() => __testing.assertAtomicApplyReconciled(
-    reconciledResult({ mutations: 6, newPeople: 2 }),
-    { mutationCount: 6, newPeopleCount: 2, importKind: "current_roster" },
+    reconciledResult({ mutations: 6, newPeople: 2, archivedMissing: 3 }),
+    { mutationCount: 6, newPeopleCount: 2, archivedMissingCount: 3, archivedMissingSetHash: "e".repeat(64), importKind: "current_roster" },
   ));
+});
+
+test("changed omitted-person identity set fails closed even when the removal count is unchanged", () => {
+  assert.throws(
+    () => __testing.assertAtomicApplyReconciled(
+      reconciledResult({ mutations: 6, newPeople: 2, archivedMissing: 3, archivedMissingSetHash: "f".repeat(64) }),
+      { mutationCount: 6, newPeopleCount: 2, archivedMissingCount: 3, archivedMissingSetHash: "e".repeat(64), importKind: "current_roster" },
+    ),
+    (error) => error.code === "ATOMIC_RECONCILIATION_FAILED" && error.status === 503,
+  );
 });
 
 test("snapshot reconciliation mismatch raises a named safe rollback error", () => {
@@ -111,7 +128,7 @@ test("snapshot reconciliation mismatch raises a named safe rollback error", () =
   assert.throws(
     () => __testing.assertAtomicApplyReconciled(
       result,
-      { mutationCount: 6, newPeopleCount: 2, importKind: "current_roster" },
+      { mutationCount: 6, newPeopleCount: 2, archivedMissingCount: 0, archivedMissingSetHash: "e".repeat(64), importKind: "current_roster" },
     ),
     (error) => {
       assert.equal(error.code, "ATOMIC_RECONCILIATION_FAILED");
@@ -175,7 +192,7 @@ test("contact reconciliation mismatches fail the application-level atomic guard"
   assert.throws(
     () => __testing.assertAtomicApplyReconciled(
       result,
-      { mutationCount: 787, newPeopleCount: 0, importKind: "current_roster" },
+      { mutationCount: 787, newPeopleCount: 0, archivedMissingCount: 0, archivedMissingSetHash: "e".repeat(64), importKind: "current_roster" },
     ),
     (error) => error.code === "ATOMIC_RECONCILIATION_FAILED" && error.status === 503,
   );

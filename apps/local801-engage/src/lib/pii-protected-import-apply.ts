@@ -79,6 +79,9 @@ type ApplyResultRow = {
   inserted_contact_index_count: number | string;
   snapshot_count: number | string;
   snapshot_row_count: number | string;
+  omitted_person_count: number | string;
+  omitted_person_set_hash: string;
+  archived_omitted_count: number | string;
   reconciliation_ok: boolean;
 };
 
@@ -135,7 +138,13 @@ function integer(value: unknown) {
 
 function assertAtomicApplyReconciled(
   result: ApplyResultRow | undefined,
-  expected: { mutationCount: number; newPeopleCount: number; importKind: string },
+  expected: {
+    mutationCount: number;
+    newPeopleCount: number;
+    archivedMissingCount: number;
+    archivedMissingSetHash: string | null;
+    importKind: string;
+  },
 ) {
   const currentRoster = expected.importKind === "current_roster";
   if (!result || result.reconciliation_ok !== true
@@ -153,7 +162,10 @@ function assertAtomicApplyReconciled(
     || integer(result.inserted_contact_count) !== integer(result.inserted_contact_pii_count)
     || integer(result.inserted_contact_count) !== integer(result.inserted_contact_index_count)
     || integer(result.snapshot_count) !== (currentRoster ? 1 : 0)
-    || integer(result.snapshot_row_count) !== (currentRoster ? expected.mutationCount : 0)) {
+    || integer(result.snapshot_row_count) !== (currentRoster ? expected.mutationCount : 0)
+    || integer(result.omitted_person_count) !== (currentRoster ? expected.archivedMissingCount : 0)
+    || (currentRoster && result.omitted_person_set_hash !== expected.archivedMissingSetHash)
+    || integer(result.archived_omitted_count) !== (currentRoster ? expected.archivedMissingCount : 0)) {
     throw new ProtectedImportApplyError(
       "ATOMIC_RECONCILIATION_FAILED",
       "The protected import was not committed because the applied roster did not exactly match the reviewed set. No roster changes were applied.",
@@ -282,6 +294,7 @@ function preflightFingerprint(input: {
     importKind: input.importKind,
     sourceSha256: input.sourceSha256,
     rowSetHash: input.rowSetHash,
+    archivedMissingSetHash: input.summary.snapshot?.archivedMissingSetHash ?? null,
     proposedNewSetHash: input.summary.hashes.proposedNew,
     existingChangesSetHash: input.summary.hashes.existingChanges,
     counts: [
@@ -397,6 +410,24 @@ export const PROTECTED_IMPORT_APPLY_SQL = `
     FROM local801.protected_import_execution_mutations mutation
     CROSS JOIN execution_gate gate
     WHERE mutation.organization_id = $1::uuid AND mutation.execution_set_id = gate.id
+  ), prior_snapshot AS MATERIALIZED (
+    SELECT snapshot.id
+    FROM local801.membership_snapshots snapshot CROSS JOIN selected_batch batch
+    WHERE batch.import_kind = 'current_roster'
+      AND snapshot.organization_id = $1::uuid
+      AND snapshot.status = 'approved'
+    ORDER BY snapshot.snapshot_date DESC, snapshot.created_at DESC, snapshot.id DESC
+    LIMIT 1
+  ), omitted_active_people AS MATERIALIZED (
+    SELECT DISTINCT snapshot_row.person_id
+    FROM prior_snapshot snapshot
+    JOIN local801.membership_snapshot_rows snapshot_row
+      ON snapshot_row.organization_id = $1::uuid AND snapshot_row.snapshot_id = snapshot.id
+    JOIN local801.people person
+      ON person.organization_id = $1::uuid AND person.id = snapshot_row.person_id AND person.archived_at IS NULL
+    WHERE NOT EXISTS (
+      SELECT 1 FROM mutations mutation WHERE mutation.target_person_id = snapshot_row.person_id
+    )
   ), inserted_people AS (
     INSERT INTO local801.people (
       id, organization_id, preferred_name, first_name, last_name, membership_status,
@@ -445,6 +476,14 @@ export const PROTECTED_IMPORT_APPLY_SQL = `
     SELECT id, membership_status, department, work_location, classification FROM inserted_people
     UNION ALL
     SELECT id, membership_status, department, work_location, classification FROM updated_people
+  ), archived_omitted_people AS (
+    UPDATE local801.people person
+    SET archived_at = now(), updated_at = now()
+    FROM omitted_active_people omitted
+    WHERE person.organization_id = $1::uuid
+      AND person.id = omitted.person_id
+      AND person.archived_at IS NULL
+    RETURNING person.id
   ), person_barrier AS (
     SELECT count(*) AS touched FROM applied_people
   ), upsert_person_pii AS (
@@ -799,7 +838,11 @@ export const PROTECTED_IMPORT_APPLY_SQL = `
         JOIN inserted_contacts inserted_contact ON inserted_contact.id = contact_index.entity_id
       ) AS inserted_contact_index_count,
       (SELECT count(*)::int FROM inserted_snapshot) AS snapshot_count,
-      (SELECT count(*)::int FROM inserted_snapshot_rows) AS snapshot_row_count
+      (SELECT count(*)::int FROM inserted_snapshot_rows) AS snapshot_row_count,
+      (SELECT count(*)::int FROM omitted_active_people) AS omitted_person_count,
+      (SELECT encode(public.digest(COALESCE(string_agg(omitted.person_id::text, ':' ORDER BY omitted.person_id), ''), 'sha256'), 'hex')
+        FROM omitted_active_people omitted) AS omitted_person_set_hash,
+      (SELECT count(*)::int FROM archived_omitted_people) AS archived_omitted_count
   ), write_guard AS MATERIALIZED (
     SELECT EXISTS (
       SELECT 1 FROM selected_batch batch CROSS JOIN write_counts counts
@@ -816,6 +859,8 @@ export const PROTECTED_IMPORT_APPLY_SQL = `
         AND (SELECT ok FROM identifier_conflict_guard)
         AND (batch.import_kind <> 'current_roster' OR (counts.snapshot_count = 1 AND counts.snapshot_row_count = counts.mutation_count))
         AND (batch.import_kind = 'current_roster' OR (counts.snapshot_count = 0 AND counts.snapshot_row_count = 0))
+        AND counts.omitted_person_count = counts.archived_omitted_count
+        AND (batch.import_kind <> 'current_roster' OR counts.omitted_person_set_hash = $8::text)
     ) AS ok
   ), inserted_approval AS (
     INSERT INTO local801.import_approvals (
@@ -850,6 +895,7 @@ export const PROTECTED_IMPORT_APPLY_SQL = `
     counts.contact_candidate_count, counts.contact_applied_count,
     counts.inserted_contact_count, counts.inserted_contact_pii_count, counts.inserted_contact_index_count,
     counts.snapshot_count, counts.snapshot_row_count,
+    counts.omitted_person_count, counts.omitted_person_set_hash, counts.archived_omitted_count,
     guard.ok AS reconciliation_ok
   FROM write_counts counts CROSS JOIN write_guard guard
 `;
@@ -913,10 +959,13 @@ export async function applyPreparedProtectedImport(
       actor.role,
       expectedMutationFingerprint,
       summary.counts.proposedNew,
+      summary.snapshot?.archivedMissingSetHash ?? "",
     ]);
     assertAtomicApplyReconciled(result, {
       mutationCount: mutations.length,
       newPeopleCount: summary.counts.proposedNew,
+      archivedMissingCount: summary.snapshot?.leaving ?? 0,
+      archivedMissingSetHash: summary.snapshot?.archivedMissingSetHash ?? null,
       importKind: locked.import_kind,
     });
 
@@ -934,6 +983,7 @@ export async function applyPreparedProtectedImport(
         totalRows: summary.counts.total,
         existingChanges: summary.counts.existingWithChanges,
         proposedNew: summary.counts.proposedNew,
+        archivedMissing: summary.snapshot?.leaving ?? 0,
       },
     }, query);
     const [auditResult] = await query<{ audit_written: boolean }>(audit.sql, audit.parameters);

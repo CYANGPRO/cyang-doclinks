@@ -47,6 +47,7 @@ type SummaryRow = {
   proposed_snapshot_count: number | string;
   entering_snapshot: number | string;
   leaving_snapshot: number | string;
+  archived_missing_set_hash: string;
 };
 
 type DecisionRow = {
@@ -171,6 +172,10 @@ export async function getProtectedImportReviewSummary(
     SELECT snapshot_row.person_id FROM previous_snapshot snapshot
     JOIN local801.membership_snapshot_rows snapshot_row
       ON snapshot_row.snapshot_id = snapshot.id AND snapshot_row.organization_id = $1
+  ), active_previous_people AS (
+    SELECT previous.person_id FROM previous_people previous
+    JOIN local801.people person
+      ON person.organization_id = $1 AND person.id = previous.person_id AND person.archived_at IS NULL
   ), proposed_people AS (
     SELECT DISTINCT person_id FROM categorized
     WHERE category IN ('unchanged_existing', 'existing_with_changes') AND person_id IS NOT NULL
@@ -180,7 +185,9 @@ export async function getProtectedImportReviewSummary(
       (SELECT count(*) FROM previous_people) AS previous_snapshot_count,
       (SELECT count(*) FROM proposed_people) + aggregate.proposed_new AS proposed_snapshot_count,
       (SELECT count(*) FROM proposed_people proposed WHERE NOT EXISTS (SELECT 1 FROM previous_people previous WHERE previous.person_id = proposed.person_id)) + aggregate.proposed_new AS entering_snapshot,
-      (SELECT count(*) FROM previous_people previous WHERE NOT EXISTS (SELECT 1 FROM proposed_people proposed WHERE proposed.person_id = previous.person_id)) AS leaving_snapshot,
+      (SELECT count(*) FROM active_previous_people previous WHERE NOT EXISTS (SELECT 1 FROM proposed_people proposed WHERE proposed.person_id = previous.person_id)) AS leaving_snapshot,
+      (SELECT encode(public.digest(COALESCE(string_agg(previous.person_id::text, ':' ORDER BY previous.person_id), ''), 'sha256'), 'hex')
+        FROM active_previous_people previous WHERE NOT EXISTS (SELECT 1 FROM proposed_people proposed WHERE proposed.person_id = previous.person_id)) AS archived_missing_set_hash,
       errors.blocking_error_count, errors.unassociated_blocking_error_count, aggregate.*
     FROM local801.import_batches batch CROSS JOIN aggregate CROSS JOIN batch_error_counts errors
     WHERE batch.organization_id = $1 AND batch.id = $2`, [actor.organizationId, batchId]);
@@ -219,6 +226,7 @@ export async function getProtectedImportReviewSummary(
     proposed,
     entering: count(row.entering_snapshot),
     leaving: count(row.leaving_snapshot),
+    archivedMissingSetHash: row.archived_missing_set_hash,
     net,
     percentChange: previous ? (net / previous) * 100 : null,
   } : null;

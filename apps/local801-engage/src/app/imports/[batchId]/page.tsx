@@ -120,12 +120,12 @@ export default async function ImportDetailPage({ params, searchParams }: { param
       </DisclosureCard>
 
       {summary.snapshot ? <DisclosureCard className="import-snapshot-disclosure" title="Roster snapshot comparison" description={summary.snapshot.percentChange == null ? "This is the first approved roster snapshot available for comparison." : `The proposed roster changes the approved snapshot by ${summary.snapshot.percentChange.toFixed(1)}%.`} defaultOpen={shrink}>
-        {shrink ? <AlertBanner title="Review this large roster decrease carefully" tone="danger">A person missing from this file is not automatically a membership drop, separation, archive, or deletion. Your acknowledgement applies only to this exact set of changes.</AlertBanner> : null}
+        {shrink ? <AlertBanner title="Review this large roster decrease carefully" tone="danger">Approving this full roster will archive {summary.snapshot.leaving} active {summary.snapshot.leaving === 1 ? "person" : "people"} who appeared in the previous approved roster but no longer appear in this one. The archive is recoverable and preserves their history. Your acknowledgement applies only to this exact set of changes.</AlertBanner> : null}
         <ReviewSummary>
           <StatCard label="Previous" value={summary.snapshot.previous} detail={summary.snapshot.previousDate ?? "No approved snapshot"} />
           <StatCard label="Proposed" value={summary.snapshot.proposed} detail="Eligible current set" />
           <StatCard label="Entering" value={summary.snapshot.entering} detail="Matched/new vs previous" />
-          <StatCard label="Leaving" value={summary.snapshot.leaving} detail="Absence only; no mutation" tone={shrink ? "danger" : "default"} />
+          <StatCard label="To archive" value={summary.snapshot.leaving} detail="Absent active people · history preserved" tone={summary.snapshot.leaving ? "danger" : "default"} />
           <StatCard label="Net" value={summary.snapshot.net > 0 ? `+${summary.snapshot.net}` : summary.snapshot.net} detail="Proposed minus previous" />
         </ReviewSummary>
       </DisclosureCard> : null}
@@ -153,6 +153,7 @@ export default async function ImportDetailPage({ params, searchParams }: { param
             effectiveDate={preflight.plan.effectiveDate}
             duplicateSourceNeedsAck={duplicateNeedsAck}
             largeShrinkNeedsAck={shrinkNeedsAck}
+            removalCount={summary.snapshot?.leaving ?? 0}
             migrationPending={preflight.plan.migrationPending}
             fingerprint={preflight.fingerprint}
           />
@@ -162,8 +163,8 @@ export default async function ImportDetailPage({ params, searchParams }: { param
             executionMode ? (
               <div className="section-card">
                 <h3>{executionMode === "protected" ? "Apply approved roster changes" : "Apply Preview changes"}</h3>
-                <p className="muted">Before changing the roster, CAT rechecks your role, the clean malware scan, review decisions, dates, duplicate-file acknowledgement, large-decrease acknowledgement, and confirmation code. It saves the roster changes and audit record together—or saves none of them.</p>
-                <ImportExecutionControl batchId={batchId} fingerprint={preflight.fingerprint} fingerprintShort={preflight.fingerprintShort} mode={executionMode} />
+                <p className="muted">Before changing the roster, CAT rechecks your role, the clean malware scan, review decisions, dates, duplicate-file acknowledgement, large-decrease acknowledgement, and confirmation code. A full roster also archives the reviewed active people who no longer appear. It saves the roster changes and audit record together—or saves none of them.</p>
+                <ImportExecutionControl batchId={batchId} fingerprint={preflight.fingerprint} fingerprintShort={preflight.fingerprintShort} removalCount={summary.snapshot?.leaving ?? 0} mode={executionMode} />
               </div>
             ) : (
               <AlertBanner title="Applying changes is temporarily unavailable" tone="warning">Your review has been saved and no member records have changed. An 801 Administrator must complete the protected import setup before this batch can be applied.</AlertBanner>
