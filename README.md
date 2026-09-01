@@ -90,9 +90,9 @@ No screenshots are included here because this repo does not ship a maintained pu
 
 ### Prerequisites
 
-- Proof baseline: Node.js `22.16.0`
+- Proof baseline: Node.js `22.19.0`
 - Proof baseline: npm `10.9.2`
-- Supported range: Node.js `>=22.16.0 <25`, npm `>=10.9.2 <12`
+- Supported range: Node.js `>=22.19.0 <25`, npm `>=10.9.2 <12`
 - copyable proof/local environment from `.env.example`
 
 Preferred local pins are included in:
@@ -188,7 +188,7 @@ npm run setup:proof:windows
 If Volta is installed but your current shell has not refreshed PATH yet, you can invoke the proof command through the installed binary directly:
 
 ```powershell
-& "C:\Program Files\Volta\volta.exe" run --node 22.16.0 --npm 10.9.2 npm run prove:build
+& "C:\Program Files\Volta\volta.exe" run --node 22.19.0 --npm 10.9.2 npm run prove:build
 ```
 
 See [PROVE_BUILD.md](PROVE_BUILD.md) for the command-by-command proof rationale.

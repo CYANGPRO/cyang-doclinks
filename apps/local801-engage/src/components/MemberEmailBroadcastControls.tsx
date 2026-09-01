@@ -3,7 +3,7 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
-const AUDIENCE_GROUPS = ["Membership", "CAT", "Departments", "Saved lists"] as const;
+const AUDIENCE_GROUPS = ["Membership", "Users", "CAT", "Departments", "Saved lists"] as const;
 
 type Audience = {
   audienceKey: string;
@@ -22,7 +22,7 @@ type Audience = {
 type AudienceOption = {
   key: string;
   label: string;
-  group: "Membership" | "CAT" | "Departments" | "Saved lists";
+  group: "Membership" | "Users" | "CAT" | "Departments" | "Saved lists";
   description: string;
 };
 
@@ -131,7 +131,7 @@ export function MemberEmailBroadcastComposer({ audienceOptions }: { audienceOpti
           </optgroup> : null;
         })}
       </select>
-      <p className="field-help" id="member-email-audience-help">Departments contain current members only. Saved lists reuse frozen campaign populations; unknown membership records remain excluded.</p>
+      <p className="field-help" id="member-email-audience-help">Registered users include every active Local 801 account with an assigned role. Departments contain current members only; unknown membership records remain excluded.</p>
     </div>
     <div className="form-actions">
       <button className="button secondary" type="button" onClick={loadPreview} disabled={pending !== null}>

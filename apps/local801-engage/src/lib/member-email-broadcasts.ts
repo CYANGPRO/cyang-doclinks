@@ -33,6 +33,7 @@ const STATIC_AUDIENCES = Object.freeze({
   members: { label: "All current members", description: "Everyone marked as a current union member." },
   nonmembers: { label: "Current nonmembers", description: "Everyone marked as a current nonmember." },
   represented_unit: { label: "Entire represented unit", description: "Current members and nonmembers; unknown statuses stay excluded." },
+  registered_users: { label: "All registered users", description: "Every active Local 801 account, across all assigned roles." },
   cat_members: { label: "All CAT members", description: "Active CAT administrators, leads, and CAT members." },
 } as const);
 
@@ -51,7 +52,7 @@ type AudienceSelection = {
 export type MemberEmailAudienceOption = {
   key: string;
   label: string;
-  group: "Membership" | "CAT" | "Departments" | "Saved lists";
+  group: "Membership" | "Users" | "CAT" | "Departments" | "Saved lists";
   description: string;
 };
 
@@ -325,6 +326,7 @@ export async function listMemberEmailAudienceOptions(context: WorkspaceContext, 
     { key: "members", label: STATIC_AUDIENCES.members.label, group: "Membership", description: STATIC_AUDIENCES.members.description },
     { key: "nonmembers", label: STATIC_AUDIENCES.nonmembers.label, group: "Membership", description: STATIC_AUDIENCES.nonmembers.description },
     { key: "represented_unit", label: STATIC_AUDIENCES.represented_unit.label, group: "Membership", description: STATIC_AUDIENCES.represented_unit.description },
+    { key: "registered_users", label: STATIC_AUDIENCES.registered_users.label, group: "Users", description: STATIC_AUDIENCES.registered_users.description },
     { key: "cat_members", label: STATIC_AUDIENCES.cat_members.label, group: "CAT", description: STATIC_AUDIENCES.cat_members.description },
     ...departments.filter((row) => AUDIENCE_HANDLE_RE.test(row.handle) && row.label).map((row) => ({
       key: `department:${row.handle}`, label: row.label, group: "Departments" as const,
@@ -366,13 +368,13 @@ function selectedContact(
   keyConfig: PiiKeyConfiguration,
 ) {
   if (row.recipient_kind === "workspace_user") {
-    if (!row.user_id) fail("CAT_RECIPIENT_INVALID", "A CAT member recipient could not be established safely.", 503);
+    if (!row.user_id) fail("WORKSPACE_RECIPIENT_INVALID", "A registered user recipient could not be established safely.", 503);
     const value = mode === "legacy"
       ? row.user_email_value
       : (() => {
           const format = Number(row.user_email_format_version);
           if (!row.user_email_encrypted_payload || !row.user_email_key_version || format !== 1) {
-            fail("PROTECTED_CONTACT_MISSING", "A selected CAT member is missing protected email data.", 503);
+            fail("PROTECTED_CONTACT_MISSING", "A selected registered user is missing protected email data.", 503);
           }
           return decryptPiiField({
             encryptedPayload: row.user_email_encrypted_payload,
@@ -401,8 +403,9 @@ async function buildAudiencePlan(context: WorkspaceContext, selectionInput: unkn
   const snapshot = await latestApprovedSnapshot(context, query);
   const selection = await resolveAudienceSelection(context, snapshot.id, selectionInput, query);
 
-  const rows = selection.kind === "cat_members" ? await query<AudienceRow>(`
-    /* member-email:synthetic-cat-audience */
+  const workspaceUserAudience = selection.kind === "registered_users" || selection.kind === "cat_members";
+  const rows = workspaceUserAudience ? await query<AudienceRow>(`
+    /* member-email:synthetic-workspace-user-audience */
     SELECT 'workspace_user'::text AS recipient_kind, NULL::text AS person_id, app_user.id::text AS user_id,
       NULL::text AS home_contact_id, NULL::text AS home_contact_value,
       NULL::text AS home_encrypted_payload, NULL::text AS home_key_version, NULL::integer AS home_format_version,
@@ -412,16 +415,20 @@ async function buildAudiencePlan(context: WorkspaceContext, selectionInput: unkn
       protected.email_encryption_key_version AS user_email_key_version,
       protected.email_encryption_format_version AS user_email_format_version
     FROM local801.users app_user
-    JOIN local801.workspace_user_roles user_role ON user_role.user_id = app_user.id
-    JOIN local801.workspace_roles role
-      ON role.id = user_role.role_id AND role.organization_id = $1::uuid
     LEFT JOIN local801.user_pii protected
       ON protected.organization_id = app_user.organization_id AND protected.user_id = app_user.id
     WHERE app_user.organization_id = $1::uuid AND app_user.deactivated_at IS NULL
-      AND role.code IN ('cat_admin','cat_lead','cat_member')
+      AND EXISTS (
+        SELECT 1
+        FROM local801.workspace_user_roles user_role
+        JOIN local801.workspace_roles role
+          ON role.id = user_role.role_id AND role.organization_id = $1::uuid
+        WHERE user_role.user_id = app_user.id
+          AND ($2::text = 'registered_users' OR role.code IN ('cat_admin','cat_lead','cat_member'))
+      )
     ORDER BY app_user.id
     LIMIT ${MAX_RECIPIENTS + 1}
-  `, [context.organizationId]) : await query<AudienceRow>(`
+  `, [context.organizationId, selection.kind]) : await query<AudienceRow>(`
     /* member-email:synthetic-audience */
     SELECT 'person'::text AS recipient_kind, snapshot_row.person_id::text, NULL::text AS user_id,
       home.id::text AS home_contact_id, home.contact_value AS home_contact_value,

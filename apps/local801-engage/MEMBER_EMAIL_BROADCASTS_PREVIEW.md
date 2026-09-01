@@ -17,7 +17,7 @@ Production and production-launch runtimes return Not Found before authentication
 
 ## Preview workflow
 
-1. The sender chooses a higher-level audience: current members, current nonmembers, the represented unit, active CAT roles, one current-member department, or an existing campaign population used as a saved list. Unknown membership records remain excluded.
+1. The sender chooses a higher-level audience: current members, current nonmembers, the represented unit, all active registered Local 801 users, active CAT roles, one current-member department, or an existing campaign population used as a saved list. Unknown membership records remain excluded.
 2. CAT resolves the choice against the latest approved snapshot. Department values and campaign selections use opaque handles, and the chosen audience label and protected recipient set are frozen into the draft.
 3. For roster audiences, a verified primary Home Email is preferred and verified primary Work Email is the fallback. The CAT-role audience uses the active CAT account email.
 4. CAT deduplicates normalized addresses and displays counts only. Required operational notices do not apply a marketing unsubscribe preference; provider bounce and complaint handling remains a separate production requirement.

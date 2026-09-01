@@ -1,5 +1,5 @@
 import type { NextConfig } from "next";
-import { withSentryConfig } from "@sentry/nextjs";
+import { withSentryConfig } from "@sentry/nextjs/config";
 import { getR2BucketEnv } from "./src/lib/envConfig";
 
 const isProd = process.env.NODE_ENV === "production";

@@ -17,7 +17,6 @@ const REQUIRED_PROOF_TOOLS = [
   { packageName: "next", purpose: "build/typegen", binName: "next" },
   { packageName: "@playwright/test", purpose: "regression tests" },
   { packageName: "playwright", purpose: "browser installer / CLI", binName: "playwright" },
-  { packageName: "start-server-and-test", purpose: "production-build test harness", binName: "start-server-and-test" },
 ];
 
 const REQUIRED_PROOF_CLI_CHECKS = [

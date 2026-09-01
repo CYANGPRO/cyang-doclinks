@@ -297,7 +297,7 @@ test("CAT audience uses active CAT account email data without widening the real-
   const summary = await previewMemberEmailAudience(context(), {
     env: previewEnv,
     keyConfig,
-    query: audienceQuery(async (sql) => sql.includes("member-email:synthetic-cat-audience") ? catRows : null),
+    query: audienceQuery(async (sql) => sql.includes("member-email:synthetic-workspace-user-audience") ? catRows : null),
   }, "cat_members");
   assert.equal(summary.audienceLabel, "All CAT members");
   assert.equal(summary.representedRecipients, 1);
@@ -308,7 +308,47 @@ test("CAT audience uses active CAT account email data without widening the real-
   assert.equal(memberEmailRealTestBoundary(realTestEnv).memberDeliveryAllowed, false);
 });
 
-test("audience options expose broad groups, CAT members, departments, and saved campaign lists", async () => {
+test("registered-user audience includes active assigned users across Local 801 roles", async () => {
+  const registeredRows = ["system.owner", "report.viewer"].map((name, index) => ({
+    recipient_kind: "workspace_user",
+    person_id: null,
+    user_id: `20000000-0000-4000-8000-0000000001${index.toString().padStart(2, "0")}`,
+    home_contact_id: null,
+    home_contact_value: null,
+    home_encrypted_payload: null,
+    home_key_version: null,
+    home_format_version: null,
+    work_contact_id: null,
+    work_contact_value: null,
+    work_encrypted_payload: null,
+    work_key_version: null,
+    work_format_version: null,
+    user_email_value: `${name}@example.test`,
+    user_email_encrypted_payload: null,
+    user_email_key_version: null,
+    user_email_format_version: null,
+  }));
+  let audienceParameters;
+  let audienceSql;
+  const summary = await previewMemberEmailAudience(context(), {
+    env: previewEnv,
+    keyConfig,
+    query: audienceQuery(async (sql, parameters) => {
+      if (!sql.includes("member-email:synthetic-workspace-user-audience")) return null;
+      audienceSql = sql;
+      audienceParameters = parameters;
+      return registeredRows;
+    }),
+  }, "registered_users");
+  assert.equal(summary.audienceLabel, "All registered users");
+  assert.equal(summary.representedRecipients, 2);
+  assert.equal(summary.eligible, 2);
+  assert.deepEqual(audienceParameters, [organizationId, "registered_users"]);
+  assert.match(audienceSql, /AND EXISTS \(/);
+  assert.doesNotMatch(JSON.stringify(summary), /system\.owner|report\.viewer|@example\.test/i);
+});
+
+test("audience options expose membership, registered users, CAT, departments, and saved campaign lists", async () => {
   const options = await listMemberEmailAudienceOptions(context(), {
     env: previewEnv,
     query: audienceQuery(async (sql) => {
@@ -322,10 +362,10 @@ test("audience options expose broad groups, CAT members, departments, and saved 
     }),
   });
   assert.deepEqual(options.map((option) => option.key), [
-    "members", "nonmembers", "represented_unit", "cat_members",
+    "members", "nonmembers", "represented_unit", "registered_users", "cat_members",
     `department:${"c".repeat(64)}`, `campaign:${"d".repeat(64)}`,
   ]);
-  assert.deepEqual([...new Set(options.map((option) => option.group))], ["Membership", "CAT", "Departments", "Saved lists"]);
+  assert.deepEqual([...new Set(options.map((option) => option.group))], ["Membership", "Users", "CAT", "Departments", "Saved lists"]);
 });
 
 test("recipient preview rejects a non-synthetic address before creating a snapshot", async () => {
@@ -418,6 +458,7 @@ test("only System Owner and Local Administrator receive the broadcast permission
 test("migration and routes preserve Preview-only, protected, authenticated boundaries", () => {
   const migration = readFileSync(new URL("../db/migrations/0035__preview_member_email_broadcasts.sql", import.meta.url), "utf8");
   const audienceMigration = readFileSync(new URL("../db/migrations/0036__member_email_audience_selection.sql", import.meta.url), "utf8");
+  const registeredUserMigration = readFileSync(new URL("../db/migrations/0037__registered_user_email_audience.sql", import.meta.url), "utf8");
   const page = readFileSync(new URL("../src/app/email-broadcasts/page.tsx", import.meta.url), "utf8");
   const http = readFileSync(new URL("../src/lib/member-email-http.ts", import.meta.url), "utf8");
   assert.match(migration, /email_encrypted_payload/);
@@ -426,6 +467,7 @@ test("migration and routes preserve Preview-only, protected, authenticated bound
   assert.match(audienceMigration, /audience_kind/);
   assert.match(audienceMigration, /user_id uuid references local801\.users/);
   assert.match(audienceMigration, /member_email_recipients_subject_ck/);
+  assert.match(registeredUserMigration, /registered_users/);
   assert.match(page, /memberEmailPreviewEnabled\(\)/);
   assert.match(page, /permission="sendMemberEmail"/);
   assert.match(http, /requirePreviewUser\("sendMemberEmail"\)/);

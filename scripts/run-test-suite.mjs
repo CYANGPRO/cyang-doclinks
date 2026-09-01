@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { copyFileSync, existsSync } from "node:fs";
 import { getPlaywrightInstallInvocation } from "./lib/playwright-runtime.mjs";
 import { spawnRepoTool } from "./lib/repo-tooling.mjs";
@@ -15,11 +15,6 @@ function resolveSpawn(command, args) {
     };
   }
   return { command, args };
-}
-
-function quoteArg(arg) {
-  if (!/[ \t"]/u.test(arg)) return arg;
-  return `"${arg.replace(/(["\\])/g, "\\$1")}"`;
 }
 
 function getProductionBuildState() {
@@ -66,6 +61,76 @@ function run(command, args) {
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
 
+async function waitForServer(url, timeoutMs = 120_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(url, {
+        redirect: "manual",
+        signal: AbortSignal.timeout(2_000),
+      });
+      if (response.status >= 200 && response.status < 500) return;
+    } catch {
+      // The production server may still be starting.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  throw new Error(`Production server did not become ready at ${url} within ${timeoutMs}ms.`);
+}
+
+function stopServerTree(server) {
+  if (!server?.pid) return;
+  if (process.platform === "win32") {
+    spawnSync("taskkill.exe", ["/PID", String(server.pid), "/T", "/F"], {
+      stdio: "ignore",
+      shell: false,
+      windowsHide: true,
+    });
+    return;
+  }
+  try {
+    process.kill(-server.pid, "SIGTERM");
+  } catch {
+    try {
+      server.kill("SIGTERM");
+    } catch {
+      // The server already stopped.
+    }
+  }
+}
+
+async function runPlaywrightWithManagedServer(args) {
+  const resolved = resolveSpawn("npm", ["run", "start"]);
+  const server = spawn(resolved.command, resolved.args, {
+    stdio: "inherit",
+    shell: false,
+    env: process.env,
+    windowsHide: true,
+    detached: process.platform !== "win32",
+  });
+  let spawnError = null;
+  server.once("error", (error) => {
+    spawnError = error;
+  });
+
+  let result;
+  try {
+    await waitForServer("http://127.0.0.1:3000");
+    if (spawnError) failSpawn(spawnError, resolved.command, resolved.args);
+    result = spawnRepoTool("playwright", ["test", ...args], {
+      stdio: "inherit",
+      // Keep source-level helper tests in an explicit test environment while
+      // the separately spawned Next server continues to run its production build.
+      env: { ...process.env, NODE_ENV: "test" },
+    });
+  } finally {
+    stopServerTree(server);
+  }
+
+  if (result?.error) failSpawn(result.error, "playwright", ["test", ...args]);
+  if (result?.status !== 0) process.exit(result?.status ?? 1);
+}
+
 await withProofLock({ label: "run-test-suite" }, async () => {
   const forwardedArgs = [];
   let requireExistingBuild = false;
@@ -90,11 +155,6 @@ await withProofLock({ label: "run-test-suite" }, async () => {
   const explicitSpecArgs = forwardedArgs.filter((arg) => /\.spec\.(ts|tsx|js|jsx|mts|mjs)$/u.test(arg));
   const suiteFiles = explicitSpecArgs.length > 0 ? [] : listSuiteFiles(profile);
   const effectiveArgs = explicitSpecArgs.length > 0 ? forwardedArgs : [...forwardedArgs, ...suiteFiles];
-
-  const playwrightCommand =
-    effectiveArgs.length > 0
-      ? `node ${quoteArg("scripts/run-repo-tool.mjs")} playwright test ${effectiveArgs.map(quoteArg).join(" ")}`
-      : `node ${quoteArg("scripts/run-repo-tool.mjs")} playwright test`;
 
   if (!existsSync(".env.local") && existsSync(".env.example") && process.env.SKIP_ENV_LOCAL_BOOTSTRAP !== "1") {
     copyFileSync(".env.example", ".env.local");
@@ -129,10 +189,5 @@ await withProofLock({ label: "run-test-suite" }, async () => {
     console.log(`Running Playwright suite profile: ${profile}`);
   }
 
-  run("repo-tool", [
-    "start-server-and-test",
-    "npm run start",
-    "http://127.0.0.1:3000",
-    playwrightCommand,
-  ]);
+  await runPlaywrightWithManagedServer(effectiveArgs);
 });

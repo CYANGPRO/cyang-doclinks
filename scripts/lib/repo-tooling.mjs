@@ -10,7 +10,6 @@ export const REPO_TOOL_DEFINITIONS = {
   tsc: { packageName: "typescript", binName: "tsc" },
   next: { packageName: "next", binName: "next" },
   playwright: { packageName: "playwright", binName: "playwright" },
-  "start-server-and-test": { packageName: "start-server-and-test", binName: "start-server-and-test" },
 };
 
 function getPackageJsonPath(packageName) {
@@ -72,13 +71,6 @@ export function spawnRepoTool(toolName, args = [], options = {}) {
       `Repo-local tool "${toolName}" is not installed under ${status.packageName}. ` +
         "Run `npm ci` and ensure proof devDependencies are present."
     );
-  }
-
-  if (toolName === "start-server-and-test" && status.packageBinPath) {
-    return spawnSync(process.execPath, [status.packageBinPath, ...args], {
-      shell: false,
-      ...options,
-    });
   }
 
   if (process.platform === "win32") {

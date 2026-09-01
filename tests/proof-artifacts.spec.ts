@@ -12,7 +12,7 @@ test.describe("proof artifact reporting", () => {
       repoName: "cyang-doclinks",
       proofCommand: "npm run prove:build",
       dockerProofRun: false,
-      nodeVersion: "22.16.0",
+      nodeVersion: "22.19.0",
       npmVersion: "10.9.2",
       gitCommitHash: "abc123",
       notProven: ["live Postgres connectivity"],
@@ -46,7 +46,7 @@ test.describe("proof artifact reporting", () => {
       repoName: "cyang-doclinks",
       proofCommand: "npm run prove:build",
       dockerProofRun: true,
-      nodeVersion: "22.16.0",
+      nodeVersion: "22.19.0",
       npmVersion: "10.9.2",
       notProven: [],
     });

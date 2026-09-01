@@ -4,7 +4,7 @@ This repository is set up so a reviewer can verify the build from a clean contai
 
 ## Proof Baseline
 
-- Node.js: `22.16.0`
+- Node.js: `22.19.0`
 - npm: `10.9.2`
 - Package manager: `npm` with the committed `package-lock.json`
 
@@ -36,7 +36,7 @@ It does not relax the pinned proof baseline. It is only a convenience path to re
 If Volta is already installed but your current shell has not picked up the new PATH yet, you can run the full proof path directly through the installed binary:
 
 ```powershell
-& "C:\Program Files\Volta\volta.exe" run --node 22.16.0 --npm 10.9.2 npm run prove:build
+& "C:\Program Files\Volta\volta.exe" run --node 22.19.0 --npm 10.9.2 npm run prove:build
 ```
 
 That command was verified against this repository and cleanly reuses the pinned Node/npm baseline for the full proof sequence.
@@ -103,7 +103,7 @@ docker build --no-cache -f Dockerfile.proof -t cyang-doclinks-proof .
 ```
 
 What Docker adds, and only why:
-- `Dockerfile.proof` uses the pinned baseline image `node:22.16.0-bookworm`.
+- `Dockerfile.proof` uses the pinned baseline image `node:22.19.0-bookworm`.
 - It copies the proof-install verifier and repo-tooling helper into the image before `npm ci`, so the container install enforces the same install-time proof gate as a local checkout.
 - It sets `PROOF_DOCKER_BUILD=1` so the proof report records that the run happened inside the Docker proof path.
 - It sets `PROOF_PLAYWRIGHT_INSTALL_WITH_DEPS=1` so the same repo proof wrapper installs Chromium together with the Linux OS packages Playwright needs in a clean container.

@@ -6,9 +6,9 @@ test.describe("prove build runtime policy", () => {
     const result = evaluateProofRuntime({
       actualNodeVersion: "24.13.0",
       actualNpmVersion: "10.9.2",
-      requiredNodeVersion: "22.16.0",
+      requiredNodeVersion: "22.19.0",
       requiredNpmVersion: "10.9.2",
-      nodeEngineRange: ">=22.16.0 <25",
+      nodeEngineRange: ">=22.19.0 <25",
       npmEngineRange: ">=10.9.2 <12",
     });
 
@@ -18,7 +18,7 @@ test.describe("prove build runtime policy", () => {
   });
 
   test("rejects versions outside the declared engine range", () => {
-    expect(satisfiesVersionRange("25.0.0", ">=22.16.0 <25")).toBeFalsy();
+    expect(satisfiesVersionRange("25.0.0", ">=22.19.0 <25")).toBeFalsy();
     expect(satisfiesVersionRange("10.8.9", ">=10.9.2 <12")).toBeFalsy();
     expect(satisfiesVersionRange("12.0.0", ">=10.9.2 <12")).toBeFalsy();
   });

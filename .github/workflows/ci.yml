@@ -23,7 +23,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22.16.0
+          node-version: 22.19.0
           cache: npm
           cache-dependency-path: apps/local801-engage/package-lock.json
       - name: Install CAT dependencies
@@ -59,7 +59,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22.16.0
+          node-version: 22.19.0
           cache: npm
 
       - name: Install
@@ -121,7 +121,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22.16.0
+          node-version: 22.19.0
           cache: npm
 
       - name: Install
@@ -155,7 +155,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22.16.0
+          node-version: 22.19.0
           cache: npm
 
       - name: Install
@@ -191,7 +191,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22.16.0
+          node-version: 22.19.0
           cache: npm
 
       - name: Install
@@ -227,7 +227,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22.16.0
+          node-version: 22.19.0
           cache: npm
 
       - name: Install
@@ -266,7 +266,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22.16.0
+          node-version: 22.19.0
           cache: npm
 
       - name: Install
@@ -300,7 +300,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22.16.0
+          node-version: 22.19.0
           cache: npm
 
       - name: Install

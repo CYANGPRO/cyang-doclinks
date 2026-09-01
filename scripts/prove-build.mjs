@@ -17,9 +17,9 @@ import {
 } from "./lib/proof-artifacts.mjs";
 import { withProofLock } from "./lib/proof-lock.mjs";
 
-const REQUIRED_NODE = "22.16.0";
+const REQUIRED_NODE = "22.19.0";
 const REQUIRED_NPM = "10.9.2";
-const PACKAGE_NODE_ENGINE = ">=22.16.0 <25";
+const PACKAGE_NODE_ENGINE = ">=22.19.0 <25";
 const PACKAGE_NPM_ENGINE = ">=10.9.2 <12";
 const NOT_PROVEN = [
   "live Postgres connectivity",
