@@ -188,7 +188,7 @@ test("large campaign populations stay aggregate-first, opaque, and detail-bounde
   assert.equal("person_id" in detail.people[0], false);
   assert.match(detail.people[0].personHandle, /^[0-9a-f]{64}$/);
   assert.match(detailSql, /member\.organization_id = \$1/);
-  assert.match(detailSql, /person_handle > \$7::text/);
+  assert.match(detailSql, /person_handle > \$8::text/);
   assert.match(detailSql, /digest\(\$1::text \|\| ':' \|\| person\.id::text/);
   assert.doesNotMatch(detailSql, /OFFSET/i);
   assert.doesNotMatch(detailSql, /disabled_at/);

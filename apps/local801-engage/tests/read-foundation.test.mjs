@@ -221,6 +221,21 @@ test("membership summary returns a safe unavailable state on database failure", 
   assert.equal(summary.source, "unavailable");
 });
 
+test("membership office breakdown returns the complete approved-snapshot office list", async () => {
+  let capturedSql = "";
+  const rows = await getMembershipBreakdowns(workspaceContext(), async (sql) => {
+    capturedSql = sql;
+    return [
+      { dimension: "location", label: "Central Office", represented: "12", members: "9" },
+      { dimension: "location", label: "North Office", represented: "8", members: "8" },
+    ];
+  });
+  assert.deepEqual(rows.map((row) => row.label), ["Central Office", "North Office"]);
+  assert.match(capturedSql, /person\.work_location/);
+  assert.match(capturedSql, /btrim\(work_location\)/);
+  assert.doesNotMatch(capturedSql, /LIMIT 150/);
+});
+
 test("membership services deny roles without manageImports before SQL", async () => {
   for (const service of [getMembershipSummary, getMembershipBreakdowns]) {
     let calls = 0;

@@ -38,8 +38,9 @@ import { hydrateCampaignDetailFromProtectedPii } from "@/lib/pii-protected-campa
 import { isPiiProtectedReadEnabled } from "@/lib/pii-protected-read";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
 
-function populationHref(campaignHandle: string, pageSize: number, cursor: string | null, assignment: string, workflow: string) {
+function populationHref(campaignHandle: string, pageSize: number, cursor: string | null, assignment: string, workflow: string, search: string) {
   const query = new URLSearchParams({ limit: String(pageSize), assignment, workflow });
+  if (search) query.set("q", search);
   if (cursor) query.set("cursor", cursor);
   return `/campaigns/${campaignHandle}?${query}`;
 }
@@ -88,6 +89,7 @@ export default async function CampaignDetailPage({
   if (!can(user.role, "manageCampaigns")) redirect("/unauthorized");
 
   const candidateTerm = scalar(input.candidate_q).trim();
+  const populationSearch = scalar(input.q).trim();
   const assignmentFilter = scalar(input.assignment);
   const workflowFilter = scalar(input.workflow);
   let campaign: Awaited<ReturnType<typeof getCampaignDetail>> = null;
@@ -110,7 +112,7 @@ export default async function CampaignDetailPage({
     if (campaign) {
       [population, options, organizerProgress] = await Promise.all([
         getCampaignPopulationPage(context, campaignHandle, { cursor: input.cursor, pageSize: input.limit,
-          assignment: assignmentFilter, workflow: workflowFilter }),
+          assignment: assignmentFilter, workflow: workflowFilter, search: populationSearch }),
         getCampaignManagementOptions(context),
         getCampaignOrganizerProgress(context, campaignHandle),
       ]);
@@ -203,10 +205,11 @@ export default async function CampaignDetailPage({
         badge={protectedReadEnabled ? <StatusBadge tone="info">Protected PII</StatusBadge> : null}
       >
         <form method="get" className="form-grid campaign-operation-filters">
+          <div className="field campaign-participant-search"><label htmlFor="campaign-participant-search">Search people</label><input id="campaign-participant-search" name="q" type="search" defaultValue={population.filters.search} maxLength={100} placeholder="Name or exact email" /></div>
           <div className="field"><label htmlFor="campaign-assignment-filter">Assignment</label><select id="campaign-assignment-filter" name="assignment" defaultValue={population.filters.assignment}><option value="all">All</option><option value="assigned">Assigned</option><option value="unassigned">Unassigned</option></select></div>
           <div className="field"><label htmlFor="campaign-workflow-filter">Workflow</label><select id="campaign-workflow-filter" name="workflow" defaultValue={population.filters.workflow}><option value="all">All</option><option value="not_contacted">Not contacted</option><option value="contacted">Contacted</option><option value="completed">Completed</option><option value="overdue">Overdue</option></select></div>
           <div className="field"><label htmlFor="campaign-page-size">Rows</label><select id="campaign-page-size" name="limit" defaultValue={String(population.pageSize)}><option value="25">25</option><option value="50">50</option><option value="100">100</option></select></div>
-          <div className="form-actions"><button className="button secondary" type="submit">Apply filters</button></div>
+          <div className="form-actions"><button className="button secondary" type="submit">Search and filter</button>{population.filters.search ? <Link className="button tertiary" href={populationHref(campaignHandle, population.pageSize, null, population.filters.assignment, population.filters.workflow, "")}>Clear search</Link> : null}</div>
         </form>
         {population.people.length === 0 ? (
           <EmptyState title={campaign.population > 0 ? "No participants match these filters" : "No one in this campaign"} description={campaign.population > 0 ? "Change the assignment or workflow filters to see other participants." : campaign.status === "draft" ? "Use Campaign operations to build this draft population before activation." : "No active people are included in this campaign."} />
@@ -250,8 +253,8 @@ export default async function CampaignDetailPage({
           </DataTable>
           <Pagination
             label={`Showing up to ${population.pageSize} of ${population.total}`}
-            historyBackFallbackHref={hasCursor ? populationHref(campaignHandle, population.pageSize, null, population.filters.assignment, population.filters.workflow) : null}
-            nextHref={population.nextCursor ? populationHref(campaignHandle, population.pageSize, population.nextCursor, population.filters.assignment, population.filters.workflow) : null}
+            historyBackFallbackHref={hasCursor ? populationHref(campaignHandle, population.pageSize, null, population.filters.assignment, population.filters.workflow, population.filters.search) : null}
+            nextHref={population.nextCursor ? populationHref(campaignHandle, population.pageSize, population.nextCursor, population.filters.assignment, population.filters.workflow, population.filters.search) : null}
           />
         </>}
       </SectionCard>

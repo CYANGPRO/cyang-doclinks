@@ -13,12 +13,12 @@ type MembershipGroup = "classification" | "department" | "location";
 const membershipGroups: Array<{ key: MembershipGroup; label: string; header: string }> = [
   { key: "classification", label: "Classification", header: "Classification" },
   { key: "department", label: "Department", header: "Department" },
-  { key: "location", label: "Section name", header: "Section name" },
+  { key: "location", label: "Office", header: "Office / work location" },
 ];
 
 function selectedGroup(value: string | string[] | undefined): MembershipGroup {
   const selected = Array.isArray(value) ? value[0] : value;
-  return selected === "department" || selected === "location" ? selected : "classification";
+  return selected === "classification" || selected === "department" ? selected : "location";
 }
 
 function countLabel(value: number | "—", singular: string, plural: string) {
@@ -85,7 +85,7 @@ export default async function MembershipPage({
         <StatCard label="Approved snapshot" value={snapshotLabel(summary.snapshotDate)} detail={countLabel(summary.represented, "represented person", "represented people")} />
       </section>
 
-      <SectionCard className="membership-breakdown-card" title="Membership by group" description="Compare current membership across one group at a time. Results appear alphabetically by group name.">
+      <SectionCard className="membership-breakdown-card" title="Membership by group" description="Compare current membership across one group at a time. The Office view includes every office in the latest approved snapshot.">
         <nav
           aria-label="Membership breakdown views"
           style={{
@@ -114,14 +114,16 @@ export default async function MembershipPage({
         {visibleBreakdowns.length === 0 ? (
           <EmptyState title={`No ${activeGroup.label.toLowerCase()} data`} description="No current membership totals are available for this group." />
         ) : (
-          <DataTable caption={`Membership by ${activeGroup.label.toLowerCase()}`} headers={[activeGroup.header, "Represented", "Members", "Membership"]}>
-            {visibleBreakdowns.map((row) => <tr key={`${row.dimension}-${row.label}`}>
-              <td><strong>{row.label === "Unspecified" ? row.label : <Link href={drilldownHref(group, row.label)}>{row.label}</Link>}</strong></td>
-              <td>{row.represented}</td>
-              <td>{row.members}</td>
-              <td>{row.membershipPercentage}</td>
-            </tr>)}
-          </DataTable>
+          <div className="membership-breakdown-scroll" tabIndex={0} role="region" aria-label={`Scrollable membership by ${activeGroup.label.toLowerCase()}`}>
+            <DataTable caption={`Membership by ${activeGroup.label.toLowerCase()}`} headers={[activeGroup.header, "Represented", "Members", "Membership"]}>
+              {visibleBreakdowns.map((row) => <tr key={`${row.dimension}-${row.label}`}>
+                <td><strong>{row.label === "Unspecified" ? row.label : <Link href={drilldownHref(group, row.label)}>{row.label}</Link>}</strong></td>
+                <td>{row.represented}</td>
+                <td>{row.members}</td>
+                <td>{row.membershipPercentage}</td>
+              </tr>)}
+            </DataTable>
+          </div>
         )}
       </SectionCard>
 

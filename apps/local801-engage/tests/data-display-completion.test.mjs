@@ -65,10 +65,10 @@ test("Directory and New Hires expose the same compact employee summaries", () =>
   }
 });
 
-test("Membership names the roster location breakdown by its Excel source field", () => {
+test("Membership names the roster location breakdown as the office view", () => {
   const membership = source("src/app/membership/page.tsx");
-  assert.match(membership, /key: "location", label: "Section name", header: "Section name"/);
-  assert.doesNotMatch(membership, /key: "location", label: "Work location"/);
+  assert.match(membership, /key: "location", label: "Office", header: "Office \/ work location"/);
+  assert.match(membership, /membership-breakdown-scroll/);
 });
 
 test("LCAT has organization-wide oversight while CAT remains assignment constrained", () => {

@@ -2,6 +2,14 @@ import "server-only";
 
 import { can } from "./access.ts";
 import { queryLocal801, type DatabaseQuery } from "./db.ts";
+import {
+  createPiiBlindIndex,
+  getPiiKeyConfiguration,
+  normalizePiiEmail,
+  normalizePiiNameForSearch,
+  PiiProtectionError,
+} from "./pii-protection.ts";
+import { assertPiiProtectedReadState, getPiiProtectedReadMode } from "./pii-protected-read.ts";
 import type { WorkspaceContext } from "./workspace-context.ts";
 
 type CampaignRow = {
@@ -57,6 +65,7 @@ export type CampaignPopulationPerson = {
 export type CampaignPopulationFilters = {
   assignment: "all" | "assigned" | "unassigned";
   workflow: "all" | "not_contacted" | "contacted" | "completed" | "overdue";
+  search: string;
 };
 
 export type CampaignOrganizerProgress = {
@@ -69,6 +78,9 @@ export type CampaignOrganizerProgress = {
 };
 
 const handlePattern = /^[0-9a-f]{64}$/;
+const MAX_POPULATION_SEARCH_LENGTH = 100;
+type SearchToken = { key_version: string; hash: string };
+type PopulationSearchMaterial = { protectedMode: boolean; tokens: SearchToken[]; email: SearchToken | null };
 
 function number(value: string | number | null | undefined) {
   const parsed = Number(value ?? 0);
@@ -89,6 +101,40 @@ function dateOnly(value: string | Date | null) {
 
 function publicStatus(value: string | null): CampaignSummary["status"] {
   return value === "active" || value === "closed" ? value : "draft";
+}
+
+function scalarSearch(value: unknown) {
+  if (Array.isArray(value)) return scalarSearch(value[0]);
+  return typeof value === "string" ? value.trim().replace(/\s+/g, " ").slice(0, MAX_POPULATION_SEARCH_LENGTH) : "";
+}
+
+function escapedContains(value: string) {
+  return value ? `%${value.replace(/[\\%_]/g, (character) => `\\${character}`)}%` : null;
+}
+
+async function populationSearchMaterial(
+  context: WorkspaceContext,
+  search: string,
+  query: DatabaseQuery,
+): Promise<PopulationSearchMaterial> {
+  const mode = getPiiProtectedReadMode();
+  if (mode === "legacy" || !search) return { protectedMode: mode !== "legacy", tokens: [], email: null };
+  await assertPiiProtectedReadState(context.organizationId, query, mode);
+  const config = getPiiKeyConfiguration();
+  const words = normalizePiiNameForSearch(search).split(" ").filter((word) => Array.from(word).length >= 3);
+  const tokens = words.map((word) => {
+    const prefix = Array.from(word).slice(0, 20).join("");
+    const index = createPiiBlindIndex(prefix, { organizationId: context.organizationId, domain: "search:combined-name:prefix" }, config);
+    return { key_version: index.blindIndexKeyVersion, hash: index.blindIndex };
+  });
+  let email: SearchToken | null = null;
+  try {
+    const index = createPiiBlindIndex(normalizePiiEmail(search), { organizationId: context.organizationId, domain: "contact:work-email" }, config);
+    email = { key_version: index.blindIndexKeyVersion, hash: index.blindIndex };
+  } catch (error) {
+    if (!(error instanceof PiiProtectionError) || error.code !== "NORMALIZATION_FAILED") throw error;
+  }
+  return { protectedMode: true, tokens, email };
 }
 
 function validTimestamp(value: unknown) {
@@ -308,7 +354,7 @@ type PopulationRow = {
 export async function getCampaignPopulationPage(
   context: WorkspaceContext,
   campaignHandle: string,
-  input: { cursor?: unknown; pageSize?: unknown; assignment?: unknown; workflow?: unknown } = {},
+  input: { cursor?: unknown; pageSize?: unknown; assignment?: unknown; workflow?: unknown; search?: unknown } = {},
   query: DatabaseQuery = queryLocal801,
 ) {
   requireAccess(context);
@@ -317,9 +363,13 @@ export async function getCampaignPopulationPage(
   const pageSize = [25, 50, 100].includes(requested) ? requested : 50;
   const filters = normalizeCampaignPopulationFilters(input);
   const position = populationCursor(input.cursor);
+  const search = await populationSearchMaterial(context, filters.search, query);
   const rows = await query<PopulationRow>(`
     /* campaigns:population-keyset-page */
-    WITH selected_campaign AS (
+    WITH search_tokens AS (
+      SELECT value.key_version, value.hash
+      FROM jsonb_to_recordset($10::text::jsonb) AS value(key_version text, hash text)
+    ), selected_campaign AS (
       SELECT campaign.id
       FROM local801.outreach_campaigns campaign
       WHERE campaign.organization_id = $1::uuid
@@ -375,20 +425,62 @@ export async function getCampaignPopulationPage(
           OR ($4::text = 'contacted' AND COALESCE(contact.contacted, false))
           OR ($4::text = 'completed' AND assignment.status = 'completed')
           OR ($4::text = 'overdue' AND assignment.status = 'open' AND assignment.due_at < now()))
+        AND ($5::text IS NULL
+          OR (NOT $9::boolean AND (
+            person.first_name ILIKE $5::text ESCAPE '\\'
+            OR person.last_name ILIKE $5::text ESCAPE '\\'
+            OR person.preferred_name ILIKE $5::text ESCAPE '\\'
+            OR EXISTS (
+              SELECT 1 FROM local801.person_contact_methods contact_method
+              WHERE contact_method.organization_id = $1::uuid
+                AND contact_method.person_id = person.id
+                AND contact_method.contact_type IN ('work_email', 'personal_email')
+                AND contact_method.archived_at IS NULL
+                AND contact_method.contact_value ILIKE $5::text ESCAPE '\\'
+            )
+          ))
+          OR ($9::boolean AND jsonb_array_length($10::text::jsonb) > 0 AND NOT EXISTS (
+            SELECT 1 FROM search_tokens wanted
+            WHERE NOT EXISTS (
+              SELECT 1 FROM local801.person_search_tokens stored
+              WHERE stored.organization_id = $1::uuid
+                AND stored.person_id = person.id
+                AND stored.token_domain = 'combined_name'
+                AND stored.token_kind = 'prefix'
+                AND stored.token_key_version = wanted.key_version
+                AND stored.token_hash = wanted.hash
+            )
+          ))
+          OR ($9::boolean AND $11::text IS NOT NULL AND EXISTS (
+            SELECT 1
+            FROM local801.person_contact_methods contact_method
+            JOIN local801.pii_exact_indexes email_index
+              ON email_index.organization_id = contact_method.organization_id
+             AND email_index.entity_type = 'person_contact_method'
+             AND email_index.entity_id = contact_method.id
+             AND email_index.index_domain = 'contact:work-email'
+             AND email_index.index_key_version = $11::text
+             AND email_index.index_hash = $12::text
+            WHERE contact_method.organization_id = $1::uuid
+              AND contact_method.person_id = person.id
+              AND contact_method.contact_type = 'work_email'
+              AND contact_method.archived_at IS NULL
+          )))
     ), page_rows AS (
       SELECT *
       FROM population
-      WHERE ($5::text IS NULL
-        OR last_name > $5::text
-        OR (last_name = $5::text AND first_name > $6::text)
-        OR (last_name = $5::text AND first_name = $6::text AND person_handle > $7::text))
+      WHERE ($6::text IS NULL
+        OR last_name > $6::text
+        OR (last_name = $6::text AND first_name > $7::text)
+        OR (last_name = $6::text AND first_name = $7::text AND person_handle > $8::text))
       ORDER BY last_name ASC, first_name ASC, person_handle ASC
-      LIMIT $8::integer
+      LIMIT $13::integer
     )
     SELECT * FROM page_rows
     ORDER BY last_name ASC, first_name ASC, person_handle ASC
   `, [context.organizationId, campaignHandle, filters.assignment, filters.workflow,
-    position?.lastName ?? null, position?.firstName ?? null, position?.handle ?? null, pageSize + 1]);
+    escapedContains(filters.search), position?.lastName ?? null, position?.firstName ?? null, position?.handle ?? null,
+    search.protectedMode, JSON.stringify(search.tokens), search.email?.key_version ?? null, search.email?.hash ?? null, pageSize + 1]);
 
   const dataRows = rows.filter((row) => row.person_handle && handlePattern.test(row.person_handle));
   const hasNext = dataRows.length > pageSize;
@@ -416,11 +508,11 @@ export async function getCampaignPopulationPage(
   };
 }
 
-export function normalizeCampaignPopulationFilters(input: { assignment?: unknown; workflow?: unknown }): CampaignPopulationFilters {
+export function normalizeCampaignPopulationFilters(input: { assignment?: unknown; workflow?: unknown; search?: unknown }): CampaignPopulationFilters {
   const assignment = input.assignment === "assigned" || input.assignment === "unassigned" ? input.assignment : "all";
   const workflow = ["not_contacted", "contacted", "completed", "overdue"].includes(String(input.workflow))
     ? input.workflow as CampaignPopulationFilters["workflow"] : "all";
-  return { assignment, workflow };
+  return { assignment, workflow, search: scalarSearch(input.search) };
 }
 
 export async function getCampaignOrganizerProgress(

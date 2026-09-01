@@ -137,7 +137,7 @@ test("campaign participant detail uses opaque employee handles and bounded keyse
   assert.deepEqual(parameters.slice(2, 4), ["all", "all"]);
   assert.equal(parameters.at(-1), 101);
   assert.match(sqlText, /member\.organization_id = \$1::uuid/);
-  assert.match(sqlText, /person_handle > \$7::text/);
+  assert.match(sqlText, /person_handle > \$8::text/);
   assert.match(sqlText, /assignment\.id IS NOT NULL/);
   assert.match(sqlText, /contact\.contacted/);
   assert.match(sqlText, /assignment\.due_at < now\(\)/);
@@ -158,11 +158,25 @@ test("campaign population filters and page sizes fail closed to bounded factual 
     workflow: "overdue",
   }, async (_sql, values) => { parameters = values; return []; });
   assert.equal(page.pageSize, 50);
-  assert.deepEqual(page.filters, { assignment: "unassigned", workflow: "overdue" });
+  assert.deepEqual(page.filters, { assignment: "unassigned", workflow: "overdue", search: "" });
   assert.deepEqual(parameters.slice(2, 4), ["unassigned", "overdue"]);
   assert.deepEqual(__testing.normalizeCampaignPopulationFilters({ assignment: "any", workflow: "priority" }), {
-    assignment: "all", workflow: "all",
+    assignment: "all", workflow: "all", search: "",
   });
+});
+
+test("campaign participant search is bounded and parameterized for names or email", async () => {
+  let sqlText = "";
+  let parameters = [];
+  const page = await getCampaignPopulationPage(context(), campaignHandle, {
+    search: `  Avery   Organizer  ${"x".repeat(200)}`,
+  }, async (sql, values) => { sqlText = sql; parameters = values; return []; });
+  assert.equal(page.filters.search.length, 100);
+  assert.equal(parameters[4], `%${page.filters.search}%`);
+  assert.match(sqlText, /person\.first_name ILIKE \$5/);
+  assert.match(sqlText, /contact_method\.contact_value ILIKE \$5/);
+  assert.match(sqlText, /person_search_tokens/);
+  assert.match(sqlText, /index_domain = 'contact:work-email'/);
 });
 
 test("campaign organizer progress is a bounded factual aggregate with opaque organizer handles", async () => {

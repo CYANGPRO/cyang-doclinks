@@ -153,14 +153,14 @@ export async function getMembershipBreakdowns(
     represented: number | string;
     members: number | string;
   }>(`
-    /* membership:bounded-breakdowns */
+    /* membership:complete-breakdowns */
     WITH latest_snapshot AS (
       SELECT id FROM local801.membership_snapshots
       WHERE organization_id = $1 AND status = 'approved'
       ORDER BY snapshot_date DESC, approved_at DESC NULLS LAST, created_at DESC, id DESC
       LIMIT 1
     ), current_people AS (
-      SELECT person.department, person.classification, person.section, snapshot_row.membership_status
+      SELECT person.department, person.classification, person.work_location, snapshot_row.membership_status
       FROM latest_snapshot snapshot
       JOIN local801.membership_snapshot_rows snapshot_row
         ON snapshot_row.snapshot_id = snapshot.id AND snapshot_row.organization_id = $1
@@ -176,14 +176,13 @@ export async function getMembershipBreakdowns(
         count(*), count(*) FILTER (WHERE membership_status = 'member')
       FROM current_people GROUP BY 2
       UNION ALL
-      SELECT 'location', COALESCE(NULLIF(btrim(section), ''), 'Unspecified'),
+      SELECT 'location', COALESCE(NULLIF(btrim(work_location), ''), 'Unspecified'),
         count(*), count(*) FILTER (WHERE membership_status = 'member')
       FROM current_people GROUP BY 2
     )
     SELECT dimension, label, represented, members
     FROM grouped
     ORDER BY dimension, label ASC
-    LIMIT 150
   `, [context.organizationId]);
   return rows.map((row) => {
     const represented = finiteNumber(row.represented);

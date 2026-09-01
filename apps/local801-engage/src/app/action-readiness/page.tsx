@@ -1,13 +1,11 @@
 import { redirect } from "next/navigation";
-import { ActionCatalogManager } from "@/components/ActionCatalogManager";
+import { ActionCatalogManager, ActionResponseEditor } from "@/components/ActionCatalogManager";
 import { DataTable, EmptyState, PageHeader, SectionCard, StatusBadge } from "@/components/DesignSystem";
 import { ProtectedPage } from "@/components/ProtectedPage";
 import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
 import { listEmployeeActionDefinitions } from "@/lib/employee-actions";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
-
-const responseStates = ["Willing", "Considering", "Declined", "Completed"];
 
 export default async function ActionReadinessCatalogPage() {
   const user = await getPreviewUser();
@@ -23,7 +21,7 @@ export default async function ActionReadinessCatalogPage() {
         {actions.map((action, index) => <tr key={action.handle}>
           <td>{index + 1}</td>
           <td><strong>{action.label}</strong><div className="muted">Commitment level {action.engagementLevel}</div></td>
-          <td><div className="page-actions compact-actions">{responseStates.map((state) => <StatusBadge key={state} tone={state === "Completed" || state === "Willing" ? "ready" : state === "Declined" ? "warning" : "pending"}>{state}</StatusBadge>)}</div></td>
+          <td><div className="page-actions compact-actions">{action.responseOptions.filter((option) => option.enabled).map((option) => <StatusBadge key={option.value} tone={option.value === "completed" || option.value === "willing" ? "ready" : option.value === "declined" ? "warning" : "pending"}>{option.label}</StatusBadge>)}</div><ActionResponseEditor action={action} /></td>
         </tr>)}
       </DataTable>}
       <p className="muted">“Not recorded” means no response has been entered yet. Use “Declines all actions” on the outreach record when that describes the member’s overall response.</p>

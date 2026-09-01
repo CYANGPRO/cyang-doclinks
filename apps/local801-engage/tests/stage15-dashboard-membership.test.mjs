@@ -61,7 +61,8 @@ test("membership page consolidates the snapshot and keeps authorized lifecycle d
   assert.match(source, /href="\/new-hires"/);
   assert.match(source, /href="\/membership\/data-quality"/);
   assert.match(source, /label\.localeCompare\(b\.label/);
-  assert.match(source, /Results appear alphabetically by group name/);
+  assert.match(source, /visibleBreakdowns[\s\S]*label\.localeCompare\(b\.label/);
+  assert.match(source, /every office in the latest approved snapshot/);
 });
 
 test("dashboard converts urgent aggregates and current work into scope-aware drill-through queues", () => {

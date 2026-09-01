@@ -14,12 +14,16 @@ test("Stage 18 campaign page exposes bounded factual operations and strict keyse
   assert.match(page, /live count preview and a second confirmation/);
   assert.match(page, /name="assignment"/);
   assert.match(page, /name="workflow"/);
+  assert.match(page, /name="q"/);
+  assert.match(page, /Name or exact email/);
   assert.match(page, /<option value="25">25<\/option>/);
   assert.match(page, /<option value="50">50<\/option>/);
   assert.match(page, /<option value="100">100<\/option>/);
   assert.doesNotMatch(page, /<option value="20000"/);
-  assert.match(campaigns, /person_handle > \$7::text/);
-  assert.match(campaigns, /LIMIT \$8::integer/);
+  assert.match(campaigns, /person_handle > \$8::text/);
+  assert.match(campaigns, /LIMIT \$13::integer/);
+  assert.match(campaigns, /person_search_tokens/);
+  assert.match(campaigns, /contact:work-email/);
   assert.match(campaigns, /LIMIT 100/);
   assert.doesNotMatch(campaigns, /\bOFFSET\b/i);
   assert.match(component, /Preview population change/);

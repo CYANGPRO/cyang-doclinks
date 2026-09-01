@@ -7,6 +7,7 @@ import {
   listEmployeeActionDefinitions,
   recordEmployeeActionPosture,
   recordEmployeeActionResponse,
+  updateEmployeeActionResponseOptions,
 } from "../src/lib/employee-actions.ts";
 
 const organizationId = "11111111-1111-4111-8111-111111111111";
@@ -78,6 +79,12 @@ test("action definitions are dynamic, bounded, and expose non-capability handles
   assert.notEqual(rows[0].handle, actionId);
   assert.equal(rows[0].label, "Attend a meeting");
   assert.equal(rows[1].scope, "campaign");
+  assert.deepEqual(rows[0].responseOptions, [
+    { value: "willing", label: "Willing", enabled: true },
+    { value: "considering", label: "Considering", enabled: true },
+    { value: "declined", label: "Declined", enabled: true },
+    { value: "completed", label: "Completed", enabled: true },
+  ]);
   assert.deepEqual(calls[0].parameters, [organizationId]);
   assert.match(calls[0].sql, /FROM local801\.employee_actions/);
   assert.match(calls[0].sql, /organization_id = \$1::uuid/);
@@ -138,6 +145,7 @@ test("recording willingness after decline-all automatically reopens by append-on
   assert.match(statements[0].sql, /response_status/);
   assert.equal(statements[0].parameters[3], "willing");
   assert.match(statements[0].sql, /COALESCE\(event\.occurred_at, now\(\)\)/);
+  assert.match(statements[0].sql, /ANY\(action\.enabled_response_statuses\)/);
   assert.match(statements[1].sql, /audit/);
   assert.doesNotMatch(statements[0].sql, /DELETE FROM|UPDATE local801\.employee_action_all_declines/i);
 });
@@ -242,6 +250,47 @@ test("approved CAT, LCAT, data, and administrator roles can create audited actio
     label: "Not allowed",
     engagementLevel: 1,
   }, { query }), /not authorized/i);
+});
+
+test("action managers can rename and enable response choices without changing response meanings", async () => {
+  const statements = [];
+  const query = async (sql) => {
+    if (sql.includes("employee-actions:resolve-handle")) return [{ id: actionId }];
+    throw new Error("Unexpected response-option query");
+  };
+  const responses = [
+    { value: "willing", label: "Ready to help", enabled: true },
+    { value: "considering", label: "Needs more information", enabled: true },
+    { value: "declined", label: "Not participating", enabled: false },
+    { value: "completed", label: "Done", enabled: true },
+  ];
+  const result = await updateEmployeeActionResponseOptions(context("cat_admin"), {
+    actionHandle,
+    responses,
+  }, {
+    query,
+    runTransaction: async (items) => statements.push(...items),
+    prepareAudit: async (event) => ({ sql: "/* audit */ SELECT 1", parameters: [event.payload.enabledResponses] }),
+  });
+  assert.equal(result.updated, true);
+  assert.deepEqual(result.responseOptions, responses);
+  assert.equal(statements.length, 2);
+  assert.match(statements[0].sql, /employee-actions:update-response-options/);
+  assert.match(statements[0].sql, /enabled_response_statuses = \$7::text\[\]/);
+  assert.deepEqual(statements[0].parameters[6], ["willing", "considering", "completed"]);
+  assert.match(statements[0].sql, /role\.code IN \('system_owner','local_admin','membership_data_manager','cat_admin','cat_lead','cat_member'\)/);
+  assert.deepEqual(statements[1].parameters[0], ["willing", "considering", "completed"]);
+});
+
+test("custom action response choices require one enabled choice and distinct visible labels", () => {
+  const base = [
+    { value: "willing", label: "Same", enabled: true },
+    { value: "considering", label: "Same", enabled: true },
+    { value: "declined", label: "Declined", enabled: false },
+    { value: "completed", label: "Completed", enabled: false },
+  ];
+  assert.throws(() => __testing.requireResponseOptions(base), /must be different/);
+  assert.throws(() => __testing.requireResponseOptions(base.map((item) => ({ ...item, label: item.value, enabled: false }))), /at least one/);
 });
 
 test("runtime contract matches the applied 0008 schema and does not use the superseded draft tables", async () => {

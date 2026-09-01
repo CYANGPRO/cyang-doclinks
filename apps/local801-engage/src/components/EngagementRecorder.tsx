@@ -220,17 +220,17 @@ export function EngagementRecorder({
             const current = currentByAction.get(action.handle) as ActionResponse | undefined;
             const selected = actionSelections[action.handle] ?? current ?? "";
             const fieldId = `action-response-${action.handle}`;
+            const currentOption = current ? action.responseOptions.find((option) => option.value === current) : null;
+            const availableOptions = action.responseOptions.filter((option) => option.enabled);
             return <article className="section-card" key={action.handle}>
-              <div className="section-heading"><div><h3>{action.label}</h3><p>Engagement level {action.engagementLevel} · Current: {current || "not recorded"}</p></div></div>
+              <div className="section-heading"><div><h3>{action.label}</h3><p>Engagement level {action.engagementLevel} · Current: {currentOption?.label || current || "not recorded"}</p></div></div>
               <div className="form-grid action-readiness-editor">
                 <div className="field">
                   <label htmlFor={fieldId}>Response</label>
                   <select id={fieldId} value={selected} onChange={(event) => setActionSelections((previous) => ({ ...previous, [action.handle]: event.target.value as ActionResponse | "" }))}>
                     <option value="">Choose a response</option>
-                    <option value="willing">Willing</option>
-                    <option value="considering">Considering</option>
-                    <option value="declined">Declined</option>
-                    <option value="completed">Completed</option>
+                    {currentOption && !currentOption.enabled ? <option value={currentOption.value} disabled>{currentOption.label} (no longer available)</option> : null}
+                    {availableOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
                 </div>
                 <div className="field action-readiness-submit">
