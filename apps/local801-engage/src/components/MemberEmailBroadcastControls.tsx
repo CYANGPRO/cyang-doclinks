@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import styles from "./MemberEmailBroadcastControls.module.css";
 
 const AUDIENCE_GROUPS = ["Membership", "Users", "CAT", "Departments", "Saved lists"] as const;
 
@@ -32,6 +33,19 @@ function isoDateTime(value: string) {
   if (!value) return null;
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? "invalid" : parsed.toISOString();
+}
+
+function formatSnapshotDate(value: string) {
+  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? new Date(`${value}T00:00:00Z`)
+    : new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(parsed);
 }
 
 async function post(url: string, body: Record<string, unknown>) {
@@ -138,17 +152,59 @@ export function MemberEmailBroadcastComposer({ audienceOptions }: { audienceOpti
         {pending === "preview" ? "Checking…" : "Preview synthetic recipients"}
       </button>
     </div>
-    {audience ? <><div className="callout neutral"><strong>Selected audience:</strong> {audience.audienceLabel}</div>
-      <div className="metric-grid compact-metrics" aria-label="Synthetic recipient preview">
-      <div className="metric-card"><span>Eligible deliveries</span><strong>{audience.eligible}</strong></div>
-      <div className="metric-card"><span>Selected recipients</span><strong>{audience.representedRecipients}</strong></div>
-      <div className="metric-card"><span>Home preferred</span><strong>{audience.homePreferred}</strong></div>
-      <div className="metric-card"><span>Work fallback</span><strong>{audience.workFallback}</strong></div>
-      <div className="metric-card"><span>Missing</span><strong>{audience.missing}</strong></div>
-      <div className="metric-card"><span>Duplicate</span><strong>{audience.duplicate}</strong></div>
-      <div className="metric-card"><span>Suppressed</span><strong>{audience.suppressed}</strong></div>
-      <div className="metric-card"><span>Snapshot</span><strong>{audience.snapshotDate}</strong></div>
-    </div></> : null}
+    {audience ? <section className={styles.recipientPreview} aria-labelledby="recipient-preview-title" aria-live="polite">
+      <header className={styles.previewHeader}>
+        <div>
+          <span className={styles.eyebrow}>Recipient preview</span>
+          <h3 id="recipient-preview-title">{audience.audienceLabel}</h3>
+          <p>Approved membership snapshot from {formatSnapshotDate(audience.snapshotDate)}</p>
+        </div>
+        <span className={styles.readyBadge}><span aria-hidden="true">✓</span> Checked</span>
+      </header>
+
+      <div className={styles.deliverySummary}>
+        <div>
+          <span className={styles.summaryLabel}>Ready to receive</span>
+          <strong>{audience.eligible}</strong>
+          <span>of {audience.representedRecipients} selected recipients</span>
+        </div>
+        <progress className={styles.deliveryProgress} value={audience.eligible} max={Math.max(audience.representedRecipients, 1)}>
+          {audience.eligible} of {audience.representedRecipients}
+        </progress>
+      </div>
+
+      <div className={styles.breakdownSection}>
+        <div className={styles.breakdownHeading}>
+          <h4>Address selection</h4>
+          <p>CAT prefers a home address, then falls back to a work address.</p>
+        </div>
+        <dl className={styles.addressGrid}>
+          <div><dt>Home address</dt><dd>{audience.homePreferred}</dd></div>
+          <div><dt>Work fallback</dt><dd>{audience.workFallback}</dd></div>
+        </dl>
+      </div>
+
+      <div className={styles.breakdownSection}>
+        <div className={styles.breakdownHeading}>
+          <h4>Not deliverable</h4>
+          <p>These records are excluded before the draft is created.</p>
+        </div>
+        <dl className={styles.exclusionGrid}>
+          <div data-empty={audience.missing === 0}><dt>Missing email</dt><dd>{audience.missing}</dd></div>
+          <div data-empty={audience.duplicate === 0}><dt>Duplicate removed</dt><dd>{audience.duplicate}</dd></div>
+          <div data-empty={audience.suppressed === 0}><dt>Suppressed</dt><dd>{audience.suppressed}</dd></div>
+        </dl>
+      </div>
+
+      <p className={styles.privacyNote}>Only aggregate counts are shown here. Recipient addresses remain protected.</p>
+    </section> : null}
+    <div className={styles.composeHeading}>
+      <span>Next</span>
+      <div>
+        <h3>Compose the notice</h3>
+        <p>The draft can be created after the selected audience has been checked.</p>
+      </div>
+    </div>
     <div className="field">
       <label htmlFor="member-email-subject">Subject</label>
       <input id="member-email-subject" name="subject" required maxLength={160} />
