@@ -3,9 +3,13 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
+const AUDIENCE_GROUPS = ["Membership", "CAT", "Departments", "Saved lists"] as const;
+
 type Audience = {
+  audienceKey: string;
+  audienceLabel: string;
   snapshotDate: string;
-  representedMembers: number;
+  representedRecipients: number;
   eligible: number;
   missing: number;
   duplicate: number;
@@ -13,6 +17,13 @@ type Audience = {
   homePreferred: number;
   workFallback: number;
   syntheticOnly: true;
+};
+
+type AudienceOption = {
+  key: string;
+  label: string;
+  group: "Membership" | "CAT" | "Departments" | "Saved lists";
+  description: string;
 };
 
 type Feedback = { tone: "error" | "success"; message: string } | null;
@@ -40,8 +51,9 @@ function FeedbackMessage({ value }: { value: Feedback }) {
     role={value.tone === "error" ? "alert" : "status"}>{value.message}</div>;
 }
 
-export function MemberEmailBroadcastComposer() {
+export function MemberEmailBroadcastComposer({ audienceOptions }: { audienceOptions: AudienceOption[] }) {
   const router = useRouter();
+  const [selectedAudience, setSelectedAudience] = useState(audienceOptions[0]?.key ?? "members");
   const [audience, setAudience] = useState<Audience | null>(null);
   const [pending, setPending] = useState<"preview" | "create" | null>(null);
   const [feedback, setFeedback] = useState<Feedback>(null);
@@ -50,9 +62,9 @@ export function MemberEmailBroadcastComposer() {
     setPending("preview");
     setFeedback(null);
     try {
-      const payload = await post("/api/email-broadcasts/preview", {});
+      const payload = await post("/api/email-broadcasts/preview", { audienceKey: selectedAudience });
       setAudience(payload.audience as Audience);
-      setFeedback({ tone: "success", message: "Synthetic recipient preview refreshed from the latest approved snapshot." });
+      setFeedback({ tone: "success", message: "Synthetic recipient preview refreshed for the selected audience." });
     } catch (error) {
       setAudience(null);
       setFeedback({ tone: "error", message: error instanceof Error ? error.message : "Recipient preview is unavailable." });
@@ -65,6 +77,11 @@ export function MemberEmailBroadcastComposer() {
     event.preventDefault();
     if (!audience) {
       setFeedback({ tone: "error", message: "Preview the synthetic recipients before creating a draft." });
+      return;
+    }
+    if (audience.audienceKey !== selectedAudience) {
+      setAudience(null);
+      setFeedback({ tone: "error", message: "Preview the currently selected audience before creating a draft." });
       return;
     }
     const form = event.currentTarget;
@@ -80,6 +97,7 @@ export function MemberEmailBroadcastComposer() {
       await post("/api/email-broadcasts", {
         subject: String(data.get("subject") ?? ""),
         body: String(data.get("body") ?? ""),
+        audienceKey: selectedAudience,
         scheduledFor,
       });
       form.reset();
@@ -97,21 +115,40 @@ export function MemberEmailBroadcastComposer() {
     <div className="callout neutral">
       <strong>Member delivery stays simulated.</strong> Draft audiences remain locked to <code>example.test</code>. A separate action may send one configured external test through Resend, never the member list.
     </div>
+    <div className="field">
+      <label htmlFor="member-email-audience">Recipients</label>
+      <select id="member-email-audience" name="audienceKey" value={selectedAudience}
+        aria-describedby="member-email-audience-help"
+        onChange={(event) => {
+          setSelectedAudience(event.target.value);
+          setAudience(null);
+          setFeedback(null);
+        }} disabled={pending !== null}>
+        {AUDIENCE_GROUPS.map((group) => {
+          const grouped = audienceOptions.filter((option) => option.group === group);
+          return grouped.length ? <optgroup key={group} label={group}>
+            {grouped.map((option) => <option key={option.key} value={option.key}>{option.label} — {option.description}</option>)}
+          </optgroup> : null;
+        })}
+      </select>
+      <p className="field-help" id="member-email-audience-help">Departments contain current members only. Saved lists reuse frozen campaign populations; unknown membership records remain excluded.</p>
+    </div>
     <div className="form-actions">
       <button className="button secondary" type="button" onClick={loadPreview} disabled={pending !== null}>
         {pending === "preview" ? "Checking…" : "Preview synthetic recipients"}
       </button>
     </div>
-    {audience ? <div className="metric-grid compact-metrics" aria-label="Synthetic recipient preview">
+    {audience ? <><div className="callout neutral"><strong>Selected audience:</strong> {audience.audienceLabel}</div>
+      <div className="metric-grid compact-metrics" aria-label="Synthetic recipient preview">
       <div className="metric-card"><span>Eligible deliveries</span><strong>{audience.eligible}</strong></div>
-      <div className="metric-card"><span>Represented members</span><strong>{audience.representedMembers}</strong></div>
+      <div className="metric-card"><span>Selected recipients</span><strong>{audience.representedRecipients}</strong></div>
       <div className="metric-card"><span>Home preferred</span><strong>{audience.homePreferred}</strong></div>
       <div className="metric-card"><span>Work fallback</span><strong>{audience.workFallback}</strong></div>
       <div className="metric-card"><span>Missing</span><strong>{audience.missing}</strong></div>
       <div className="metric-card"><span>Duplicate</span><strong>{audience.duplicate}</strong></div>
       <div className="metric-card"><span>Suppressed</span><strong>{audience.suppressed}</strong></div>
       <div className="metric-card"><span>Snapshot</span><strong>{audience.snapshotDate}</strong></div>
-    </div> : null}
+    </div></> : null}
     <div className="field">
       <label htmlFor="member-email-subject">Subject</label>
       <input id="member-email-subject" name="subject" required maxLength={160} />

@@ -2,7 +2,7 @@
 
 ## Current state
 
-The CAT member email workflow is an explicitly Preview-only simulation. It does not contain a Resend client, provider API key, outbound delivery path, or public webhook endpoint.
+The CAT member email workflow is an explicitly Preview-only member-delivery simulation. Its only outbound path is a separate Resend action locked to one configured external test address; it never reads or delivers the frozen member audience.
 
 Runtime access requires all of the following:
 
@@ -17,12 +17,13 @@ Production and production-launch runtimes return Not Found before authentication
 
 ## Preview workflow
 
-1. CAT reads only the latest approved membership snapshot and selects Local 0801 rows with snapshot status `member`.
-2. A verified primary Home Email is preferred; verified primary Work Email is the fallback.
-3. CAT deduplicates normalized addresses, applies the local topic-suppression index, and displays counts only.
-4. Draft subject, body, and recipient addresses are encrypted with CAT PII keys. Operational and audit JSON stores no raw address or message content.
-5. The creator submits the frozen draft. A different authorized administrator must approve it.
-6. Test and final actions create idempotent simulated events only. No network call occurs.
+1. The sender chooses a higher-level audience: current members, current nonmembers, the represented unit, active CAT roles, one current-member department, or an existing campaign population used as a saved list. Unknown membership records remain excluded.
+2. CAT resolves the choice against the latest approved snapshot. Department values and campaign selections use opaque handles, and the chosen audience label and protected recipient set are frozen into the draft.
+3. For roster audiences, a verified primary Home Email is preferred and verified primary Work Email is the fallback. The CAT-role audience uses the active CAT account email.
+4. CAT deduplicates normalized addresses and displays counts only. Required operational notices do not apply a marketing unsubscribe preference; provider bounce and complaint handling remains a separate production requirement.
+5. Draft subject, body, and recipient addresses are encrypted with CAT PII keys. Operational and audit JSON stores no raw address or message content.
+6. The creator submits the frozen draft. A different authorized administrator must approve it.
+7. Test and final member actions create idempotent simulated events only. The separately configured one-address test may call Resend after explicit confirmation.
 
 ## Synthetic acceptance
 
@@ -42,7 +43,7 @@ Do not enable provider delivery as part of Preview acceptance. A later, separate
 2. Provision a CAT-only Resend team/resource. Do not reuse a DocLinks team, key, contacts, billing resource, domain, or webhook.
 3. Verify a CAT-specific sending subdomain with SPF and DKIM, add DMARC deliberately, and choose a monitored Local 801 Reply-To inbox.
 4. Introduce CAT-prefixed secrets such as `LOCAL801_RESEND_API_KEY` and `LOCAL801_RESEND_WEBHOOK_SECRET` only in the separate CAT Vercel project.
-5. Add a reviewed provider adapter for Contacts, Segments, Topics, and Broadcasts. Roster synchronization must remove former members from the segment without recreating or overriding unsubscribe state.
+5. Add a reviewed transactional provider adapter with queued batches, idempotent retries, and a hard recipient cap. Do not use Resend Marketing Contacts or Broadcasts for required operational member notices.
 6. Add a signed raw-body webhook endpoint with replay/idempotency protection for delivered, bounced, complained, suppressed, and preference events.
 7. Keep open and click tracking off by default. Do not attach protected documents; link to authenticated CAT content with opaque identifiers.
 8. Run a synthetic provider sandbox pilot, then an owner-approved limited internal pilot, before any all-member capability is considered.

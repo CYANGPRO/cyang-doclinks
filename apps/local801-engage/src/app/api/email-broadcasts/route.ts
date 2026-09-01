@@ -17,6 +17,7 @@ export async function POST(request: Request) {
     const result = await createMemberEmailBroadcast(authorized.context, {
       subject: body.subject,
       body: body.body,
+      audienceKey: body.audienceKey,
       scheduledFor: body.scheduledFor,
     });
     return memberEmailJson({ broadcast: "ok", ...result }, 201);

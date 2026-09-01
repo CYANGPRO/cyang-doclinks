@@ -4,7 +4,7 @@ import { DataTable, EmptyState, PageHeader, SectionCard, StatusBadge, Unavailabl
 import { ProtectedPage } from "@/components/ProtectedPage";
 import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
-import { listMemberEmailBroadcasts } from "@/lib/member-email-broadcasts";
+import { listMemberEmailAudienceOptions, listMemberEmailBroadcasts } from "@/lib/member-email-broadcasts";
 import { memberEmailPreviewEnabled, memberEmailRealTestSummary } from "@/lib/member-email-preview-policy";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
 
@@ -17,8 +17,13 @@ export default async function EmailBroadcastsPage() {
   if (!can(user.role, "sendMemberEmail")) redirect("/unauthorized");
   const realTest = memberEmailRealTestSummary();
   let broadcasts: Awaited<ReturnType<typeof listMemberEmailBroadcasts>> | null = null;
+  let audienceOptions: Awaited<ReturnType<typeof listMemberEmailAudienceOptions>> | null = null;
   try {
-    broadcasts = await listMemberEmailBroadcasts(await resolveWorkspaceContext(user));
+    const context = await resolveWorkspaceContext(user);
+    [broadcasts, audienceOptions] = await Promise.all([
+      listMemberEmailBroadcasts(context),
+      listMemberEmailAudienceOptions(context),
+    ]);
   } catch {
     // Fail closed rather than display a partial protected recipient workflow.
   }
@@ -27,10 +32,11 @@ export default async function EmailBroadcastsPage() {
     <PageHeader
       eyebrow="Programs · Preview only"
       title="Email broadcasts"
-      description="Build and approve an all-member communication against a frozen synthetic membership snapshot. Member delivery stays simulated; one configured test address can use Resend."
+      description="Choose a higher-level audience, then build and approve a communication against a frozen synthetic recipient snapshot. Member delivery stays simulated; one configured test address can use Resend."
     />
     <SectionCard title="Create Preview broadcast" description="Check the latest approved snapshot, then encrypt the draft and freeze its synthetic recipient population." badge={<StatusBadge tone={realTest.enabled ? "info" : "pending"}>{realTest.enabled ? "One-address Resend test" : "Provider disabled"}</StatusBadge>}>
-      <MemberEmailBroadcastComposer />
+      {audienceOptions ? <MemberEmailBroadcastComposer audienceOptions={audienceOptions} />
+        : <UnavailableState title="Recipient audiences unavailable" description="CAT could not establish the protected Preview audience choices, so draft creation stays disabled." />}
     </SectionCard>
     <SectionCard title="Preview workflow" description="The creator submits the draft; a different authorized administrator approves it; delivery remains simulated." badge={<StatusBadge tone="info">Two-person approval</StatusBadge>}>
       {!broadcasts ? <UnavailableState title="Broadcast workflow unavailable" description="CAT could not establish the protected Preview broadcast state, so no incomplete results are shown." />
@@ -40,7 +46,7 @@ export default async function EmailBroadcastsPage() {
               <td><strong>{broadcast.subject}</strong><br /><span className="muted">Created {new Date(broadcast.createdAt).toLocaleString()}</span></td>
               <td><StatusBadge tone={broadcast.status === "simulated" ? "ready" : broadcast.status === "approved" ? "info" : "pending"}>{broadcast.status}</StatusBadge></td>
               <td>{broadcast.snapshotDate}</td>
-              <td>{broadcast.eligible} eligible<br /><span className="muted">{broadcast.missing} missing · {broadcast.duplicate} duplicate · {broadcast.suppressed} suppressed</span></td>
+              <td><strong>{broadcast.audienceLabel}</strong><br />{broadcast.eligible} eligible of {broadcast.representedRecipients}<br /><span className="muted">{broadcast.missing} missing · {broadcast.duplicate} duplicate · {broadcast.suppressed} suppressed</span></td>
               <td>{broadcast.scheduledFor ? new Date(broadcast.scheduledFor).toLocaleString() : "Manual simulation"}</td>
               <td><MemberEmailBroadcastActions handle={broadcast.handle} status={broadcast.status} requiresDifferentApprover={broadcast.requiresDifferentApprover} realTestRecipient={realTest.recipient} /></td>
             </tr>)}

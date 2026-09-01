@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   approveMemberEmailBroadcast,
   createMemberEmailBroadcast,
+  listMemberEmailAudienceOptions,
   previewMemberEmailAudience,
   sendMemberEmailRealTest,
 } from "../src/lib/member-email-broadcasts.ts";
@@ -244,8 +245,10 @@ test("recipient preview prefers home email, falls back to work, deduplicates, an
     query: audienceQuery(),
   });
   assert.deepEqual(summary, {
+    audienceKey: "members",
+    audienceLabel: "All current members",
     snapshotDate: "2026-08-01",
-    representedMembers: 5,
+    representedRecipients: 5,
     eligible: 3,
     missing: 1,
     duplicate: 1,
@@ -255,6 +258,74 @@ test("recipient preview prefers home email, falls back to work, deduplicates, an
     syntheticOnly: true,
   });
   assert.doesNotMatch(JSON.stringify(summary), /avery|riley|shared\.household|@example\.test/i);
+});
+
+test("department audiences resolve from opaque choices and constrain the approved snapshot", async () => {
+  const departmentHandle = "b".repeat(64);
+  let audienceParameters;
+  const query = audienceQuery(async (sql, parameters) => {
+    if (sql.includes("member-email:resolve-department-audience")) return [{ department: "Synthetic Services" }];
+    if (sql.includes("member-email:synthetic-audience")) {
+      audienceParameters = parameters;
+      return audienceRows.slice(0, 2);
+    }
+    return null;
+  });
+  const summary = await previewMemberEmailAudience(context(), { env: previewEnv, keyConfig, query }, `department:${departmentHandle}`);
+  assert.equal(summary.audienceKey, `department:${departmentHandle}`);
+  assert.equal(summary.audienceLabel, "Department members · Synthetic Services");
+  assert.equal(summary.representedRecipients, 2);
+  assert.deepEqual(audienceParameters, [organizationId, snapshotId, "department", "Synthetic Services", null]);
+});
+
+test("CAT audience uses active CAT account email data without widening the real-send boundary", async () => {
+  const catRows = [{
+    recipient_kind: "workspace_user",
+    person_id: null,
+    user_id: "20000000-0000-4000-8000-000000000099",
+    home_contact_id: null,
+    home_contact_value: null,
+    work_contact_id: null,
+    work_contact_value: null,
+    user_email_value: "cat.member@example.test",
+  }].map((row) => ({
+    home_encrypted_payload: null, home_key_version: null, home_format_version: null,
+    work_encrypted_payload: null, work_key_version: null, work_format_version: null,
+    user_email_encrypted_payload: null, user_email_key_version: null, user_email_format_version: null,
+    ...row,
+  }));
+  const summary = await previewMemberEmailAudience(context(), {
+    env: previewEnv,
+    keyConfig,
+    query: audienceQuery(async (sql) => sql.includes("member-email:synthetic-cat-audience") ? catRows : null),
+  }, "cat_members");
+  assert.equal(summary.audienceLabel, "All CAT members");
+  assert.equal(summary.representedRecipients, 1);
+  assert.equal(summary.eligible, 1);
+  assert.equal(summary.homePreferred, 0);
+  assert.equal(summary.workFallback, 0);
+  assert.doesNotMatch(JSON.stringify(summary), /cat\.member|@example\.test/i);
+  assert.equal(memberEmailRealTestBoundary(realTestEnv).memberDeliveryAllowed, false);
+});
+
+test("audience options expose broad groups, CAT members, departments, and saved campaign lists", async () => {
+  const options = await listMemberEmailAudienceOptions(context(), {
+    env: previewEnv,
+    query: audienceQuery(async (sql) => {
+      if (sql.includes("member-email:department-options")) {
+        return [{ handle: "c".repeat(64), label: "Synthetic Services", people_count: 4 }];
+      }
+      if (sql.includes("member-email:campaign-options")) {
+        return [{ handle: "d".repeat(64), label: "Synthetic list", people_count: 3 }];
+      }
+      return null;
+    }),
+  });
+  assert.deepEqual(options.map((option) => option.key), [
+    "members", "nonmembers", "represented_unit", "cat_members",
+    `department:${"c".repeat(64)}`, `campaign:${"d".repeat(64)}`,
+  ]);
+  assert.deepEqual([...new Set(options.map((option) => option.group))], ["Membership", "CAT", "Departments", "Saved lists"]);
 });
 
 test("recipient preview rejects a non-synthetic address before creating a snapshot", async () => {
@@ -346,11 +417,15 @@ test("only System Owner and Local Administrator receive the broadcast permission
 
 test("migration and routes preserve Preview-only, protected, authenticated boundaries", () => {
   const migration = readFileSync(new URL("../db/migrations/0035__preview_member_email_broadcasts.sql", import.meta.url), "utf8");
+  const audienceMigration = readFileSync(new URL("../db/migrations/0036__member_email_audience_selection.sql", import.meta.url), "utf8");
   const page = readFileSync(new URL("../src/app/email-broadcasts/page.tsx", import.meta.url), "utf8");
   const http = readFileSync(new URL("../src/lib/member-email-http.ts", import.meta.url), "utf8");
   assert.match(migration, /email_encrypted_payload/);
   assert.match(migration, /email_blind_index/);
   assert.doesNotMatch(migration, /\bemail_address\b|\brecipient_email\b/i);
+  assert.match(audienceMigration, /audience_kind/);
+  assert.match(audienceMigration, /user_id uuid references local801\.users/);
+  assert.match(audienceMigration, /member_email_recipients_subject_ck/);
   assert.match(page, /memberEmailPreviewEnabled\(\)/);
   assert.match(page, /permission="sendMemberEmail"/);
   assert.match(http, /requirePreviewUser\("sendMemberEmail"\)/);

@@ -27,11 +27,40 @@ const HANDLE_RE = /^[0-9a-f]{64}$/;
 const MAX_RECIPIENTS = 1_500;
 const MAX_SUBJECT = 160;
 const MAX_BODY = 20_000;
+const AUDIENCE_HANDLE_RE = /^[0-9a-f]{64}$/;
+
+const STATIC_AUDIENCES = Object.freeze({
+  members: { label: "All current members", description: "Everyone marked as a current union member." },
+  nonmembers: { label: "Current nonmembers", description: "Everyone marked as a current nonmember." },
+  represented_unit: { label: "Entire represented unit", description: "Current members and nonmembers; unknown statuses stay excluded." },
+  cat_members: { label: "All CAT members", description: "Active CAT administrators, leads, and CAT members." },
+} as const);
+
+type StaticAudienceKey = keyof typeof STATIC_AUDIENCES;
+type AudienceKind = StaticAudienceKey | "department" | "campaign";
+
+type AudienceSelection = {
+  key: string;
+  kind: AudienceKind;
+  label: string;
+  referenceHandle: string | null;
+  department: string | null;
+  campaignId: string | null;
+};
+
+export type MemberEmailAudienceOption = {
+  key: string;
+  label: string;
+  group: "Membership" | "CAT" | "Departments" | "Saved lists";
+  description: string;
+};
 
 type SnapshotRow = { id: string; snapshot_date: string | Date };
 
 type AudienceRow = {
-  person_id: string;
+  recipient_kind: "person" | "workspace_user";
+  person_id: string | null;
+  user_id: string | null;
   home_contact_id: string | null;
   home_contact_value: string | null;
   home_encrypted_payload: string | null;
@@ -42,15 +71,18 @@ type AudienceRow = {
   work_encrypted_payload: string | null;
   work_key_version: string | null;
   work_format_version: number | string | null;
+  user_email_value: string | null;
+  user_email_encrypted_payload: string | null;
+  user_email_key_version: string | null;
+  user_email_format_version: number | string | null;
 };
-
-type PreferenceRow = { email_blind_index_key_version: string; email_blind_index: string };
 
 type PlannedRecipient = {
   id: string;
-  personId: string;
+  personId: string | null;
+  userId: string | null;
   contactMethodId: string | null;
-  contactKind: "home" | "work" | null;
+  contactKind: "home" | "work" | "cat_user" | null;
   status: "eligible" | "missing" | "duplicate" | "suppressed";
   duplicateOfRecipientId: string | null;
   normalizedEmail: string | null;
@@ -59,8 +91,10 @@ type PlannedRecipient = {
 };
 
 export type MemberEmailAudienceSummary = {
+  audienceKey: string;
+  audienceLabel: string;
   snapshotDate: string;
-  representedMembers: number;
+  representedRecipients: number;
   eligible: number;
   missing: number;
   duplicate: number;
@@ -90,6 +124,10 @@ type BroadcastRow = {
   subject_encrypted_payload: string;
   subject_encryption_key_version: string;
   subject_encryption_format_version: number | string;
+  audience_kind: string;
+  audience_label: string;
+  audience_reference_handle: string | null;
+  represented_count: number | string;
 };
 
 type RealTestBroadcastRow = BroadcastRow & {
@@ -102,6 +140,8 @@ export type MemberEmailBroadcastSummary = {
   handle: string;
   subject: string;
   status: "draft" | "review" | "approved" | "simulated" | "cancelled";
+  audienceLabel: string;
+  representedRecipients: number;
   snapshotDate: string;
   eligible: number;
   missing: number;
@@ -178,6 +218,126 @@ function schedule(value: unknown, now: Date) {
   return parsed.toISOString();
 }
 
+function audienceKey(value: unknown) {
+  if (value === undefined || value === null || value === "") return "members";
+  if (typeof value !== "string" || value.length > 100) fail("INVALID_AUDIENCE", "Choose an available recipient audience.");
+  if (value in STATIC_AUDIENCES) return value as StaticAudienceKey;
+  const [prefix, handle, extra] = value.split(":");
+  if (extra !== undefined || (prefix !== "department" && prefix !== "campaign") || !handle || !AUDIENCE_HANDLE_RE.test(handle)) {
+    fail("INVALID_AUDIENCE", "Choose an available recipient audience.");
+  }
+  return `${prefix}:${handle}`;
+}
+
+function audienceHandleSql(domain: "department" | "campaign", expression: string) {
+  if (domain === "campaign") {
+    return `encode(public.digest('campaign:' || campaign.organization_id::text || ':' || campaign.id::text, 'sha256'), 'hex')`;
+  }
+  return `encode(public.digest('member-email:department:' || $1::text || ':' || lower(btrim(${expression})), 'sha256'), 'hex')`;
+}
+
+async function latestApprovedSnapshot(context: WorkspaceContext, query: DatabaseQuery) {
+  const snapshots = await query<SnapshotRow>(`
+    /* member-email:latest-approved-snapshot */
+    SELECT id::text, snapshot_date
+    FROM local801.membership_snapshots
+    WHERE organization_id = $1::uuid AND status = 'approved'
+    ORDER BY snapshot_date DESC, approved_at DESC NULLS LAST, created_at DESC, id DESC
+    LIMIT 1
+  `, [context.organizationId]);
+  if (snapshots.length !== 1) fail("SNAPSHOT_UNAVAILABLE", "Exactly one latest approved membership snapshot could not be established.", 409);
+  return snapshots[0];
+}
+
+async function resolveAudienceSelection(
+  context: WorkspaceContext,
+  snapshotId: string,
+  value: unknown,
+  query: DatabaseQuery,
+): Promise<AudienceSelection> {
+  const key = audienceKey(value);
+  if (key in STATIC_AUDIENCES) {
+    const kind = key as StaticAudienceKey;
+    return { key, kind, label: STATIC_AUDIENCES[kind].label, referenceHandle: null, department: null, campaignId: null };
+  }
+  const [kind, referenceHandle] = key.split(":") as ["department" | "campaign", string];
+  if (kind === "department") {
+    const [row] = await query<{ department: string }>(`
+      /* member-email:resolve-department-audience */
+      SELECT min(btrim(snapshot_row.department)) AS department
+      FROM local801.membership_snapshot_rows snapshot_row
+      WHERE snapshot_row.organization_id = $1::uuid AND snapshot_row.snapshot_id = $2::uuid
+        AND snapshot_row.membership_status = 'member' AND nullif(btrim(snapshot_row.department), '') IS NOT NULL
+        AND ${audienceHandleSql("department", "snapshot_row.department")} = $3::text
+      GROUP BY lower(btrim(snapshot_row.department))
+      LIMIT 1
+    `, [context.organizationId, snapshotId, referenceHandle]);
+    if (!row?.department) fail("AUDIENCE_UNAVAILABLE", "That department is no longer available in the approved member snapshot.", 409);
+    return { key, kind, label: `Department members · ${row.department}`, referenceHandle, department: row.department, campaignId: null };
+  }
+  const [row] = await query<{ id: string; name: string }>(`
+    /* member-email:resolve-campaign-audience */
+    SELECT campaign.id::text, campaign.name
+    FROM local801.outreach_campaigns campaign
+    WHERE campaign.organization_id = $1::uuid AND campaign.archived_at IS NULL
+      AND ${audienceHandleSql("campaign", "campaign.id::text")} = $2::text
+      AND EXISTS (
+        SELECT 1 FROM local801.outreach_campaign_population population
+        WHERE population.organization_id = campaign.organization_id AND population.campaign_id = campaign.id
+      )
+    LIMIT 1
+  `, [context.organizationId, referenceHandle]);
+  if (!row?.id || !row.name) fail("AUDIENCE_UNAVAILABLE", "That saved campaign list is no longer available.", 409);
+  return { key, kind, label: `Saved list · ${row.name}`, referenceHandle, department: null, campaignId: row.id };
+}
+
+export async function listMemberEmailAudienceOptions(context: WorkspaceContext, dependencies: Dependencies = {}) {
+  const env = dependencies.env ?? process.env;
+  requireAccess(context, env);
+  const query = dependencies.query ?? queryLocal801;
+  const snapshot = await latestApprovedSnapshot(context, query);
+  const [departments, campaigns] = await Promise.all([
+    query<{ handle: string; label: string; people_count: number | string }>(`
+      /* member-email:department-options */
+      SELECT ${audienceHandleSql("department", "snapshot_row.department")} AS handle,
+        min(btrim(snapshot_row.department)) AS label, count(*)::integer AS people_count
+      FROM local801.membership_snapshot_rows snapshot_row
+      WHERE snapshot_row.organization_id = $1::uuid AND snapshot_row.snapshot_id = $2::uuid
+        AND snapshot_row.membership_status = 'member' AND nullif(btrim(snapshot_row.department), '') IS NOT NULL
+      GROUP BY lower(btrim(snapshot_row.department))
+      ORDER BY min(btrim(snapshot_row.department))
+      LIMIT 250
+    `, [context.organizationId, snapshot.id]),
+    query<{ handle: string; label: string; people_count: number | string }>(`
+      /* member-email:campaign-options */
+      SELECT ${audienceHandleSql("campaign", "campaign.id::text")} AS handle,
+        campaign.name AS label, count(population.person_id)::integer AS people_count
+      FROM local801.outreach_campaigns campaign
+      JOIN local801.outreach_campaign_population population
+        ON population.organization_id = campaign.organization_id AND population.campaign_id = campaign.id
+      WHERE campaign.organization_id = $1::uuid AND campaign.archived_at IS NULL
+      GROUP BY campaign.id, campaign.organization_id, campaign.name, campaign.created_at
+      ORDER BY campaign.created_at DESC, campaign.name
+      LIMIT 100
+    `, [context.organizationId]),
+  ]);
+  const options: MemberEmailAudienceOption[] = [
+    { key: "members", label: STATIC_AUDIENCES.members.label, group: "Membership", description: STATIC_AUDIENCES.members.description },
+    { key: "nonmembers", label: STATIC_AUDIENCES.nonmembers.label, group: "Membership", description: STATIC_AUDIENCES.nonmembers.description },
+    { key: "represented_unit", label: STATIC_AUDIENCES.represented_unit.label, group: "Membership", description: STATIC_AUDIENCES.represented_unit.description },
+    { key: "cat_members", label: STATIC_AUDIENCES.cat_members.label, group: "CAT", description: STATIC_AUDIENCES.cat_members.description },
+    ...departments.filter((row) => AUDIENCE_HANDLE_RE.test(row.handle) && row.label).map((row) => ({
+      key: `department:${row.handle}`, label: row.label, group: "Departments" as const,
+      description: `${count(row.people_count).toLocaleString()} current ${count(row.people_count) === 1 ? "member" : "members"}`,
+    })),
+    ...campaigns.filter((row) => AUDIENCE_HANDLE_RE.test(row.handle) && row.label).map((row) => ({
+      key: `campaign:${row.handle}`, label: row.label, group: "Saved lists" as const,
+      description: `${count(row.people_count).toLocaleString()} saved ${count(row.people_count) === 1 ? "person" : "people"}`,
+    })),
+  ];
+  return options;
+}
+
 function protectedValue(
   row: AudienceRow,
   kind: "home" | "work",
@@ -205,6 +365,23 @@ function selectedContact(
   organizationId: string,
   keyConfig: PiiKeyConfiguration,
 ) {
+  if (row.recipient_kind === "workspace_user") {
+    if (!row.user_id) fail("CAT_RECIPIENT_INVALID", "A CAT member recipient could not be established safely.", 503);
+    const value = mode === "legacy"
+      ? row.user_email_value
+      : (() => {
+          const format = Number(row.user_email_format_version);
+          if (!row.user_email_encrypted_payload || !row.user_email_key_version || format !== 1) {
+            fail("PROTECTED_CONTACT_MISSING", "A selected CAT member is missing protected email data.", 503);
+          }
+          return decryptPiiField({
+            encryptedPayload: row.user_email_encrypted_payload,
+            encryptionKeyVersion: row.user_email_key_version,
+            encryptionFormatVersion: 1,
+          }, { organizationId, entity: "user", recordId: row.user_id, field: "email" }, keyConfig);
+        })();
+    return { id: null, kind: "cat_user" as const, value };
+  }
   const value = (kind: "home" | "work") => mode === "legacy"
     ? row[`${kind}_contact_value`]
     : protectedValue(row, kind, organizationId, keyConfig);
@@ -213,7 +390,7 @@ function selectedContact(
   return null;
 }
 
-async function buildAudiencePlan(context: WorkspaceContext, dependencies: Dependencies = {}): Promise<AudiencePlan> {
+async function buildAudiencePlan(context: WorkspaceContext, selectionInput: unknown, dependencies: Dependencies = {}): Promise<AudiencePlan> {
   const env = dependencies.env ?? process.env;
   requireAccess(context, env);
   const query = dependencies.query ?? queryLocal801;
@@ -221,20 +398,32 @@ async function buildAudiencePlan(context: WorkspaceContext, dependencies: Depend
   const keyConfig = dependencies.keyConfig ?? getPiiKeyConfiguration(env);
   if (mode !== "legacy") await assertPiiProtectedReadState(context.organizationId, query, mode);
 
-  const snapshots = await query<SnapshotRow>(`
-    /* member-email:latest-approved-snapshot */
-    SELECT id::text, snapshot_date
-    FROM local801.membership_snapshots
-    WHERE organization_id = $1::uuid AND status = 'approved'
-    ORDER BY snapshot_date DESC, approved_at DESC NULLS LAST, created_at DESC, id DESC
-    LIMIT 1
-  `, [context.organizationId]);
-  if (snapshots.length !== 1) fail("SNAPSHOT_UNAVAILABLE", "Exactly one latest approved membership snapshot could not be established.", 409);
-  const snapshot = snapshots[0];
+  const snapshot = await latestApprovedSnapshot(context, query);
+  const selection = await resolveAudienceSelection(context, snapshot.id, selectionInput, query);
 
-  const rows = await query<AudienceRow>(`
+  const rows = selection.kind === "cat_members" ? await query<AudienceRow>(`
+    /* member-email:synthetic-cat-audience */
+    SELECT 'workspace_user'::text AS recipient_kind, NULL::text AS person_id, app_user.id::text AS user_id,
+      NULL::text AS home_contact_id, NULL::text AS home_contact_value,
+      NULL::text AS home_encrypted_payload, NULL::text AS home_key_version, NULL::integer AS home_format_version,
+      NULL::text AS work_contact_id, NULL::text AS work_contact_value,
+      NULL::text AS work_encrypted_payload, NULL::text AS work_key_version, NULL::integer AS work_format_version,
+      app_user.email AS user_email_value, protected.email_encrypted_payload AS user_email_encrypted_payload,
+      protected.email_encryption_key_version AS user_email_key_version,
+      protected.email_encryption_format_version AS user_email_format_version
+    FROM local801.users app_user
+    JOIN local801.workspace_user_roles user_role ON user_role.user_id = app_user.id
+    JOIN local801.workspace_roles role
+      ON role.id = user_role.role_id AND role.organization_id = $1::uuid
+    LEFT JOIN local801.user_pii protected
+      ON protected.organization_id = app_user.organization_id AND protected.user_id = app_user.id
+    WHERE app_user.organization_id = $1::uuid AND app_user.deactivated_at IS NULL
+      AND role.code IN ('cat_admin','cat_lead','cat_member')
+    ORDER BY app_user.id
+    LIMIT ${MAX_RECIPIENTS + 1}
+  `, [context.organizationId]) : await query<AudienceRow>(`
     /* member-email:synthetic-audience */
-    SELECT snapshot_row.person_id::text,
+    SELECT 'person'::text AS recipient_kind, snapshot_row.person_id::text, NULL::text AS user_id,
       home.id::text AS home_contact_id, home.contact_value AS home_contact_value,
       home_pii.contact_value_encrypted_payload AS home_encrypted_payload,
       home_pii.encryption_key_version AS home_key_version,
@@ -242,7 +431,9 @@ async function buildAudiencePlan(context: WorkspaceContext, dependencies: Depend
       work.id::text AS work_contact_id, work.contact_value AS work_contact_value,
       work_pii.contact_value_encrypted_payload AS work_encrypted_payload,
       work_pii.encryption_key_version AS work_key_version,
-      work_pii.encryption_format_version AS work_format_version
+      work_pii.encryption_format_version AS work_format_version,
+      NULL::text AS user_email_value, NULL::text AS user_email_encrypted_payload,
+      NULL::text AS user_email_key_version, NULL::integer AS user_email_format_version
     FROM local801.membership_snapshot_rows snapshot_row
     JOIN local801.people person
       ON person.organization_id = snapshot_row.organization_id AND person.id = snapshot_row.person_id
@@ -268,17 +459,29 @@ async function buildAudiencePlan(context: WorkspaceContext, dependencies: Depend
     LEFT JOIN local801.person_contact_method_pii work_pii
       ON work_pii.organization_id = $1::uuid AND work_pii.contact_method_id = work.id
     WHERE snapshot_row.organization_id = $1::uuid AND snapshot_row.snapshot_id = $2::uuid
-      AND snapshot_row.membership_status = 'member'
+      AND (
+        ($3::text = 'members' AND snapshot_row.membership_status = 'member')
+        OR ($3::text = 'nonmembers' AND snapshot_row.membership_status = 'nonmember')
+        OR ($3::text = 'represented_unit' AND snapshot_row.membership_status IN ('member','nonmember'))
+        OR ($3::text = 'department' AND snapshot_row.membership_status = 'member'
+          AND lower(btrim(snapshot_row.department)) = lower(btrim($4::text)))
+        OR ($3::text = 'campaign' AND snapshot_row.membership_status IN ('member','nonmember') AND EXISTS (
+          SELECT 1 FROM local801.outreach_campaign_population population
+          WHERE population.organization_id = $1::uuid AND population.campaign_id = $5::uuid
+            AND population.person_id = snapshot_row.person_id
+        ))
+      )
     ORDER BY snapshot_row.person_id
     LIMIT ${MAX_RECIPIENTS + 1}
-  `, [context.organizationId, snapshot.id]);
-  if (rows.length > MAX_RECIPIENTS) fail("AUDIENCE_TOO_LARGE", `Preview broadcasts are limited to ${MAX_RECIPIENTS.toLocaleString()} represented members.`, 409);
+  `, [context.organizationId, snapshot.id, selection.kind, selection.department, selection.campaignId]);
+  if (rows.length > MAX_RECIPIENTS) fail("AUDIENCE_TOO_LARGE", `Preview broadcasts are limited to ${MAX_RECIPIENTS.toLocaleString()} represented recipients.`, 409);
 
   const preliminary: Array<Omit<PlannedRecipient, "status" | "duplicateOfRecipientId">> = [];
   for (const row of rows) {
     const contact = selectedContact(row, mode, context.organizationId, keyConfig);
     if (!contact?.value) {
-      preliminary.push({ id: randomUUID(), personId: row.person_id, contactMethodId: null, contactKind: null,
+      preliminary.push({ id: randomUUID(), personId: row.person_id, userId: row.user_id, contactMethodId: null,
+        contactKind: row.recipient_kind === "workspace_user" ? "cat_user" : null,
         normalizedEmail: null, blindIndexKeyVersion: null, blindIndex: null });
       continue;
     }
@@ -290,20 +493,11 @@ async function buildAudiencePlan(context: WorkspaceContext, dependencies: Depend
     }
     requireSyntheticMemberEmail(normalized);
     const index = createPiiBlindIndex(normalized, { organizationId: context.organizationId, domain: "member-email:recipient" }, keyConfig);
-    preliminary.push({ id: randomUUID(), personId: row.person_id, contactMethodId: contact.id, contactKind: contact.kind,
+    preliminary.push({ id: randomUUID(), personId: row.person_id, userId: row.user_id,
+      contactMethodId: contact.id, contactKind: contact.kind,
       normalizedEmail: normalized, blindIndexKeyVersion: index.blindIndexKeyVersion, blindIndex: index.blindIndex });
   }
 
-  const indexVersion = preliminary.find((item) => item.blindIndexKeyVersion)?.blindIndexKeyVersion ?? keyConfig.activeBlindIndexKeyVersion;
-  const hashes = [...new Set(preliminary.flatMap((item) => item.blindIndex ? [item.blindIndex] : []))];
-  const preferences = hashes.length ? await query<PreferenceRow>(`
-    /* member-email:suppression-preferences */
-    SELECT email_blind_index_key_version, email_blind_index
-    FROM local801.member_email_preferences
-    WHERE organization_id = $1::uuid AND topic = 'member_updates'
-      AND email_blind_index_key_version = $2::text AND email_blind_index = ANY($3::text[])
-  `, [context.organizationId, indexVersion, hashes]) : [];
-  const suppressed = new Set(preferences.map((row) => `${row.email_blind_index_key_version}:${row.email_blind_index}`));
   const canonical = new Map<string, PlannedRecipient>();
   const recipients: PlannedRecipient[] = preliminary.map((item) => {
     if (!item.normalizedEmail || !item.blindIndex || !item.blindIndexKeyVersion) {
@@ -314,7 +508,7 @@ async function buildAudiencePlan(context: WorkspaceContext, dependencies: Depend
     if (existing) return { ...item, status: "duplicate", duplicateOfRecipientId: existing.id };
     const planned: PlannedRecipient = {
       ...item,
-      status: suppressed.has(key) ? "suppressed" : "eligible",
+      status: "eligible",
       duplicateOfRecipientId: null,
     };
     canonical.set(key, planned);
@@ -323,8 +517,10 @@ async function buildAudiencePlan(context: WorkspaceContext, dependencies: Depend
 
   return {
     snapshotId: snapshot.id,
+    audienceKey: selection.key,
+    audienceLabel: selection.label,
     snapshotDate: dateOnly(snapshot.snapshot_date),
-    representedMembers: recipients.length,
+    representedRecipients: recipients.length,
     eligible: recipients.filter((item) => item.status === "eligible").length,
     missing: recipients.filter((item) => item.status === "missing").length,
     duplicate: recipients.filter((item) => item.status === "duplicate").length,
@@ -336,8 +532,12 @@ async function buildAudiencePlan(context: WorkspaceContext, dependencies: Depend
   };
 }
 
-export async function previewMemberEmailAudience(context: WorkspaceContext, dependencies: Dependencies = {}) {
-  const { snapshotId: _snapshotId, recipients: _recipients, ...summary } = await buildAudiencePlan(context, dependencies);
+export async function previewMemberEmailAudience(
+  context: WorkspaceContext,
+  dependencies: Dependencies = {},
+  selectionInput: unknown = "members",
+) {
+  const { snapshotId: _snapshotId, recipients: _recipients, ...summary } = await buildAudiencePlan(context, selectionInput, dependencies);
   return summary;
 }
 
@@ -347,7 +547,7 @@ function broadcastHandleSql(alias: string) {
 
 export async function createMemberEmailBroadcast(
   context: WorkspaceContext,
-  input: { subject: unknown; body: unknown; scheduledFor?: unknown },
+  input: { subject: unknown; body: unknown; audienceKey?: unknown; scheduledFor?: unknown },
   dependencies: Dependencies = {},
 ) {
   const env = dependencies.env ?? process.env;
@@ -357,7 +557,7 @@ export async function createMemberEmailBroadcast(
   const now = (dependencies.now ?? (() => new Date()))();
   const scheduledFor = schedule(input.scheduledFor, now);
   const keyConfig = dependencies.keyConfig ?? getPiiKeyConfiguration(env);
-  const plan = await buildAudiencePlan(context, { ...dependencies, keyConfig });
+  const plan = await buildAudiencePlan(context, input.audienceKey, { ...dependencies, keyConfig });
   if (plan.eligible === 0) fail("NO_ELIGIBLE_RECIPIENTS", "The approved snapshot has no eligible synthetic recipients.", 409);
 
   const id = randomUUID();
@@ -375,6 +575,7 @@ export async function createMemberEmailBroadcast(
     return {
       id: recipient.id,
       person_id: recipient.personId,
+      user_id: recipient.userId,
       contact_method_id: recipient.contactMethodId,
       contact_kind: recipient.contactKind,
       status: recipient.status,
@@ -391,12 +592,17 @@ export async function createMemberEmailBroadcast(
     const [created] = await query<{ handle: string }>(`
       /* member-email:create-broadcast */
       INSERT INTO local801.member_email_broadcasts
-        (id, organization_id, source_snapshot_id, subject_hash_key_version, subject_hash,
+        (id, organization_id, source_snapshot_id, audience_kind, audience_label, audience_reference_handle,
+         represented_count, subject_hash_key_version, subject_hash,
          body_hash_key_version, body_hash, eligible_count, missing_count,
          duplicate_count, suppressed_count, scheduled_for, created_by)
-      VALUES ($1::uuid,$2::uuid,$3::uuid,$4::text,$5::text,$6::text,$7::text,$8::integer,$9::integer,$10::integer,$11::integer,$12::timestamptz,$13::uuid)
+      VALUES ($1::uuid,$2::uuid,$3::uuid,$4::text,$5::text,$6::text,$7::integer,$8::text,$9::text,$10::text,$11::text,
+        $12::integer,$13::integer,$14::integer,$15::integer,$16::timestamptz,$17::uuid)
       RETURNING ${broadcastHandleSql("member_email_broadcasts")} AS handle
     `, [id, context.organizationId, plan.snapshotId,
+      plan.audienceKey.split(":", 1)[0], plan.audienceLabel,
+      plan.audienceKey.includes(":") ? plan.audienceKey.split(":", 2)[1] : null,
+      plan.representedRecipients,
       subjectIntegrity.blindIndexKeyVersion, subjectIntegrity.blindIndex,
       bodyIntegrity.blindIndexKeyVersion, bodyIntegrity.blindIndex,
       plan.eligible, plan.missing, plan.duplicate, plan.suppressed, scheduledFor, context.userId]);
@@ -414,14 +620,14 @@ export async function createMemberEmailBroadcast(
     await query(`
       /* member-email:freeze-recipients */
       INSERT INTO local801.member_email_broadcast_recipients
-        (id, organization_id, broadcast_id, person_id, contact_method_id, contact_kind, recipient_status,
+        (id, organization_id, broadcast_id, person_id, user_id, contact_method_id, contact_kind, recipient_status,
          duplicate_of_recipient_id, email_blind_index_key_version, email_blind_index,
          email_encrypted_payload, email_encryption_key_version, email_encryption_format_version)
-      SELECT value.id::uuid,$1::uuid,$2::uuid,value.person_id::uuid,value.contact_method_id::uuid,value.contact_kind,
+      SELECT value.id::uuid,$1::uuid,$2::uuid,value.person_id::uuid,value.user_id::uuid,value.contact_method_id::uuid,value.contact_kind,
         value.status,value.duplicate_of_recipient_id::uuid,value.blind_index_key_version,value.blind_index,
         value.encrypted_payload,value.encryption_key_version,value.encryption_format_version
       FROM jsonb_to_recordset($3::text::jsonb) AS value(
-        id text, person_id text, contact_method_id text, contact_kind text, status text,
+        id text, person_id text, user_id text, contact_method_id text, contact_kind text, status text,
         duplicate_of_recipient_id text, blind_index_key_version text, blind_index text,
         encrypted_payload text, encryption_key_version text, encryption_format_version smallint
       )
@@ -431,7 +637,10 @@ export async function createMemberEmailBroadcast(
       eventType: "broadcast.create", actorId: context.userId, organizationId: context.organizationId,
       subjectType: "member_email_broadcast", subjectId: id,
       payload: { eligibleCount: plan.eligible, missingCount: plan.missing, duplicateCount: plan.duplicate,
-        suppressedCount: plan.suppressed, sourceSnapshotId: plan.snapshotId, syntheticOnly: true },
+        suppressedCount: plan.suppressed, representedCount: plan.representedRecipients,
+        audienceKind: plan.audienceKey.split(":", 1)[0],
+        audienceReferenceHandle: plan.audienceKey.includes(":") ? plan.audienceKey.split(":", 2)[1] : null,
+        sourceSnapshotId: plan.snapshotId, syntheticOnly: true },
     }, query);
     await query(audit.sql, audit.parameters);
     return { handle: created.handle };
@@ -472,7 +681,9 @@ export async function listMemberEmailBroadcasts(context: WorkspaceContext, depen
   const rows = await query<BroadcastRow>(`
     /* member-email:list */
     SELECT broadcast.id::text, ${broadcastHandleSql("broadcast")} AS handle, broadcast.status,
-      broadcast.source_snapshot_id::text, snapshot.snapshot_date, broadcast.eligible_count,
+      broadcast.source_snapshot_id::text, snapshot.snapshot_date, broadcast.audience_kind,
+      broadcast.audience_label, broadcast.audience_reference_handle, broadcast.represented_count,
+      broadcast.eligible_count,
       broadcast.missing_count, broadcast.duplicate_count, broadcast.suppressed_count,
       broadcast.scheduled_for, broadcast.created_by::text, broadcast.approved_by::text,
       broadcast.simulated_at, broadcast.created_at,
@@ -490,6 +701,8 @@ export async function listMemberEmailBroadcasts(context: WorkspaceContext, depen
     handle: row.handle,
     subject: decryptSubject(row, context.organizationId, keyConfig),
     status: publicStatus(row.status),
+    audienceLabel: row.audience_label,
+    representedRecipients: count(row.represented_count),
     snapshotDate: dateOnly(row.snapshot_date),
     eligible: count(row.eligible_count),
     missing: count(row.missing_count),
@@ -518,7 +731,9 @@ async function mutateStatus(
     const [row] = await query<BroadcastRow>(`
       /* member-email:lock-broadcast */
       SELECT broadcast.id::text, ${broadcastHandleSql("broadcast")} AS handle, broadcast.status,
-        broadcast.source_snapshot_id::text, snapshot.snapshot_date, broadcast.eligible_count,
+        broadcast.source_snapshot_id::text, snapshot.snapshot_date, broadcast.audience_kind,
+        broadcast.audience_label, broadcast.audience_reference_handle, broadcast.represented_count,
+        broadcast.eligible_count,
         broadcast.missing_count, broadcast.duplicate_count, broadcast.suppressed_count,
         broadcast.scheduled_for, broadcast.created_by::text, broadcast.approved_by::text,
         broadcast.simulated_at, broadcast.created_at,
@@ -586,6 +801,7 @@ async function mutateStatus(
       eventType, actorId: context.userId, organizationId: context.organizationId,
       subjectType: "member_email_broadcast", subjectId: row.id,
       payload: { action, eligibleCount: count(row.eligible_count), syntheticOnly: true,
+        audienceKind: row.audience_kind, audienceReferenceHandle: row.audience_reference_handle,
         deliveryMode: deliveryBoundary.mode, outboundNetworkAllowed: deliveryBoundary.outboundNetworkAllowed },
     }, query);
     await query(audit.sql, audit.parameters);
@@ -618,7 +834,9 @@ export async function sendMemberEmailRealTest(context: WorkspaceContext, handle:
   const [row] = await query<RealTestBroadcastRow>(`
     /* member-email:real-test-broadcast */
     SELECT broadcast.id::text, ${broadcastHandleSql("broadcast")} AS handle, broadcast.status,
-      broadcast.source_snapshot_id::text, snapshot.snapshot_date, broadcast.eligible_count,
+      broadcast.source_snapshot_id::text, snapshot.snapshot_date, broadcast.audience_kind,
+      broadcast.audience_label, broadcast.audience_reference_handle, broadcast.represented_count,
+      broadcast.eligible_count,
       broadcast.missing_count, broadcast.duplicate_count, broadcast.suppressed_count,
       broadcast.scheduled_for, broadcast.created_by::text, broadcast.approved_by::text,
       broadcast.simulated_at, broadcast.created_at,
