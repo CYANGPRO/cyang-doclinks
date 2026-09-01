@@ -4,6 +4,8 @@ import test from "node:test";
 import {
   approveMemberEmailBroadcast,
   createMemberEmailBroadcast,
+  getMemberEmailBroadcastPreview,
+  listMemberEmailAttachmentOptions,
   listMemberEmailAudienceOptions,
   previewMemberEmailAudience,
   sendMemberEmailRealTest,
@@ -21,6 +23,8 @@ const approverId = "10000000-0000-4000-8000-000000000003";
 const snapshotId = "10000000-0000-4000-8000-000000000004";
 const broadcastId = "10000000-0000-4000-8000-000000000005";
 const handle = "a".repeat(64);
+const documentId = "10000000-0000-4000-8000-000000000006";
+const documentHandle = "e".repeat(64);
 
 const previewEnv = {
   NODE_ENV: "production",
@@ -187,10 +191,21 @@ test("real Preview test sends exactly once to the configured address and never r
   const sqlCalls = [];
   const providerCalls = [];
   const auditCalls = [];
+  const loadedAttachmentRows = [];
   const query = async (sql, parameters = []) => {
     sqlCalls.push(sql);
     if (sql.includes("member-email:real-test-broadcast")) return [realTestRow()];
     if (sql.includes("member-email:real-test-audit-check")) return [];
+    if (sql.includes("member-email:send-attachments")) return [{
+      document_id: documentId,
+      handle: null,
+      title: "Synthetic agenda",
+      original_filename: "synthetic-agenda.pdf",
+      media_type: "application/pdf",
+      byte_size: 128,
+      sha256: "f".repeat(64),
+      display_order: 1,
+    }];
     throw new Error(`Unexpected SQL: ${sql.slice(0, 80)}`);
   };
   const transaction = async (callback) => callback(async (sql, parameters = []) => {
@@ -204,6 +219,10 @@ test("real Preview test sends exactly once to the configured address and never r
     keyConfig,
     query,
     transaction,
+    loadAttachments: async (_context, rows) => {
+      loadedAttachmentRows.push(...rows);
+      return [{ content: Buffer.from("synthetic"), filename: "synthetic-agenda.pdf", contentType: "application/pdf" }];
+    },
     sendPreviewTest: async (input) => {
       providerCalls.push(input);
       return { providerMessageId: "provider-test-id" };
@@ -220,6 +239,9 @@ test("real Preview test sends exactly once to the configured address and never r
   assert.match(providerCalls[0].text, /No member broadcast was delivered/);
   assert.match(providerCalls[0].html, /<strong>Preview-only<\/strong>/);
   assert.match(providerCalls[0].html, /No member broadcast was delivered/);
+  assert.equal(loadedAttachmentRows.length, 1);
+  assert.equal(providerCalls[0].attachments.length, 1);
+  assert.equal(providerCalls[0].attachments[0].filename, "synthetic-agenda.pdf");
   assert.equal(sqlCalls.some((sql) => sql.includes("member_email_broadcast_recipients")), false);
   const auditInsert = auditCalls.find((call) => call.sql.includes("INSERT INTO local801.audit_events"));
   assert.ok(auditInsert);
@@ -376,6 +398,38 @@ test("audience options expose membership, registered users, CAT, departments, an
   assert.deepEqual([...new Set(options.map((option) => option.group))], ["Membership", "Users", "CAT", "Departments", "Saved lists"]);
 });
 
+test("attachment options expose only opaque approved document choices", async () => {
+  let parameters;
+  const options = await listMemberEmailAttachmentOptions(context(), {
+    env: previewEnv,
+    query: async (sql, values) => {
+      assert.match(sql, /document\.status = 'approved'/);
+      assert.match(sql, /document\.organization_id = \$1::uuid/);
+      assert.match(sql, /document\.visibility/);
+      parameters = values;
+      return [{
+        document_id: documentId,
+        handle: documentHandle,
+        title: "Synthetic agenda",
+        original_filename: "synthetic-agenda.pdf",
+        media_type: "application/pdf",
+        byte_size: 128,
+        sha256: "f".repeat(64),
+        display_order: 0,
+      }];
+    },
+  });
+  assert.deepEqual(options, [{
+    handle: documentHandle,
+    title: "Synthetic agenda",
+    originalFilename: "synthetic-agenda.pdf",
+    mediaType: "application/pdf",
+    byteSize: 128,
+  }]);
+  assert.equal(parameters[0], organizationId);
+  assert.doesNotMatch(JSON.stringify(options), new RegExp(documentId));
+});
+
 test("recipient preview rejects a non-synthetic address before creating a snapshot", async () => {
   const rows = audienceRows.map((row, index) => index === 0 ? { ...row, home_contact_value: "real@personal.example" } : row);
   await assert.rejects(previewMemberEmailAudience(context(), {
@@ -419,6 +473,84 @@ test("draft creation encrypts content and recipients and freezes only protected 
   assert.equal(frozenRecipients[0].contact_method_id, audienceRows[0].home_contact_id);
   assert.equal(frozenRecipients[0].contact_kind, "home");
   assert.equal(frozenRecipients[0].personId, undefined);
+});
+
+test("draft creation freezes approved attachment metadata without exposing storage details", async () => {
+  const captured = [];
+  const transaction = async (callback) => callback(async (sql, parameters = []) => {
+    captured.push({ sql, parameters });
+    if (sql.includes("member-email:create-broadcast")) return [{ handle }];
+    if (sql.includes("SELECT event_hash")) return [];
+    if (sql.includes("INSERT INTO local801.audit_events")) return [{ audit_written: true }];
+    return [];
+  });
+  await createMemberEmailBroadcast(context(), {
+    subject: "Synthetic member update",
+    body: "This is a Preview-only message.",
+    attachmentHandles: [documentHandle],
+  }, {
+    env: previewEnv,
+    keyConfig,
+    query: audienceQuery(async (sql) => sql.includes("member-email:resolve-attachments") ? [{
+      document_id: documentId,
+      handle: documentHandle,
+      title: "Synthetic agenda",
+      original_filename: "synthetic-agenda.pdf",
+      media_type: "application/pdf",
+      byte_size: 128,
+      sha256: "f".repeat(64),
+      display_order: 0,
+    }] : null),
+    transaction,
+    now: () => new Date("2026-08-25T12:00:00.000Z"),
+  });
+  const attachmentInsert = captured.find((call) => call.sql.includes("member-email:freeze-attachments"));
+  assert.ok(attachmentInsert);
+  const frozen = JSON.parse(String(attachmentInsert.parameters[2]));
+  assert.equal(frozen.length, 1);
+  assert.equal(frozen[0].document_id, documentId);
+  assert.equal(frozen[0].original_filename, "synthetic-agenda.pdf");
+  assert.doesNotMatch(JSON.stringify(attachmentInsert), /storage_key|encryption_key/i);
+});
+
+test("protected email preview restores the formatted body and frozen attachments", async () => {
+  const preview = await getMemberEmailBroadcastPreview(context(), handle, {
+    env: previewEnv,
+    keyConfig,
+    query: async (sql) => {
+      if (sql.includes("member-email:preview-detail")) return [{
+        ...realTestRow(),
+        audience_kind: "members",
+        audience_label: "All current members",
+        audience_reference_handle: null,
+        represented_count: 5,
+        attachment_count: 1,
+        real_test_sent_at: "2026-08-25T13:00:00.000Z",
+      }];
+      if (sql.includes("member-email:preview-attachments")) return [{
+        document_id: documentId,
+        handle: documentHandle,
+        title: "Synthetic agenda",
+        original_filename: "synthetic-agenda.pdf",
+        media_type: "application/pdf",
+        byte_size: 128,
+        sha256: "f".repeat(64),
+        display_order: 1,
+      }];
+      throw new Error(`Unexpected SQL: ${sql.slice(0, 80)}`);
+    },
+  });
+  assert.equal(preview?.subject, "Synthetic member update");
+  assert.match(preview?.html ?? "", /<strong>Preview-only<\/strong>/);
+  assert.equal(preview?.realTestSentAt, "2026-08-25T13:00:00.000Z");
+  assert.deepEqual(preview?.attachments, [{
+    handle: documentHandle,
+    title: "Synthetic agenda",
+    originalFilename: "synthetic-agenda.pdf",
+    mediaType: "application/pdf",
+    byteSize: 128,
+    available: true,
+  }]);
 });
 
 test("the broadcast creator cannot approve their own reviewed draft", async () => {
@@ -467,7 +599,9 @@ test("migration and routes preserve Preview-only, protected, authenticated bound
   const migration = readFileSync(new URL("../db/migrations/0035__preview_member_email_broadcasts.sql", import.meta.url), "utf8");
   const audienceMigration = readFileSync(new URL("../db/migrations/0036__member_email_audience_selection.sql", import.meta.url), "utf8");
   const registeredUserMigration = readFileSync(new URL("../db/migrations/0037__registered_user_email_audience.sql", import.meta.url), "utf8");
+  const attachmentMigration = readFileSync(new URL("../db/migrations/0038__member_email_document_attachments.sql", import.meta.url), "utf8");
   const page = readFileSync(new URL("../src/app/email-broadcasts/page.tsx", import.meta.url), "utf8");
+  const previewPage = readFileSync(new URL("../src/app/email-broadcasts/[handle]/page.tsx", import.meta.url), "utf8");
   const http = readFileSync(new URL("../src/lib/member-email-http.ts", import.meta.url), "utf8");
   assert.match(migration, /email_encrypted_payload/);
   assert.match(migration, /email_blind_index/);
@@ -476,11 +610,16 @@ test("migration and routes preserve Preview-only, protected, authenticated bound
   assert.match(audienceMigration, /user_id uuid references local801\.users/);
   assert.match(audienceMigration, /member_email_recipients_subject_ck/);
   assert.match(registeredUserMigration, /registered_users/);
+  assert.match(attachmentMigration, /member_email_broadcast_attachments/);
+  assert.match(attachmentMigration, /document_id uuid references local801\.documents\(id\) on delete set null/);
+  assert.doesNotMatch(attachmentMigration, /storage_key|encrypted_payload/);
   assert.match(page, /memberEmailPreviewEnabled\(\)/);
   assert.match(page, /permission="sendMemberEmail"/);
   assert.match(page, /Promise\.allSettled/);
   assert.match(page, /local801-member-email-safe-failure/);
   assert.match(page, /safeProductionAuthInternalFailure/);
+  assert.match(previewPage, /getMemberEmailBroadcastPreview/);
+  assert.match(previewPage, /permission="sendMemberEmail"/);
   assert.match(http, /requirePreviewUser\("sendMemberEmail"\)/);
   assert.match(http, /hasExactSameOrigin/);
 });

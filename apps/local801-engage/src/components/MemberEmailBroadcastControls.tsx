@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { renderMemberEmailHtml } from "@/lib/member-email-format";
 import styles from "./MemberEmailBroadcastControls.module.css";
@@ -28,6 +29,14 @@ type AudienceOption = {
   description: string;
 };
 
+type AttachmentOption = {
+  handle: string;
+  title: string;
+  originalFilename: string;
+  mediaType: string;
+  byteSize: number;
+};
+
 type Feedback = { tone: "error" | "success"; message: string } | null;
 
 type DraftReview = {
@@ -35,7 +44,14 @@ type DraftReview = {
   body: string;
   scheduledFor: string | null;
   scheduledDisplay: string;
+  attachments: AttachmentOption[];
 };
+
+function fileSize(value: number) {
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${Math.ceil(value / 1024)} KB`;
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 function isoDateTime(value: string) {
   if (!value) return null;
@@ -83,10 +99,12 @@ function FeedbackMessage({ value }: { value: Feedback }) {
 
 export function MemberEmailBroadcastComposer({
   audienceOptions,
+  attachmentOptions,
   sender,
   replyTo,
 }: {
   audienceOptions: AudienceOption[];
+  attachmentOptions: AttachmentOption[] | null;
   sender: string | null;
   replyTo: string | null;
 }) {
@@ -96,9 +114,28 @@ export function MemberEmailBroadcastComposer({
   const [selectedAudience, setSelectedAudience] = useState(audienceOptions[0]?.key ?? "members");
   const [audience, setAudience] = useState<Audience | null>(null);
   const [bodySource, setBodySource] = useState("");
+  const [selectedAttachmentHandles, setSelectedAttachmentHandles] = useState<string[]>([]);
   const [review, setReview] = useState<DraftReview | null>(null);
   const [pending, setPending] = useState<"preview" | "create" | null>(null);
   const [feedback, setFeedback] = useState<Feedback>(null);
+
+  function toggleAttachment(option: AttachmentOption, checked: boolean) {
+    const next = checked
+      ? [...selectedAttachmentHandles, option.handle]
+      : selectedAttachmentHandles.filter((handle) => handle !== option.handle);
+    const selected = (attachmentOptions ?? []).filter((attachment) => next.includes(attachment.handle));
+    if (next.length > 5) {
+      setFeedback({ tone: "error", message: "Choose no more than 5 attachments." });
+      return;
+    }
+    if (selected.reduce((total, attachment) => total + attachment.byteSize, 0) > 20 * 1024 * 1024) {
+      setFeedback({ tone: "error", message: "Attachments must total 20 MB or less." });
+      return;
+    }
+    setSelectedAttachmentHandles(next);
+    setReview(null);
+    setFeedback(null);
+  }
 
   function updateBody(next: string, selectionStart: number, selectionEnd: number) {
     setBodySource(next);
@@ -183,7 +220,8 @@ export function MemberEmailBroadcastComposer({
       return;
     }
     setFeedback(null);
-    setReview({ subject, body, scheduledFor, scheduledDisplay: formatSchedule(scheduledFor) });
+    const attachments = (attachmentOptions ?? []).filter((attachment) => selectedAttachmentHandles.includes(attachment.handle));
+    setReview({ subject, body, scheduledFor, scheduledDisplay: formatSchedule(scheduledFor), attachments });
   }
 
   async function create() {
@@ -200,9 +238,11 @@ export function MemberEmailBroadcastComposer({
         body: review.body,
         audienceKey: selectedAudience,
         scheduledFor: review.scheduledFor,
+        attachmentHandles: review.attachments.map((attachment) => attachment.handle),
       });
       formRef.current?.reset();
       setBodySource("");
+      setSelectedAttachmentHandles([]);
       setAudience(null);
       setReview(null);
       setFeedback({ tone: "success", message: "Preview broadcast draft created with a frozen synthetic recipient snapshot." });
@@ -326,6 +366,21 @@ export function MemberEmailBroadcastComposer({
       <p className="field-help">Use headings, bold, italic, lists, and safe web links. Raw HTML is shown as text, and CAT generates a plain-text fallback automatically. Private documents should stay in CAT.</p>
     </div>
     <div className="field">
+      <span className={styles.fieldLabel}>Attachments</span>
+      {attachmentOptions === null ? <div className="callout neutral">
+        <strong>Attachments are temporarily unavailable.</strong> You can still create the notice without a file.
+      </div> : attachmentOptions.length === 0 ? <div className="callout neutral">
+        <strong>No approved documents are available.</strong> Upload and approve a file in <Link href="/documents">Documents</Link>, then return here.
+      </div> : <div className={styles.attachmentPicker}>
+        {attachmentOptions.map((attachment) => <label key={attachment.handle} className={styles.attachmentChoice}>
+          <input type="checkbox" checked={selectedAttachmentHandles.includes(attachment.handle)}
+            onChange={(event) => toggleAttachment(attachment, event.target.checked)} />
+          <span><strong>{attachment.title}</strong><small>{attachment.originalFilename} · {fileSize(attachment.byteSize)}</small></span>
+        </label>)}
+      </div>}
+      <p className="field-help">Optional. Choose up to 5 approved CAT Documents, totaling no more than 20 MB. Access and file integrity are checked again before a real Preview test.</p>
+    </div>
+    <div className="field">
       <label htmlFor="member-email-schedule">Optional simulated send time</label>
       <input id="member-email-schedule" name="scheduledFor" type="datetime-local" />
     </div>
@@ -348,6 +403,7 @@ export function MemberEmailBroadcastComposer({
         <div><dt>From</dt><dd>{sender ?? "Sender not configured"}</dd></div>
         <div><dt>Replies go to</dt><dd>{replyTo ?? "Reply-To not configured"}</dd></div>
         <div><dt>Schedule</dt><dd>{review.scheduledDisplay}</dd></div>
+        <div><dt>Attachments</dt><dd>{review.attachments.length === 0 ? "None" : `${review.attachments.length} selected`}</dd></div>
       </dl>
 
       <div className={styles.messageReview}>
@@ -355,6 +411,12 @@ export function MemberEmailBroadcastComposer({
         <strong>{review.subject}</strong>
         <span>Message</span>
         <div dangerouslySetInnerHTML={{ __html: renderMemberEmailHtml(review.body) }} />
+        {review.attachments.length > 0 ? <>
+          <span>Attachments</span>
+          <ul className={styles.attachmentReviewList}>{review.attachments.map((attachment) => <li key={attachment.handle}>
+            <strong>{attachment.title}</strong><span>{attachment.originalFilename} · {fileSize(attachment.byteSize)}</span>
+          </li>)}</ul>
+        </> : null}
       </div>
 
       <div className={styles.freezeNotice}>
@@ -419,14 +481,14 @@ export function MemberEmailBroadcastActions({
     }
   }
 
-  if (status === "simulated" || status === "cancelled") return <span className="muted">No further actions</span>;
   return <div className="stack">
     <div className="form-actions compact-actions">
+      <Link className="button secondary" href={`/email-broadcasts/${handle}`}>View email</Link>
       {status === "draft" ? <button className="button secondary" type="button" onClick={() => act("submit")} disabled={pending !== null}>Submit for review</button> : null}
       {status === "review" ? <button className="button" type="button" onClick={() => act("approve")} disabled={pending !== null || requiresDifferentApprover}>Approve</button> : null}
       {status === "approved" ? <button className="button" type="button" onClick={() => act("simulate_send")} disabled={pending !== null}>Simulate delivery</button> : null}
-      <button className="button secondary" type="button" onClick={() => act("simulate_test")} disabled={pending !== null}>Simulate test</button>
-      {realTestRecipient ? <button className="button secondary" type="button" onClick={() => act("real_test")} disabled={pending !== null}>
+      {status !== "simulated" && status !== "cancelled" ? <button className="button secondary" type="button" onClick={() => act("simulate_test")} disabled={pending !== null}>Simulate test</button> : null}
+      {status !== "simulated" && status !== "cancelled" && realTestRecipient ? <button className="button secondary" type="button" onClick={() => act("real_test")} disabled={pending !== null}>
         {pending === "real_test" ? "Sending…" : "Send real email test"}
       </button> : null}
     </div>

@@ -19,6 +19,7 @@ export async function POST(request: Request) {
       body: body.body,
       audienceKey: body.audienceKey,
       scheduledFor: body.scheduledFor,
+      attachmentHandles: body.attachmentHandles,
     });
     return memberEmailJson({ broadcast: "ok", ...result }, 201);
   } catch (error) {

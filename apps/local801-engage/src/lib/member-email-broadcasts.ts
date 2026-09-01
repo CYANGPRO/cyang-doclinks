@@ -4,6 +4,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { can } from "./access.ts";
 import { prepareAtomicAuditStatement } from "./audit.ts";
 import { queryLocal801, withLocal801Transaction, type DatabaseQuery } from "./db.ts";
+import { downloadDocument } from "./document-storage.ts";
+import { documentAccessParameters, documentAccessSql } from "./documents.ts";
 import { sendMemberEmailPreviewTest, type SendMemberEmailPreviewTestInput } from "./member-email-resend.ts";
 import { renderMemberEmailHtml, renderMemberEmailText } from "./member-email-format.ts";
 import {
@@ -29,6 +31,8 @@ const MAX_RECIPIENTS = 1_500;
 const MAX_SUBJECT = 160;
 const MAX_BODY = 20_000;
 const AUDIENCE_HANDLE_RE = /^[0-9a-f]{64}$/;
+const MAX_ATTACHMENTS = 5;
+const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 
 const STATIC_AUDIENCES = Object.freeze({
   members: { label: "All current members", description: "Everyone marked as a current union member." },
@@ -130,12 +134,38 @@ type BroadcastRow = {
   audience_label: string;
   audience_reference_handle: string | null;
   represented_count: number | string;
+  attachment_count: number | string;
+  real_test_sent_at: string | Date | null;
 };
 
 type RealTestBroadcastRow = BroadcastRow & {
   body_encrypted_payload: string;
   body_encryption_key_version: string;
   body_encryption_format_version: number | string;
+};
+
+type AttachmentRow = {
+  document_id: string | null;
+  handle: string | null;
+  title: string;
+  original_filename: string;
+  media_type: string;
+  byte_size: number | string;
+  sha256: string;
+  display_order: number | string;
+};
+
+export type MemberEmailAttachmentOption = {
+  handle: string;
+  title: string;
+  originalFilename: string;
+  mediaType: string;
+  byteSize: number;
+};
+
+export type MemberEmailAttachmentSummary = Omit<MemberEmailAttachmentOption, "handle"> & {
+  handle: string | null;
+  available: boolean;
 };
 
 export type MemberEmailBroadcastSummary = {
@@ -152,7 +182,21 @@ export type MemberEmailBroadcastSummary = {
   scheduledFor: string | null;
   createdAt: string;
   simulatedAt: string | null;
+  realTestSentAt: string | null;
+  attachmentCount: number;
   requiresDifferentApprover: boolean;
+};
+
+export type MemberEmailBroadcastPreview = MemberEmailBroadcastSummary & {
+  body: string;
+  html: string;
+  attachments: MemberEmailAttachmentSummary[];
+};
+
+type LoadedAttachment = {
+  content: Buffer;
+  filename: string;
+  contentType: string;
 };
 
 type Dependencies = {
@@ -162,6 +206,7 @@ type Dependencies = {
   keyConfig?: PiiKeyConfiguration;
   now?: () => Date;
   sendPreviewTest?: (input: SendMemberEmailPreviewTestInput) => Promise<{ providerMessageId: string }>;
+  loadAttachments?: (context: WorkspaceContext, rows: AttachmentRow[]) => Promise<LoadedAttachment[]>;
 };
 
 export class MemberEmailBroadcastError extends Error {
@@ -229,6 +274,58 @@ function audienceKey(value: unknown) {
     fail("INVALID_AUDIENCE", "Choose an available recipient audience.");
   }
   return `${prefix}:${handle}`;
+}
+
+function attachmentHandles(value: unknown) {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value) || value.length > MAX_ATTACHMENTS) {
+    fail("INVALID_ATTACHMENTS", `Choose up to ${MAX_ATTACHMENTS} approved CAT Documents.`);
+  }
+  const handles = value.map((item) => typeof item === "string" ? item.toLowerCase() : "");
+  if (handles.some((handle) => !HANDLE_RE.test(handle)) || new Set(handles).size !== handles.length) {
+    fail("INVALID_ATTACHMENTS", "Choose valid, non-duplicate CAT Documents.");
+  }
+  return handles;
+}
+
+async function resolveAttachmentDocuments(
+  context: WorkspaceContext,
+  value: unknown,
+  query: DatabaseQuery,
+) {
+  const handles = attachmentHandles(value);
+  if (handles.length === 0) return [];
+  const access = documentAccessParameters(context);
+  const rows = await query<AttachmentRow>(`
+    /* member-email:resolve-attachments */
+    SELECT document.id::text AS document_id,
+      encode(public.digest(document.organization_id::text || ':' || document.id::text, 'sha256'), 'hex') AS handle,
+      document.title, document.original_filename, document.media_type, document.byte_size,
+      document.sha256, 0::smallint AS display_order
+    FROM local801.documents document
+    WHERE document.organization_id = $1::uuid
+      AND document.archived_at IS NULL
+      AND document.status = 'approved'
+      AND ${documentAccessSql("document", { legacyVisibilities: 2, userId: 3, uploaderRoles: 4 })}
+      AND encode(public.digest(document.organization_id::text || ':' || document.id::text, 'sha256'), 'hex') = ANY($5::text[])
+  `, [
+    context.organizationId,
+    access.legacyVisibilities,
+    access.userId,
+    access.uploaderRoles,
+    handles,
+  ]);
+  const byHandle = new Map(rows.filter((row) => row.handle && HANDLE_RE.test(row.handle)).map((row) => [row.handle!, row]));
+  if (byHandle.size !== handles.length) {
+    fail("ATTACHMENT_UNAVAILABLE", "One or more selected documents are not approved or are no longer available to you.", 409);
+  }
+  const ordered = handles.map((handle, index) => ({ ...byHandle.get(handle)!, display_order: index + 1 }));
+  const totalBytes = ordered.reduce((total, row) => total + count(row.byte_size), 0);
+  if (ordered.some((row) => !row.document_id || !row.original_filename || !row.media_type || !row.sha256)
+    || totalBytes <= 0 || totalBytes > MAX_ATTACHMENT_BYTES) {
+    fail("ATTACHMENT_LIMIT", "Selected attachments must total 20 MB or less.", 409);
+  }
+  return ordered;
 }
 
 function audienceHandleSql(domain: "department" | "campaign", expression: string) {
@@ -339,6 +436,35 @@ export async function listMemberEmailAudienceOptions(context: WorkspaceContext, 
     })),
   ];
   return options;
+}
+
+export async function listMemberEmailAttachmentOptions(context: WorkspaceContext, dependencies: Dependencies = {}) {
+  const env = dependencies.env ?? process.env;
+  requireAccess(context, env);
+  const query = dependencies.query ?? queryLocal801;
+  const access = documentAccessParameters(context);
+  const rows = await query<AttachmentRow>(`
+    /* member-email:attachment-options */
+    SELECT document.id::text AS document_id,
+      encode(public.digest(document.organization_id::text || ':' || document.id::text, 'sha256'), 'hex') AS handle,
+      document.title, document.original_filename, document.media_type, document.byte_size,
+      document.sha256, 0::smallint AS display_order
+    FROM local801.documents document
+    WHERE document.organization_id = $1::uuid
+      AND document.archived_at IS NULL
+      AND document.status = 'approved'
+      AND ${documentAccessSql("document", { legacyVisibilities: 2, userId: 3, uploaderRoles: 4 })}
+    ORDER BY document.created_at DESC, document.id DESC
+    LIMIT 100
+  `, [context.organizationId, access.legacyVisibilities, access.userId, access.uploaderRoles]);
+  return rows.filter((row) => row.handle && HANDLE_RE.test(row.handle) && row.original_filename && row.media_type)
+    .map((row): MemberEmailAttachmentOption => ({
+      handle: row.handle!,
+      title: row.title,
+      originalFilename: row.original_filename,
+      mediaType: row.media_type,
+      byteSize: count(row.byte_size),
+    }));
 }
 
 function protectedValue(
@@ -555,7 +681,7 @@ function broadcastHandleSql(alias: string) {
 
 export async function createMemberEmailBroadcast(
   context: WorkspaceContext,
-  input: { subject: unknown; body: unknown; audienceKey?: unknown; scheduledFor?: unknown },
+  input: { subject: unknown; body: unknown; audienceKey?: unknown; scheduledFor?: unknown; attachmentHandles?: unknown },
   dependencies: Dependencies = {},
 ) {
   const env = dependencies.env ?? process.env;
@@ -565,8 +691,10 @@ export async function createMemberEmailBroadcast(
   const now = (dependencies.now ?? (() => new Date()))();
   const scheduledFor = schedule(input.scheduledFor, now);
   const keyConfig = dependencies.keyConfig ?? getPiiKeyConfiguration(env);
+  const query = dependencies.query ?? queryLocal801;
   const plan = await buildAudiencePlan(context, input.audienceKey, { ...dependencies, keyConfig });
   if (plan.eligible === 0) fail("NO_ELIGIBLE_RECIPIENTS", "The approved snapshot has no eligible synthetic recipients.", 409);
+  const attachments = await resolveAttachmentDocuments(context, input.attachmentHandles, query);
 
   const id = randomUUID();
   const subjectProtected = encryptPiiField(subject,
@@ -641,6 +769,29 @@ export async function createMemberEmailBroadcast(
       )
     `, [context.organizationId, id, JSON.stringify(protectedRecipients)]);
 
+    if (attachments.length > 0) {
+      await query(`
+        /* member-email:freeze-attachments */
+        INSERT INTO local801.member_email_broadcast_attachments
+          (organization_id, broadcast_id, document_id, display_order, title, original_filename,
+           media_type, byte_size, sha256)
+        SELECT $1::uuid,$2::uuid,value.document_id::uuid,value.display_order::smallint,value.title,
+          value.original_filename,value.media_type,value.byte_size::integer,value.sha256
+        FROM jsonb_to_recordset($3::text::jsonb) AS value(
+          document_id text, display_order smallint, title text, original_filename text,
+          media_type text, byte_size integer, sha256 text
+        )
+      `, [context.organizationId, id, JSON.stringify(attachments.map((attachment) => ({
+        document_id: attachment.document_id,
+        display_order: attachment.display_order,
+        title: attachment.title,
+        original_filename: attachment.original_filename,
+        media_type: attachment.media_type,
+        byte_size: count(attachment.byte_size),
+        sha256: attachment.sha256,
+      })))]);
+    }
+
     const audit = await prepareAtomicAuditStatement({
       eventType: "broadcast.create", actorId: context.userId, organizationId: context.organizationId,
       subjectType: "member_email_broadcast", subjectId: id,
@@ -648,7 +799,9 @@ export async function createMemberEmailBroadcast(
         suppressedCount: plan.suppressed, representedCount: plan.representedRecipients,
         audienceKind: plan.audienceKey.split(":", 1)[0],
         audienceReferenceHandle: plan.audienceKey.includes(":") ? plan.audienceKey.split(":", 2)[1] : null,
-        sourceSnapshotId: plan.snapshotId, syntheticOnly: true },
+        sourceSnapshotId: plan.snapshotId, attachmentCount: attachments.length,
+        attachmentBytes: attachments.reduce((total, attachment) => total + count(attachment.byte_size), 0),
+        syntheticOnly: true },
     }, query);
     await query(audit.sql, audit.parameters);
     return { handle: created.handle };
@@ -681,6 +834,27 @@ function decryptBody(row: RealTestBroadcastRow, organizationId: string, keyConfi
   }, { organizationId, entity: "member-email-broadcast", recordId: row.id, field: "body" }, keyConfig);
 }
 
+function broadcastSummary(row: BroadcastRow, context: WorkspaceContext, keyConfig: PiiKeyConfiguration): MemberEmailBroadcastSummary {
+  return {
+    handle: row.handle,
+    subject: decryptSubject(row, context.organizationId, keyConfig),
+    status: publicStatus(row.status),
+    audienceLabel: row.audience_label,
+    representedRecipients: count(row.represented_count),
+    snapshotDate: dateOnly(row.snapshot_date),
+    eligible: count(row.eligible_count),
+    missing: count(row.missing_count),
+    duplicate: count(row.duplicate_count),
+    suppressed: count(row.suppressed_count),
+    scheduledFor: timestamp(row.scheduled_for),
+    createdAt: timestamp(row.created_at)!,
+    simulatedAt: timestamp(row.simulated_at),
+    realTestSentAt: timestamp(row.real_test_sent_at),
+    attachmentCount: count(row.attachment_count),
+    requiresDifferentApprover: row.created_by === context.userId,
+  };
+}
+
 export async function listMemberEmailBroadcasts(context: WorkspaceContext, dependencies: Dependencies = {}) {
   const env = dependencies.env ?? process.env;
   requireAccess(context, env);
@@ -695,6 +869,11 @@ export async function listMemberEmailBroadcasts(context: WorkspaceContext, depen
       broadcast.missing_count, broadcast.duplicate_count, broadcast.suppressed_count,
       broadcast.scheduled_for, broadcast.created_by::text, broadcast.approved_by::text,
       broadcast.simulated_at, broadcast.created_at,
+      (SELECT count(*)::integer FROM local801.member_email_broadcast_attachments attachment
+        WHERE attachment.organization_id = broadcast.organization_id AND attachment.broadcast_id = broadcast.id) AS attachment_count,
+      (SELECT max(event.created_at) FROM local801.audit_events event
+        WHERE event.organization_id = broadcast.organization_id AND event.subject_id = broadcast.id
+          AND event.subject_type = 'member_email_broadcast' AND event.event_type = 'broadcast.real_test_sent') AS real_test_sent_at,
       content.subject_encrypted_payload, content.subject_encryption_key_version, content.subject_encryption_format_version
     FROM local801.member_email_broadcasts broadcast
     JOIN local801.membership_snapshots snapshot
@@ -705,22 +884,73 @@ export async function listMemberEmailBroadcasts(context: WorkspaceContext, depen
     ORDER BY broadcast.created_at DESC, broadcast.id DESC
     LIMIT 25
   `, [context.organizationId]);
-  return rows.filter((row) => HANDLE_RE.test(row.handle)).map((row): MemberEmailBroadcastSummary => ({
-    handle: row.handle,
-    subject: decryptSubject(row, context.organizationId, keyConfig),
-    status: publicStatus(row.status),
-    audienceLabel: row.audience_label,
-    representedRecipients: count(row.represented_count),
-    snapshotDate: dateOnly(row.snapshot_date),
-    eligible: count(row.eligible_count),
-    missing: count(row.missing_count),
-    duplicate: count(row.duplicate_count),
-    suppressed: count(row.suppressed_count),
-    scheduledFor: timestamp(row.scheduled_for),
-    createdAt: timestamp(row.created_at)!,
-    simulatedAt: timestamp(row.simulated_at),
-    requiresDifferentApprover: row.created_by === context.userId,
-  }));
+  return rows.filter((row) => HANDLE_RE.test(row.handle)).map((row) => broadcastSummary(row, context, keyConfig));
+}
+
+export async function getMemberEmailBroadcastPreview(
+  context: WorkspaceContext,
+  handle: string,
+  dependencies: Dependencies = {},
+): Promise<MemberEmailBroadcastPreview | null> {
+  const env = dependencies.env ?? process.env;
+  requireAccess(context, env);
+  if (!HANDLE_RE.test(handle)) return null;
+  const query = dependencies.query ?? queryLocal801;
+  const keyConfig = dependencies.keyConfig ?? getPiiKeyConfiguration(env);
+  const [row] = await query<RealTestBroadcastRow>(`
+    /* member-email:preview-detail */
+    SELECT broadcast.id::text, ${broadcastHandleSql("broadcast")} AS handle, broadcast.status,
+      broadcast.source_snapshot_id::text, snapshot.snapshot_date, broadcast.audience_kind,
+      broadcast.audience_label, broadcast.audience_reference_handle, broadcast.represented_count,
+      broadcast.eligible_count, broadcast.missing_count, broadcast.duplicate_count, broadcast.suppressed_count,
+      broadcast.scheduled_for, broadcast.created_by::text, broadcast.approved_by::text,
+      broadcast.simulated_at, broadcast.created_at,
+      (SELECT count(*)::integer FROM local801.member_email_broadcast_attachments attachment
+        WHERE attachment.organization_id = broadcast.organization_id AND attachment.broadcast_id = broadcast.id) AS attachment_count,
+      (SELECT max(event.created_at) FROM local801.audit_events event
+        WHERE event.organization_id = broadcast.organization_id AND event.subject_id = broadcast.id
+          AND event.subject_type = 'member_email_broadcast' AND event.event_type = 'broadcast.real_test_sent') AS real_test_sent_at,
+      content.subject_encrypted_payload, content.subject_encryption_key_version, content.subject_encryption_format_version,
+      content.body_encrypted_payload, content.body_encryption_key_version, content.body_encryption_format_version
+    FROM local801.member_email_broadcasts broadcast
+    JOIN local801.membership_snapshots snapshot
+      ON snapshot.organization_id = broadcast.organization_id AND snapshot.id = broadcast.source_snapshot_id
+    JOIN local801.member_email_broadcast_content content
+      ON content.organization_id = broadcast.organization_id AND content.broadcast_id = broadcast.id
+    WHERE broadcast.organization_id = $1::uuid AND ${broadcastHandleSql("broadcast")} = $2::text
+  `, [context.organizationId, handle]);
+  if (!row) return null;
+  const access = documentAccessParameters(context);
+  const attachments = await query<AttachmentRow>(`
+    /* member-email:preview-attachments */
+    SELECT document.id::text AS document_id,
+      CASE WHEN document.id IS NULL THEN NULL ELSE
+        encode(public.digest(document.organization_id::text || ':' || document.id::text, 'sha256'), 'hex')
+      END AS handle,
+      attachment.title, attachment.original_filename, attachment.media_type, attachment.byte_size,
+      attachment.sha256, attachment.display_order
+    FROM local801.member_email_broadcast_attachments attachment
+    LEFT JOIN local801.documents document
+      ON document.organization_id = attachment.organization_id AND document.id = attachment.document_id
+      AND document.archived_at IS NULL AND document.status = 'approved'
+      AND ${documentAccessSql("document", { legacyVisibilities: 3, userId: 4, uploaderRoles: 5 })}
+    WHERE attachment.organization_id = $1::uuid AND attachment.broadcast_id = $2::uuid
+    ORDER BY attachment.display_order
+  `, [context.organizationId, row.id, access.legacyVisibilities, access.userId, access.uploaderRoles]);
+  const body = decryptBody(row, context.organizationId, keyConfig);
+  return {
+    ...broadcastSummary(row, context, keyConfig),
+    body,
+    html: renderMemberEmailHtml(body),
+    attachments: attachments.map((attachment) => ({
+      handle: attachment.handle && HANDLE_RE.test(attachment.handle) ? attachment.handle : null,
+      title: attachment.title,
+      originalFilename: attachment.original_filename,
+      mediaType: attachment.media_type,
+      byteSize: count(attachment.byte_size),
+      available: Boolean(attachment.document_id && attachment.handle && HANDLE_RE.test(attachment.handle)),
+    })),
+  };
 }
 
 async function mutateStatus(
@@ -833,6 +1063,33 @@ export function simulateMemberEmailSend(context: WorkspaceContext, handle: strin
   return mutateStatus(context, handle, "simulate_send", dependencies);
 }
 
+async function loadMemberEmailAttachments(context: WorkspaceContext, rows: AttachmentRow[]) {
+  if (rows.length === 0) return [];
+  if (rows.length > MAX_ATTACHMENTS || rows.some((row) => !row.document_id)) {
+    fail("ATTACHMENT_UNAVAILABLE", "A frozen email attachment is no longer available.", 409);
+  }
+  try {
+    const loaded = await Promise.all(rows.map(async (row) => {
+      const document = await downloadDocument({
+        actor: { organizationId: context.organizationId, userId: context.userId, role: context.role },
+        organizationId: context.organizationId,
+        documentId: row.document_id!,
+      });
+      if (document.sha256 !== row.sha256 || !document.originalFilename || !document.mediaType) {
+        fail("ATTACHMENT_CHANGED", "A frozen email attachment no longer matches its approved document.", 409);
+      }
+      return { content: document.plaintext, filename: row.original_filename, contentType: row.media_type };
+    }));
+    if (loaded.reduce((total, attachment) => total + attachment.content.byteLength, 0) > MAX_ATTACHMENT_BYTES) {
+      fail("ATTACHMENT_LIMIT", "Selected attachments must total 20 MB or less.", 409);
+    }
+    return loaded;
+  } catch (error) {
+    if (error instanceof MemberEmailBroadcastError) throw error;
+    fail("ATTACHMENT_UNAVAILABLE", "A frozen email attachment could not be opened securely.", 409);
+  }
+}
+
 export async function sendMemberEmailRealTest(context: WorkspaceContext, handle: string, dependencies: Dependencies = {}) {
   const env = dependencies.env ?? process.env;
   requireAccess(context, env);
@@ -872,6 +1129,22 @@ export async function sendMemberEmailRealTest(context: WorkspaceContext, handle:
   `, [context.organizationId, row.id]);
   if (existing.length > 0) return { action: "real_test" as const, status: publicStatus(row.status), alreadySent: true };
 
+  const access = documentAccessParameters(context);
+  const attachmentRows = await query<AttachmentRow>(`
+    /* member-email:send-attachments */
+    SELECT document.id::text AS document_id, NULL::text AS handle,
+      attachment.title, attachment.original_filename, attachment.media_type, attachment.byte_size,
+      attachment.sha256, attachment.display_order
+    FROM local801.member_email_broadcast_attachments attachment
+    LEFT JOIN local801.documents document
+      ON document.organization_id = attachment.organization_id AND document.id = attachment.document_id
+      AND document.archived_at IS NULL AND document.status = 'approved'
+      AND ${documentAccessSql("document", { legacyVisibilities: 3, userId: 4, uploaderRoles: 5 })}
+    WHERE attachment.organization_id = $1::uuid AND attachment.broadcast_id = $2::uuid
+    ORDER BY attachment.display_order
+  `, [context.organizationId, row.id, access.legacyVisibilities, access.userId, access.uploaderRoles]);
+  const attachments = await (dependencies.loadAttachments ?? loadMemberEmailAttachments)(context, attachmentRows);
+
   const keyConfig = dependencies.keyConfig ?? getPiiKeyConfiguration(env);
   const subject = decryptSubject(row, context.organizationId, keyConfig);
   const body = decryptBody(row, context.organizationId, keyConfig);
@@ -888,6 +1161,7 @@ export async function sendMemberEmailRealTest(context: WorkspaceContext, handle:
       subject: `[CAT Preview Test] ${subject}`,
       text: `${formattedText}\n\n---\nCAT Preview one-address test. No member broadcast was delivered.`,
       html: `${formattedHtml}<hr style="border:0;border-top:1px solid #d9e0e7;margin:24px 0 12px;"><p style="color:#526171;font-size:12px;line-height:1.5;">CAT Preview one-address test. No member broadcast was delivered.</p>`,
+      attachments,
       idempotencyKey: `cat-preview-test/${context.organizationId}/${row.id}`,
     }));
   } catch {
@@ -906,6 +1180,7 @@ export async function sendMemberEmailRealTest(context: WorkspaceContext, handle:
         provider: boundary.provider,
         deliveryMode: boundary.mode,
         recipientCount: 1,
+        attachmentCount: attachments.length,
         memberDeliveryAllowed: false,
         providerMessageHash: createHash("sha256").update(providerMessageId).digest("hex"),
       },
@@ -915,4 +1190,13 @@ export async function sendMemberEmailRealTest(context: WorkspaceContext, handle:
   return { action: "real_test" as const, status: publicStatus(row.status), alreadySent: false };
 }
 
-export const __testing = { content, schedule, MAX_RECIPIENTS, MAX_SUBJECT, MAX_BODY };
+export const __testing = {
+  attachmentHandles,
+  content,
+  schedule,
+  MAX_ATTACHMENTS,
+  MAX_ATTACHMENT_BYTES,
+  MAX_RECIPIENTS,
+  MAX_SUBJECT,
+  MAX_BODY,
+};
