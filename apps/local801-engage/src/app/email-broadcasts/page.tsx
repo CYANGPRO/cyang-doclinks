@@ -3,6 +3,7 @@ import { MemberEmailBroadcastActions, MemberEmailBroadcastComposer } from "@/com
 import { DataTable, EmptyState, PageHeader, SectionCard, StatusBadge, UnavailableState } from "@/components/DesignSystem";
 import { ProtectedPage } from "@/components/ProtectedPage";
 import { can } from "@/lib/access";
+import { safeProductionAuthInternalFailure } from "@/lib/auth-failure-diagnostics";
 import { getPreviewUser } from "@/lib/authz.server";
 import { listMemberEmailAudienceOptions, listMemberEmailBroadcasts } from "@/lib/member-email-broadcasts";
 import { memberEmailPreviewEnabled, memberEmailRealTestSummary } from "@/lib/member-email-preview-policy";
@@ -20,12 +21,25 @@ export default async function EmailBroadcastsPage() {
   let audienceOptions: Awaited<ReturnType<typeof listMemberEmailAudienceOptions>> | null = null;
   try {
     const context = await resolveWorkspaceContext(user);
-    [broadcasts, audienceOptions] = await Promise.all([
+    const [broadcastResult, audienceResult] = await Promise.allSettled([
       listMemberEmailBroadcasts(context),
       listMemberEmailAudienceOptions(context),
     ]);
-  } catch {
-    // Fail closed rather than display a partial protected recipient workflow.
+    if (broadcastResult.status === "fulfilled") broadcasts = broadcastResult.value;
+    else console.error("[local801-member-email-safe-failure]", JSON.stringify({
+      operation: "list-broadcasts",
+      ...safeProductionAuthInternalFailure(broadcastResult.reason),
+    }));
+    if (audienceResult.status === "fulfilled") audienceOptions = audienceResult.value;
+    else console.error("[local801-member-email-safe-failure]", JSON.stringify({
+      operation: "list-audiences",
+      ...safeProductionAuthInternalFailure(audienceResult.reason),
+    }));
+  } catch (error) {
+    console.error("[local801-member-email-safe-failure]", JSON.stringify({
+      operation: "resolve-workspace",
+      ...safeProductionAuthInternalFailure(error),
+    }));
   }
 
   return <ProtectedPage permission="sendMemberEmail"><div className="content route-email-broadcasts-page queue-first-page">

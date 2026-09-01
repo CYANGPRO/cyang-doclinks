@@ -470,6 +470,9 @@ test("migration and routes preserve Preview-only, protected, authenticated bound
   assert.match(registeredUserMigration, /registered_users/);
   assert.match(page, /memberEmailPreviewEnabled\(\)/);
   assert.match(page, /permission="sendMemberEmail"/);
+  assert.match(page, /Promise\.allSettled/);
+  assert.match(page, /local801-member-email-safe-failure/);
+  assert.match(page, /safeProductionAuthInternalFailure/);
   assert.match(http, /requirePreviewUser\("sendMemberEmail"\)/);
   assert.match(http, /hasExactSameOrigin/);
 });
