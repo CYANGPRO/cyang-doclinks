@@ -19,7 +19,7 @@ type Audience = {
   suppressed: number;
   homePreferred: number;
   workFallback: number;
-  syntheticOnly: true;
+  syntheticOnly: boolean;
 };
 
 type AudienceOption = {
@@ -37,6 +37,14 @@ type AttachmentOption = {
   byteSize: number;
 };
 
+type TemplateOption = {
+  handle: string;
+  name: string;
+  subject: string;
+  body: string;
+  updatedAt: string;
+};
+
 type Feedback = { tone: "error" | "success"; message: string } | null;
 
 type DraftReview = {
@@ -45,6 +53,13 @@ type DraftReview = {
   scheduledFor: string | null;
   scheduledDisplay: string;
   attachments: AttachmentOption[];
+};
+
+export type MemberEmailInitialDraft = {
+  subject: string;
+  body: string;
+  audienceKey: string;
+  attachmentHandles: string[];
 };
 
 function fileSize(value: number) {
@@ -102,22 +117,61 @@ export function MemberEmailBroadcastComposer({
   attachmentOptions,
   sender,
   replyTo,
+  mode,
+  initialDraft = null,
+  templates,
 }: {
   audienceOptions: AudienceOption[];
   attachmentOptions: AttachmentOption[] | null;
   sender: string | null;
   replyTo: string | null;
+  mode: "preview" | "production";
+  initialDraft?: MemberEmailInitialDraft | null;
+  templates: TemplateOption[] | null;
 }) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
-  const [selectedAudience, setSelectedAudience] = useState(audienceOptions[0]?.key ?? "members");
+  const initialAudience = initialDraft && audienceOptions.some((option) => option.key === initialDraft.audienceKey)
+    ? initialDraft.audienceKey
+    : audienceOptions[0]?.key ?? "members";
+  const [selectedAudience, setSelectedAudience] = useState(initialAudience);
   const [audience, setAudience] = useState<Audience | null>(null);
-  const [bodySource, setBodySource] = useState("");
-  const [selectedAttachmentHandles, setSelectedAttachmentHandles] = useState<string[]>([]);
+  const [bodySource, setBodySource] = useState(initialDraft?.body ?? "");
+  const [subjectSource, setSubjectSource] = useState(initialDraft?.subject ?? "");
+  const [selectedAttachmentHandles, setSelectedAttachmentHandles] = useState<string[]>(initialDraft?.attachmentHandles ?? []);
   const [review, setReview] = useState<DraftReview | null>(null);
-  const [pending, setPending] = useState<"preview" | "create" | null>(null);
+  const [pending, setPending] = useState<"preview" | "create" | "template" | null>(null);
   const [feedback, setFeedback] = useState<Feedback>(null);
+
+  function applyTemplate(handle: string) {
+    const template = templates?.find((item) => item.handle === handle);
+    if (!template) return;
+    setSubjectSource(template.subject);
+    setBodySource(template.body);
+    setReview(null);
+    setFeedback({ tone: "success", message: `Loaded the “${template.name}” template. Review it before sending.` });
+  }
+
+  async function saveTemplate() {
+    const name = window.prompt("Name this reusable notice template:")?.trim();
+    if (!name) return;
+    if (!subjectSource.trim() || !bodySource.trim()) {
+      setFeedback({ tone: "error", message: "Enter a subject and message before saving a template." });
+      return;
+    }
+    setPending("template");
+    setFeedback(null);
+    try {
+      await post("/api/email-broadcasts/templates", { name, subject: subjectSource, body: bodySource });
+      setFeedback({ tone: "success", message: "Reusable notice template saved." });
+      router.refresh();
+    } catch (error) {
+      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "The template could not be saved." });
+    } finally {
+      setPending(null);
+    }
+  }
 
   function toggleAttachment(option: AttachmentOption, checked: boolean) {
     const next = checked
@@ -186,7 +240,7 @@ export function MemberEmailBroadcastComposer({
     try {
       const payload = await post("/api/email-broadcasts/preview", { audienceKey: selectedAudience });
       setAudience(payload.audience as Audience);
-      setFeedback({ tone: "success", message: "Synthetic recipient preview refreshed for the selected audience." });
+      setFeedback({ tone: "success", message: `${mode === "preview" ? "Synthetic " : ""}recipient preview refreshed for the selected audience.` });
     } catch (error) {
       setAudience(null);
       setFeedback({ tone: "error", message: error instanceof Error ? error.message : "Recipient preview is unavailable." });
@@ -242,10 +296,11 @@ export function MemberEmailBroadcastComposer({
       });
       formRef.current?.reset();
       setBodySource("");
+      setSubjectSource("");
       setSelectedAttachmentHandles([]);
       setAudience(null);
       setReview(null);
-      setFeedback({ tone: "success", message: "Preview broadcast draft created with a frozen synthetic recipient snapshot." });
+      setFeedback({ tone: "success", message: `${mode === "preview" ? "Preview broadcast" : "Member notice"} draft created with a frozen recipient snapshot.` });
       router.refresh();
     } catch (error) {
       setFeedback({ tone: "error", message: error instanceof Error ? error.message : "The draft could not be created." });
@@ -255,8 +310,10 @@ export function MemberEmailBroadcastComposer({
   }
 
   return <form ref={formRef} className="stack" onSubmit={prepareReview} onInput={() => setReview(null)}>
+    {initialDraft ? <div className="callout neutral"><strong>Started from a previous notice.</strong> Review the copy, check the current audience, and create a new independent draft.</div> : null}
     <div className="callout neutral">
-      <strong>Member delivery stays simulated.</strong> Draft audiences remain locked to <code>example.test</code>. A separate action may send one configured external test through Resend, never the member list.
+      {mode === "preview" ? <><strong>Member delivery stays simulated.</strong> Draft audiences remain locked to <code>example.test</code>. A separate action may send one configured external test through Resend, never the member list.</>
+        : <><strong>This can deliver a real member notice.</strong> CAT freezes the chosen audience, requires a different approver, and asks for final confirmation before delivery.</>}
     </div>
     <div className="field">
       <label htmlFor="member-email-audience">Recipients</label>
@@ -279,7 +336,7 @@ export function MemberEmailBroadcastComposer({
     </div>
     <div className="form-actions">
       <button className="button secondary" type="button" onClick={loadPreview} disabled={pending !== null}>
-        {pending === "preview" ? "Checking…" : "Preview synthetic recipients"}
+        {pending === "preview" ? "Checking…" : `Preview ${mode === "preview" ? "synthetic " : ""}recipients`}
       </button>
     </div>
     {audience ? <section className={styles.recipientPreview} aria-labelledby="recipient-preview-title" aria-live="polite">
@@ -326,7 +383,7 @@ export function MemberEmailBroadcastComposer({
         </dl>
       </div>
 
-      <p className={styles.privacyNote}>Only aggregate counts are shown here. Recipient addresses remain protected.</p>
+      <p className={styles.privacyNote}>Only aggregate counts are shown here. Recipient addresses remain protected{mode === "preview" ? " and synthetic" : ""}.</p>
     </section> : null}
     <div className={styles.composeHeading}>
       <span>Next</span>
@@ -335,9 +392,26 @@ export function MemberEmailBroadcastComposer({
         <p>The draft can be created after the selected audience has been checked.</p>
       </div>
     </div>
+    {templates === null ? null : <div className="field">
+      <label htmlFor="member-email-template">Reusable template</label>
+      <div className="form-actions compact-actions">
+        <select id="member-email-template" defaultValue="" onChange={(event) => {
+          if (event.target.value) applyTemplate(event.target.value);
+          event.target.value = "";
+        }} disabled={pending !== null || templates.length === 0}>
+          <option value="">{templates.length === 0 ? "No saved templates" : "Choose a saved template"}</option>
+          {templates.map((template) => <option key={template.handle} value={template.handle}>{template.name}</option>)}
+        </select>
+        <button className="button secondary" type="button" onClick={saveTemplate} disabled={pending !== null || !subjectSource.trim() || !bodySource.trim()}>Save current copy as template</button>
+      </div>
+      <p className="field-help">Templates save the subject and formatted message only. Recipients, schedules, and attachments are never carried over.</p>
+    </div>}
     <div className="field">
       <label htmlFor="member-email-subject">Subject</label>
-      <input id="member-email-subject" name="subject" required maxLength={160} />
+      <input id="member-email-subject" name="subject" required maxLength={160} value={subjectSource} onChange={(event) => {
+        setSubjectSource(event.target.value);
+        setReview(null);
+      }} />
     </div>
     <div className="field">
       <label htmlFor="member-email-body">Message</label>
@@ -378,10 +452,10 @@ export function MemberEmailBroadcastComposer({
           <span><strong>{attachment.title}</strong><small>{attachment.originalFilename} · {fileSize(attachment.byteSize)}</small></span>
         </label>)}
       </div>}
-      <p className="field-help">Optional. Choose up to 5 approved CAT Documents, totaling no more than 20 MB. Access and file integrity are checked again before a real Preview test.</p>
+      <p className="field-help">Optional. Choose up to 5 approved CAT Documents, totaling no more than 20 MB. Access and file integrity are checked again before {mode === "preview" ? "a real Preview test" : "member delivery"}.</p>
     </div>
     <div className="field">
-      <label htmlFor="member-email-schedule">Optional simulated send time</label>
+      <label htmlFor="member-email-schedule">Optional {mode === "preview" ? "simulated " : ""}send time</label>
       <input id="member-email-schedule" name="scheduledFor" type="datetime-local" />
     </div>
     <div className="form-actions">
@@ -391,7 +465,7 @@ export function MemberEmailBroadcastComposer({
       <header className={styles.finalReviewHeader}>
         <div>
           <span className={styles.eyebrow}>Final review</span>
-          <h3 id="final-review-title">Confirm this Preview draft</h3>
+          <h3 id="final-review-title">Confirm this {mode === "preview" ? "Preview draft" : "member notice draft"}</h3>
           <p>Check the delivery details and message before freezing the recipient snapshot.</p>
         </div>
         <span className={styles.reviewBadge}>Not sent yet</span>
@@ -429,7 +503,7 @@ export function MemberEmailBroadcastComposer({
           document.getElementById("member-email-subject")?.focus();
         }} disabled={pending !== null}>Back to edit</button>
         <button className="button" type="button" onClick={create} disabled={pending !== null}>
-          {pending === "create" ? "Creating…" : "Create Preview draft"}
+          {pending === "create" ? "Creating…" : `Create ${mode === "preview" ? "Preview " : ""}draft`}
         </button>
       </div>
     </section> : null}
@@ -441,24 +515,38 @@ export function MemberEmailBroadcastActions({
   handle,
   status,
   requiresDifferentApprover,
+  mode,
+  providerReady,
+  eligible,
+  sender,
+  replyTo,
   realTestRecipient,
 }: {
   handle: string;
-  status: "draft" | "review" | "approved" | "simulated" | "cancelled";
+  status: "draft" | "review" | "approved" | "queued" | "sending" | "paused" | "sent" | "failed" | "simulated" | "cancelled";
   requiresDifferentApprover: boolean;
+  mode: "preview" | "production";
+  providerReady: boolean;
+  eligible: number;
+  sender: string | null;
+  replyTo: string | null;
   realTestRecipient: string | null;
 }) {
   const router = useRouter();
   const [pending, setPending] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Feedback>(null);
 
-  async function act(action: "submit" | "approve" | "simulate_test" | "simulate_send" | "real_test") {
+  async function act(action: "submit" | "approve" | "simulate_test" | "simulate_send" | "real_test" | "send" | "pause" | "resume" | "cancel") {
     const warning = action === "approve"
-      ? "Approve this frozen synthetic recipient list? No email will be delivered."
+      ? `Approve this frozen ${mode === "preview" ? "synthetic " : ""}recipient list?${mode === "preview" ? " No email will be delivered." : " This does not send it yet."}`
       : action === "simulate_send"
         ? "Record simulated delivery for every eligible synthetic recipient?"
         : action === "real_test"
           ? `Send one real external email through Resend to ${realTestRecipient}? No member email will be delivered.`
+          : action === "send"
+            ? `Send this notice to ${eligible.toLocaleString()} recipients?\n\nFrom: ${sender}\nReplies: ${replyTo}\n\nThis starts real member delivery and cannot recall messages already accepted by the provider.`
+            : action === "cancel"
+              ? "Cancel this notice? Messages already accepted by the provider cannot be recalled."
         : null;
     if (warning && !window.confirm(warning)) return;
     setPending(action);
@@ -471,7 +559,15 @@ export function MemberEmailBroadcastActions({
           ? "Test simulation recorded."
           : action === "real_test"
             ? "Resend accepted the one-address Preview test."
-            : "Preview workflow updated.",
+            : action === "send"
+              ? "Member delivery was queued."
+              : action === "pause"
+                ? "Delivery will pause before the next batch."
+                : action === "resume"
+                  ? "Delivery resumed."
+                  : action === "cancel"
+                    ? "The notice was cancelled."
+                    : `${mode === "preview" ? "Preview" : "Notice"} workflow updated.`,
       });
       router.refresh();
     } catch (error) {
@@ -486,13 +582,20 @@ export function MemberEmailBroadcastActions({
       <Link className="button secondary" href={`/email-broadcasts/${handle}`}>View email</Link>
       {status === "draft" ? <button className="button secondary" type="button" onClick={() => act("submit")} disabled={pending !== null}>Submit for review</button> : null}
       {status === "review" ? <button className="button" type="button" onClick={() => act("approve")} disabled={pending !== null || requiresDifferentApprover}>Approve</button> : null}
-      {status === "approved" ? <button className="button" type="button" onClick={() => act("simulate_send")} disabled={pending !== null}>Simulate delivery</button> : null}
-      {status !== "simulated" && status !== "cancelled" ? <button className="button secondary" type="button" onClick={() => act("simulate_test")} disabled={pending !== null}>Simulate test</button> : null}
-      {status !== "simulated" && status !== "cancelled" && realTestRecipient ? <button className="button secondary" type="button" onClick={() => act("real_test")} disabled={pending !== null}>
+      {mode === "preview" && status === "approved" ? <button className="button" type="button" onClick={() => act("simulate_send")} disabled={pending !== null}>Simulate delivery</button> : null}
+      {mode === "production" && (status === "approved" || status === "failed") ? <button className="button" type="button" onClick={() => act("send")} disabled={pending !== null || !providerReady}>
+        {pending === "send" ? "Queuing…" : status === "failed" ? "Retry delivery" : "Send notice"}
+      </button> : null}
+      {mode === "production" && (status === "queued" || status === "sending") ? <button className="button secondary" type="button" onClick={() => act("pause")} disabled={pending !== null}>Pause</button> : null}
+      {mode === "production" && status === "paused" ? <button className="button" type="button" onClick={() => act("resume")} disabled={pending !== null}>Resume</button> : null}
+      {mode === "production" && ["draft", "review", "approved", "queued", "sending", "paused"].includes(status) ? <button className="button secondary" type="button" onClick={() => act("cancel")} disabled={pending !== null}>Cancel</button> : null}
+      {mode === "preview" && status !== "simulated" && status !== "cancelled" ? <button className="button secondary" type="button" onClick={() => act("simulate_test")} disabled={pending !== null}>Simulate test</button> : null}
+      {mode === "preview" && status !== "simulated" && status !== "cancelled" && realTestRecipient ? <button className="button secondary" type="button" onClick={() => act("real_test")} disabled={pending !== null}>
         {pending === "real_test" ? "Sending…" : "Send real email test"}
       </button> : null}
     </div>
     {status === "review" && requiresDifferentApprover ? <span className="muted">Switch to the other authorized administrator to approve.</span> : null}
+    {mode === "production" && (status === "approved" || status === "failed") && !providerReady ? <span className="muted">Production delivery stays disabled until the separate CAT Resend key and signed webhook are ready.</span> : null}
     <FeedbackMessage value={feedback} />
   </div>;
 }

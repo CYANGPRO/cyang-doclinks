@@ -10,8 +10,9 @@ import { sendMemberEmailPreviewTest, type SendMemberEmailPreviewTestInput } from
 import { renderMemberEmailHtml, renderMemberEmailText } from "./member-email-format.ts";
 import {
   memberEmailDeliveryBoundary,
+  memberEmailRuntimeMode,
   memberEmailRealTestBoundary,
-  requireMemberEmailPreview,
+  requireMemberEmailRuntime,
   requireSyntheticMemberEmail,
 } from "./member-email-preview-policy.ts";
 import {
@@ -107,7 +108,7 @@ export type MemberEmailAudienceSummary = {
   suppressed: number;
   homePreferred: number;
   workFallback: number;
-  syntheticOnly: true;
+  syntheticOnly: boolean;
 };
 
 type AudiencePlan = MemberEmailAudienceSummary & { snapshotId: string; recipients: PlannedRecipient[] };
@@ -136,6 +137,16 @@ type BroadcastRow = {
   represented_count: number | string;
   attachment_count: number | string;
   real_test_sent_at: string | Date | null;
+  queued_at: string | Date | null;
+  started_at: string | Date | null;
+  completed_at: string | Date | null;
+  failure_code: string | null;
+  sender_address: string | null;
+  reply_to_address: string | null;
+  pending_delivery_count: number | string;
+  accepted_delivery_count: number | string;
+  delivered_delivery_count: number | string;
+  failed_delivery_count: number | string;
 };
 
 type RealTestBroadcastRow = BroadcastRow & {
@@ -171,8 +182,9 @@ export type MemberEmailAttachmentSummary = Omit<MemberEmailAttachmentOption, "ha
 export type MemberEmailBroadcastSummary = {
   handle: string;
   subject: string;
-  status: "draft" | "review" | "approved" | "simulated" | "cancelled";
+  status: "draft" | "review" | "approved" | "queued" | "sending" | "paused" | "sent" | "failed" | "simulated" | "cancelled";
   audienceLabel: string;
+  audienceKey: string;
   representedRecipients: number;
   snapshotDate: string;
   eligible: number;
@@ -185,12 +197,27 @@ export type MemberEmailBroadcastSummary = {
   realTestSentAt: string | null;
   attachmentCount: number;
   requiresDifferentApprover: boolean;
+  queuedAt: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  failureCode: string | null;
+  senderAddress: string | null;
+  replyToAddress: string | null;
+  deliveryCounts: { pending: number; accepted: number; delivered: number; failed: number };
 };
 
 export type MemberEmailBroadcastPreview = MemberEmailBroadcastSummary & {
   body: string;
   html: string;
   attachments: MemberEmailAttachmentSummary[];
+};
+
+export type MemberEmailTemplate = {
+  handle: string;
+  name: string;
+  subject: string;
+  body: string;
+  updatedAt: string;
 };
 
 type LoadedAttachment = {
@@ -226,7 +253,7 @@ function fail(code: string, message: string, status = 400): never {
 }
 
 function requireAccess(context: WorkspaceContext, env: NodeJS.ProcessEnv) {
-  requireMemberEmailPreview(env);
+  requireMemberEmailRuntime(env);
   if (!can(context.role, "sendMemberEmail")) fail("FORBIDDEN", "Member email broadcast access is not authorized.", 403);
 }
 
@@ -256,11 +283,11 @@ function content(value: unknown, label: string, max: number) {
 
 function schedule(value: unknown, now: Date) {
   if (value === undefined || value === null || value === "") return null;
-  if (typeof value !== "string" || value.length > 50) fail("INVALID_SCHEDULE", "The simulated send time is invalid.");
+  if (typeof value !== "string" || value.length > 50) fail("INVALID_SCHEDULE", "The send time is invalid.");
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime()) || parsed.getTime() < now.getTime() - 60_000
     || parsed.getTime() > now.getTime() + 366 * 86_400_000) {
-    fail("INVALID_SCHEDULE", "Choose a simulated send time from now through the next year.");
+    fail("INVALID_SCHEDULE", "Choose a send time from now through the next year.");
   }
   return parsed.toISOString();
 }
@@ -522,6 +549,7 @@ function selectedContact(
 async function buildAudiencePlan(context: WorkspaceContext, selectionInput: unknown, dependencies: Dependencies = {}): Promise<AudiencePlan> {
   const env = dependencies.env ?? process.env;
   requireAccess(context, env);
+  const runtimeMode = memberEmailRuntimeMode(env);
   const query = dependencies.query ?? queryLocal801;
   const mode = getPiiProtectedReadMode(env);
   const keyConfig = dependencies.keyConfig ?? getPiiKeyConfiguration(env);
@@ -608,7 +636,8 @@ async function buildAudiencePlan(context: WorkspaceContext, selectionInput: unkn
     ORDER BY snapshot_row.person_id
     LIMIT ${MAX_RECIPIENTS + 1}
   `, [context.organizationId, snapshot.id, selection.kind, selection.department, selection.campaignId]);
-  if (rows.length > MAX_RECIPIENTS) fail("AUDIENCE_TOO_LARGE", `Preview broadcasts are limited to ${MAX_RECIPIENTS.toLocaleString()} represented recipients.`, 409);
+  const runtimeRecipientLimit = runtimeMode === "production" ? 1000 : MAX_RECIPIENTS;
+  if (rows.length > runtimeRecipientLimit) fail("AUDIENCE_TOO_LARGE", `Email notices are limited to ${runtimeRecipientLimit.toLocaleString()} represented recipients.`, 409);
 
   const preliminary: Array<Omit<PlannedRecipient, "status" | "duplicateOfRecipientId">> = [];
   for (const row of rows) {
@@ -625,7 +654,7 @@ async function buildAudiencePlan(context: WorkspaceContext, selectionInput: unkn
     } catch {
       fail("INVALID_ROSTER_EMAIL", "A selected member email is invalid. Correct the roster before previewing a broadcast.", 409);
     }
-    requireSyntheticMemberEmail(normalized);
+    if (runtimeMode === "preview") requireSyntheticMemberEmail(normalized);
     const index = createPiiBlindIndex(normalized, { organizationId: context.organizationId, domain: "member-email:recipient" }, keyConfig);
     preliminary.push({ id: randomUUID(), personId: row.person_id, userId: row.user_id,
       contactMethodId: contact.id, contactKind: contact.kind,
@@ -661,7 +690,7 @@ async function buildAudiencePlan(context: WorkspaceContext, selectionInput: unkn
     suppressed: recipients.filter((item) => item.status === "suppressed").length,
     homePreferred: recipients.filter((item) => item.contactKind === "home").length,
     workFallback: recipients.filter((item) => item.contactKind === "work").length,
-    syntheticOnly: true,
+    syntheticOnly: runtimeMode === "preview",
     recipients,
   };
 }
@@ -693,7 +722,7 @@ export async function createMemberEmailBroadcast(
   const keyConfig = dependencies.keyConfig ?? getPiiKeyConfiguration(env);
   const query = dependencies.query ?? queryLocal801;
   const plan = await buildAudiencePlan(context, input.audienceKey, { ...dependencies, keyConfig });
-  if (plan.eligible === 0) fail("NO_ELIGIBLE_RECIPIENTS", "The approved snapshot has no eligible synthetic recipients.", 409);
+  if (plan.eligible === 0) fail("NO_ELIGIBLE_RECIPIENTS", "The approved snapshot has no eligible recipients.", 409);
   const attachments = await resolveAttachmentDocuments(context, input.attachmentHandles, query);
 
   const id = randomUUID();
@@ -742,7 +771,7 @@ export async function createMemberEmailBroadcast(
       subjectIntegrity.blindIndexKeyVersion, subjectIntegrity.blindIndex,
       bodyIntegrity.blindIndexKeyVersion, bodyIntegrity.blindIndex,
       plan.eligible, plan.missing, plan.duplicate, plan.suppressed, scheduledFor, context.userId]);
-    if (!created?.handle || !HANDLE_RE.test(created.handle)) fail("CREATE_FAILED", "The Preview broadcast could not be created safely.", 503);
+    if (!created?.handle || !HANDLE_RE.test(created.handle)) fail("CREATE_FAILED", "The email notice could not be created safely.", 503);
 
     await query(`
       INSERT INTO local801.member_email_broadcast_content
@@ -801,7 +830,7 @@ export async function createMemberEmailBroadcast(
         audienceReferenceHandle: plan.audienceKey.includes(":") ? plan.audienceKey.split(":", 2)[1] : null,
         sourceSnapshotId: plan.snapshotId, attachmentCount: attachments.length,
         attachmentBytes: attachments.reduce((total, attachment) => total + count(attachment.byte_size), 0),
-        syntheticOnly: true },
+        syntheticOnly: plan.syntheticOnly },
     }, query);
     await query(audit.sql, audit.parameters);
     return { handle: created.handle };
@@ -811,7 +840,9 @@ export async function createMemberEmailBroadcast(
 }
 
 function publicStatus(value: string): MemberEmailBroadcastSummary["status"] {
-  return value === "review" || value === "approved" || value === "simulated" || value === "cancelled" ? value : "draft";
+  return new Set(["draft", "review", "approved", "queued", "sending", "paused", "sent", "failed", "simulated", "cancelled"]).has(value)
+    ? value as MemberEmailBroadcastSummary["status"]
+    : "draft";
 }
 
 function decryptSubject(row: BroadcastRow, organizationId: string, keyConfig: PiiKeyConfiguration) {
@@ -835,11 +866,15 @@ function decryptBody(row: RealTestBroadcastRow, organizationId: string, keyConfi
 }
 
 function broadcastSummary(row: BroadcastRow, context: WorkspaceContext, keyConfig: PiiKeyConfiguration): MemberEmailBroadcastSummary {
+  const selectedAudienceKey = row.audience_reference_handle
+    ? `${row.audience_kind}:${row.audience_reference_handle}`
+    : row.audience_kind;
   return {
     handle: row.handle,
     subject: decryptSubject(row, context.organizationId, keyConfig),
     status: publicStatus(row.status),
     audienceLabel: row.audience_label,
+    audienceKey: selectedAudienceKey,
     representedRecipients: count(row.represented_count),
     snapshotDate: dateOnly(row.snapshot_date),
     eligible: count(row.eligible_count),
@@ -852,6 +887,18 @@ function broadcastSummary(row: BroadcastRow, context: WorkspaceContext, keyConfi
     realTestSentAt: timestamp(row.real_test_sent_at),
     attachmentCount: count(row.attachment_count),
     requiresDifferentApprover: row.created_by === context.userId,
+    queuedAt: timestamp(row.queued_at),
+    startedAt: timestamp(row.started_at),
+    completedAt: timestamp(row.completed_at),
+    failureCode: row.failure_code,
+    senderAddress: row.sender_address,
+    replyToAddress: row.reply_to_address,
+    deliveryCounts: {
+      pending: count(row.pending_delivery_count),
+      accepted: count(row.accepted_delivery_count),
+      delivered: count(row.delivered_delivery_count),
+      failed: count(row.failed_delivery_count),
+    },
   };
 }
 
@@ -868,7 +915,20 @@ export async function listMemberEmailBroadcasts(context: WorkspaceContext, depen
       broadcast.eligible_count,
       broadcast.missing_count, broadcast.duplicate_count, broadcast.suppressed_count,
       broadcast.scheduled_for, broadcast.created_by::text, broadcast.approved_by::text,
-      broadcast.simulated_at, broadcast.created_at,
+      broadcast.simulated_at, broadcast.created_at, broadcast.queued_at, broadcast.started_at,
+      broadcast.completed_at, broadcast.failure_code, broadcast.sender_address, broadcast.reply_to_address,
+      (SELECT count(*)::integer FROM local801.member_email_broadcast_recipients recipient
+        WHERE recipient.organization_id=broadcast.organization_id AND recipient.broadcast_id=broadcast.id
+          AND recipient.recipient_status='eligible' AND recipient.delivery_status='pending') AS pending_delivery_count,
+      (SELECT count(*)::integer FROM local801.member_email_broadcast_recipients recipient
+        WHERE recipient.organization_id=broadcast.organization_id AND recipient.broadcast_id=broadcast.id
+          AND recipient.recipient_status='eligible' AND recipient.delivery_status='accepted') AS accepted_delivery_count,
+      (SELECT count(*)::integer FROM local801.member_email_broadcast_recipients recipient
+        WHERE recipient.organization_id=broadcast.organization_id AND recipient.broadcast_id=broadcast.id
+          AND recipient.recipient_status='eligible' AND recipient.delivery_status='delivered') AS delivered_delivery_count,
+      (SELECT count(*)::integer FROM local801.member_email_broadcast_recipients recipient
+        WHERE recipient.organization_id=broadcast.organization_id AND recipient.broadcast_id=broadcast.id
+          AND recipient.recipient_status='eligible' AND recipient.delivery_status IN ('bounced','complained','suppressed','failed')) AS failed_delivery_count,
       (SELECT count(*)::integer FROM local801.member_email_broadcast_attachments attachment
         WHERE attachment.organization_id = broadcast.organization_id AND attachment.broadcast_id = broadcast.id) AS attachment_count,
       (SELECT max(event.created_at) FROM local801.audit_events event
@@ -882,7 +942,7 @@ export async function listMemberEmailBroadcasts(context: WorkspaceContext, depen
       ON content.organization_id = broadcast.organization_id AND content.broadcast_id = broadcast.id
     WHERE broadcast.organization_id = $1::uuid
     ORDER BY broadcast.created_at DESC, broadcast.id DESC
-    LIMIT 25
+    LIMIT 200
   `, [context.organizationId]);
   return rows.filter((row) => HANDLE_RE.test(row.handle)).map((row) => broadcastSummary(row, context, keyConfig));
 }
@@ -904,7 +964,20 @@ export async function getMemberEmailBroadcastPreview(
       broadcast.audience_label, broadcast.audience_reference_handle, broadcast.represented_count,
       broadcast.eligible_count, broadcast.missing_count, broadcast.duplicate_count, broadcast.suppressed_count,
       broadcast.scheduled_for, broadcast.created_by::text, broadcast.approved_by::text,
-      broadcast.simulated_at, broadcast.created_at,
+      broadcast.simulated_at, broadcast.created_at, broadcast.queued_at, broadcast.started_at,
+      broadcast.completed_at, broadcast.failure_code, broadcast.sender_address, broadcast.reply_to_address,
+      (SELECT count(*)::integer FROM local801.member_email_broadcast_recipients recipient
+        WHERE recipient.organization_id=broadcast.organization_id AND recipient.broadcast_id=broadcast.id
+          AND recipient.recipient_status='eligible' AND recipient.delivery_status='pending') AS pending_delivery_count,
+      (SELECT count(*)::integer FROM local801.member_email_broadcast_recipients recipient
+        WHERE recipient.organization_id=broadcast.organization_id AND recipient.broadcast_id=broadcast.id
+          AND recipient.recipient_status='eligible' AND recipient.delivery_status='accepted') AS accepted_delivery_count,
+      (SELECT count(*)::integer FROM local801.member_email_broadcast_recipients recipient
+        WHERE recipient.organization_id=broadcast.organization_id AND recipient.broadcast_id=broadcast.id
+          AND recipient.recipient_status='eligible' AND recipient.delivery_status='delivered') AS delivered_delivery_count,
+      (SELECT count(*)::integer FROM local801.member_email_broadcast_recipients recipient
+        WHERE recipient.organization_id=broadcast.organization_id AND recipient.broadcast_id=broadcast.id
+          AND recipient.recipient_status='eligible' AND recipient.delivery_status IN ('bounced','complained','suppressed','failed')) AS failed_delivery_count,
       (SELECT count(*)::integer FROM local801.member_email_broadcast_attachments attachment
         WHERE attachment.organization_id = broadcast.organization_id AND attachment.broadcast_id = broadcast.id) AS attachment_count,
       (SELECT max(event.created_at) FROM local801.audit_events event
@@ -961,10 +1034,11 @@ async function mutateStatus(
 ) {
   const env = dependencies.env ?? process.env;
   requireAccess(context, env);
-  if (!HANDLE_RE.test(handle)) fail("NOT_FOUND", "Preview broadcast not found.", 404);
+  if (!HANDLE_RE.test(handle)) fail("NOT_FOUND", "Email notice not found.", 404);
   const transaction = dependencies.transaction ?? withLocal801Transaction;
   const now = (dependencies.now ?? (() => new Date()))();
-  const deliveryBoundary = memberEmailDeliveryBoundary(env);
+  const runtimeMode = memberEmailRuntimeMode(env);
+  const deliveryBoundary = runtimeMode === "preview" ? memberEmailDeliveryBoundary(env) : null;
   return transaction(async (query) => {
     const [row] = await query<BroadcastRow>(`
       /* member-email:lock-broadcast */
@@ -984,7 +1058,7 @@ async function mutateStatus(
       WHERE broadcast.organization_id = $1::uuid AND ${broadcastHandleSql("broadcast")} = $2::text
       FOR UPDATE OF broadcast
     `, [context.organizationId, handle]);
-    if (!row) fail("NOT_FOUND", "Preview broadcast not found.", 404);
+    if (!row) fail("NOT_FOUND", "Email notice not found.", 404);
 
     let eventType: "broadcast.submit" | "broadcast.approve" | "broadcast.test_simulated" | "broadcast.send_simulated";
     if (action === "submit") {
@@ -1001,9 +1075,11 @@ async function mutateStatus(
       [context.organizationId, row.id, context.userId, now.toISOString()]);
       eventType = "broadcast.approve";
     } else if (action === "simulate_test") {
+      if (runtimeMode !== "preview") fail("INVALID_ACTION", "Production notices use the protected delivery workflow.", 409);
       if (!new Set(["draft", "review", "approved"]).has(row.status)) fail("INVALID_STATE", "This broadcast cannot run another test simulation.", 409);
       eventType = "broadcast.test_simulated";
     } else {
+      if (runtimeMode !== "preview") fail("INVALID_ACTION", "Production notices use the protected delivery workflow.", 409);
       if (row.status !== "approved") fail("INVALID_STATE", "Only an approved broadcast can simulate delivery.", 409);
       const scheduledFor = timestamp(row.scheduled_for);
       if (scheduledFor && new Date(scheduledFor).getTime() > now.getTime()) {
@@ -1038,9 +1114,9 @@ async function mutateStatus(
     const audit = await prepareAtomicAuditStatement({
       eventType, actorId: context.userId, organizationId: context.organizationId,
       subjectType: "member_email_broadcast", subjectId: row.id,
-      payload: { action, eligibleCount: count(row.eligible_count), syntheticOnly: true,
+      payload: { action, eligibleCount: count(row.eligible_count), syntheticOnly: runtimeMode === "preview",
         audienceKind: row.audience_kind, audienceReferenceHandle: row.audience_reference_handle,
-        deliveryMode: deliveryBoundary.mode, outboundNetworkAllowed: deliveryBoundary.outboundNetworkAllowed },
+        deliveryMode: deliveryBoundary?.mode ?? "production_approval", outboundNetworkAllowed: false },
     }, query);
     await query(audit.sql, audit.parameters);
     return { action, status: action === "submit" ? "review" : action === "approve" ? "approved" : action === "simulate_send" ? "simulated" : row.status };
@@ -1061,6 +1137,77 @@ export function simulateMemberEmailTest(context: WorkspaceContext, handle: strin
 
 export function simulateMemberEmailSend(context: WorkspaceContext, handle: string, dependencies?: Dependencies) {
   return mutateStatus(context, handle, "simulate_send", dependencies);
+}
+
+function templateHandleSql(alias: string) {
+  return `encode(public.digest('member-email-template:' || ${alias}.organization_id::text || ':' || ${alias}.id::text, 'sha256'), 'hex')`;
+}
+
+export async function listMemberEmailTemplates(context: WorkspaceContext, dependencies: Dependencies = {}): Promise<MemberEmailTemplate[]> {
+  const env = dependencies.env ?? process.env;
+  requireAccess(context, env);
+  const query = dependencies.query ?? queryLocal801;
+  const keys = dependencies.keyConfig ?? getPiiKeyConfiguration(env);
+  const rows = await query<{
+    id: string; handle: string; name: string; updated_at: string | Date;
+    subject_encrypted_payload: string; subject_encryption_key_version: string; subject_encryption_format_version: number | string;
+    body_encrypted_payload: string; body_encryption_key_version: string; body_encryption_format_version: number | string;
+  }>(`SELECT template.id::text, ${templateHandleSql("template")} AS handle, template.name, template.updated_at,
+      template.subject_encrypted_payload, template.subject_encryption_key_version, template.subject_encryption_format_version,
+      template.body_encrypted_payload, template.body_encryption_key_version, template.body_encryption_format_version
+    FROM local801.member_email_templates template
+    WHERE template.organization_id=$1::uuid AND template.archived_at IS NULL
+    ORDER BY template.name, template.updated_at DESC LIMIT 50`, [context.organizationId]);
+  return rows.filter((row) => HANDLE_RE.test(row.handle)).map((row) => ({
+    handle: row.handle,
+    name: row.name,
+    subject: decryptPiiField({
+      encryptedPayload: row.subject_encrypted_payload,
+      encryptionKeyVersion: row.subject_encryption_key_version,
+      encryptionFormatVersion: Number(row.subject_encryption_format_version) as 1,
+    }, { organizationId: context.organizationId, entity: "member-email-template", recordId: row.id, field: "subject" }, keys),
+    body: decryptPiiField({
+      encryptedPayload: row.body_encrypted_payload,
+      encryptionKeyVersion: row.body_encryption_key_version,
+      encryptionFormatVersion: Number(row.body_encryption_format_version) as 1,
+    }, { organizationId: context.organizationId, entity: "member-email-template", recordId: row.id, field: "body" }, keys),
+    updatedAt: timestamp(row.updated_at)!,
+  }));
+}
+
+export async function createMemberEmailTemplate(
+  context: WorkspaceContext,
+  input: { name: unknown; subject: unknown; body: unknown },
+  dependencies: Dependencies = {},
+) {
+  const env = dependencies.env ?? process.env;
+  requireAccess(context, env);
+  const name = content(input.name, "Template name", 120);
+  const subject = content(input.subject, "Subject", MAX_SUBJECT);
+  const body = content(input.body, "Message", MAX_BODY);
+  const id = randomUUID();
+  const keys = dependencies.keyConfig ?? getPiiKeyConfiguration(env);
+  const protectedSubject = encryptPiiField(subject,
+    { organizationId: context.organizationId, entity: "member-email-template", recordId: id, field: "subject" }, keys);
+  const protectedBody = encryptPiiField(body,
+    { organizationId: context.organizationId, entity: "member-email-template", recordId: id, field: "body" }, keys);
+  const transaction = dependencies.transaction ?? withLocal801Transaction;
+  return transaction(async (query) => {
+    const [created] = await query<{ handle: string }>(`INSERT INTO local801.member_email_templates
+      (id,organization_id,name,subject_encrypted_payload,subject_encryption_key_version,subject_encryption_format_version,
+       body_encrypted_payload,body_encryption_key_version,body_encryption_format_version,created_by,updated_by)
+      VALUES ($1::uuid,$2::uuid,$3::text,$4::text,$5::text,$6::smallint,$7::text,$8::text,$9::smallint,$10::uuid,$10::uuid)
+      RETURNING ${templateHandleSql("member_email_templates")} AS handle`,
+    [id, context.organizationId, name, protectedSubject.encryptedPayload, protectedSubject.encryptionKeyVersion,
+      protectedSubject.encryptionFormatVersion, protectedBody.encryptedPayload, protectedBody.encryptionKeyVersion,
+      protectedBody.encryptionFormatVersion, context.userId]);
+    const audit = await prepareAtomicAuditStatement({
+      eventType: "broadcast.template_create", actorId: context.userId, organizationId: context.organizationId,
+      subjectType: "member_email_template", subjectId: id, payload: { templateNameLength: name.length },
+    }, query);
+    await query(audit.sql, audit.parameters);
+    return { handle: created.handle };
+  });
 }
 
 async function loadMemberEmailAttachments(context: WorkspaceContext, rows: AttachmentRow[]) {

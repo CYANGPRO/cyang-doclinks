@@ -3,7 +3,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { requirePreviewUser } from "./authz.server.ts";
 import { MemberEmailBroadcastError } from "./member-email-broadcasts.ts";
-import { memberEmailPreviewEnabled, MemberEmailPreviewPolicyError } from "./member-email-preview-policy.ts";
+import { memberEmailRuntimeEnabled, MemberEmailPreviewPolicyError } from "./member-email-preview-policy.ts";
 import { hasExactSameOrigin } from "./request-security.ts";
 import { enforceWorkspaceRateLimit, RateLimitError } from "./rate-limit.ts";
 import { rateLimitResponse } from "./rate-limit-response.ts";
@@ -17,11 +17,11 @@ export function memberEmailJson(body: Record<string, unknown>, status = 200) {
 }
 
 export async function authorizeMemberEmailMutation(request: Request) {
-  if (!memberEmailPreviewEnabled()) return { response: memberEmailJson({ error: "NOT_FOUND" }, 404) } as const;
+  if (!memberEmailRuntimeEnabled()) return { response: memberEmailJson({ error: "NOT_FOUND" }, 404) } as const;
   if (!hasExactSameOrigin(request)) {
     return { response: memberEmailJson({
       error: "FORBIDDEN_ORIGIN",
-      message: "This request must come from the signed-in Local 801 Preview application.",
+      message: "This request must come from the signed-in Local 801 application.",
     }, 403) } as const;
   }
   const auth = await requirePreviewUser("sendMemberEmail");
@@ -66,7 +66,7 @@ export function memberEmailFailure(error: unknown) {
   if (error instanceof MemberEmailBroadcastError || error instanceof MemberEmailPreviewPolicyError) {
     return memberEmailJson({ error: error.code, message: error.message }, error.status);
   }
-  return memberEmailJson({ error: "BROADCAST_UNAVAILABLE", message: "The Preview broadcast operation could not be completed safely." }, 503);
+  return memberEmailJson({ error: "BROADCAST_UNAVAILABLE", message: "The email notice operation could not be completed safely." }, 503);
 }
 
 export const __testing = { MAX_JSON_BYTES };

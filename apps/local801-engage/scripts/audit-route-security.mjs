@@ -20,6 +20,9 @@ const authenticationPatterns = [
   /authorizeTeamMutation\(/,
   /authorizeWorkPreferenceMutation\(/,
   /authorizeMemberEmailMutation\(/,
+  // Provider callbacks authenticate the exact raw body with the independent
+  // CAT webhook secret instead of a browser session or same-origin token.
+  /applyResendWebhook\(rawBody, \{ id, timestamp, signature \}\)/,
   /verifyPreviewCsrfToken\(/,
 ];
 const originPatterns = [
@@ -30,6 +33,7 @@ const originPatterns = [
   /authorizeTeamMutation\(/,
   /authorizeWorkPreferenceMutation\(/,
   /authorizeMemberEmailMutation\(/,
+  /applyResendWebhook\(rawBody, \{ id, timestamp, signature \}\)/,
   /verifyPreviewCsrfToken\(/,
 ];
 

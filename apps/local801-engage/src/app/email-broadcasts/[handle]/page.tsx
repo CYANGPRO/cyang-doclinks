@@ -5,15 +5,16 @@ import { ProtectedPage } from "@/components/ProtectedPage";
 import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
 import { getMemberEmailBroadcastPreview } from "@/lib/member-email-broadcasts";
-import { memberEmailPreviewEnabled, memberEmailRealTestSummary } from "@/lib/member-email-preview-policy";
+import { memberEmailRuntimeEnabled, memberEmailRuntimeSummary } from "@/lib/member-email-preview-policy";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
 import styles from "./page.module.css";
 
 export const dynamic = "force-dynamic";
 
 function statusTone(status: string): StatusTone {
-  if (status === "simulated") return "ready";
-  if (status === "approved") return "info";
+  if (status === "simulated" || status === "sent") return "ready";
+  if (status === "approved" || status === "queued" || status === "sending") return "info";
+  if (status === "failed") return "blocked";
   if (status === "cancelled") return "neutral";
   return "pending";
 }
@@ -29,26 +30,33 @@ function dateTime(value: string | null) {
 }
 
 export default async function EmailBroadcastPreviewPage({ params }: { params: Promise<{ handle: string }> }) {
-  if (!memberEmailPreviewEnabled()) notFound();
+  if (!memberEmailRuntimeEnabled()) notFound();
   const user = await getPreviewUser();
   if (!user) redirect("/sign-in");
   if (!can(user.role, "sendMemberEmail")) redirect("/unauthorized");
   const [{ handle }, context] = await Promise.all([params, resolveWorkspaceContext(user)]);
   const email = await getMemberEmailBroadcastPreview(context, handle);
   if (!email) notFound();
-  const realTest = memberEmailRealTestSummary();
-  const sentMessage = email.realTestSentAt
-    ? `A real Preview test was accepted for ${realTest.recipient ?? "the configured test address"} on ${dateTime(email.realTestSentAt)}.`
-    : email.simulatedAt
-      ? `Synthetic member delivery was recorded on ${dateTime(email.simulatedAt)}. No member email was sent.`
-      : "This Preview email has not been sent yet.";
+  const runtime = memberEmailRuntimeSummary();
+  const isPreview = runtime.mode === "preview";
+  const sentMessage = isPreview
+    ? email.realTestSentAt
+      ? `A real Preview test was accepted for ${runtime.recipient ?? "the configured test address"} on ${dateTime(email.realTestSentAt)}.`
+      : email.simulatedAt
+        ? `Synthetic member delivery was recorded on ${dateTime(email.simulatedAt)}. No member email was sent.`
+        : "This Preview email has not been sent yet."
+    : email.status === "sent"
+      ? `Provider submission completed on ${dateTime(email.completedAt)}. Delivery receipts continue to update below.`
+      : email.status === "failed"
+        ? "Delivery stopped after an error. Review the totals before retrying."
+        : "This notice has not completed delivery yet.";
 
   return <ProtectedPage permission="sendMemberEmail"><div className="content route-email-broadcast-preview-page">
     <PageHeader
       eyebrow="Programs · Email broadcasts"
-      title="Email preview"
-      description="Review the protected copy CAT retained for this Preview broadcast."
-      actions={<Link className="button secondary" href="/email-broadcasts">Back to broadcasts</Link>}
+      title={isPreview ? "Email preview" : "Member notice"}
+      description={`Review the protected copy CAT retained for this ${isPreview ? "Preview broadcast" : "member notice"}.`}
+      actions={<><Link className="button secondary" href={`/email-broadcasts?copy=${email.handle}`}>Use as new draft</Link><Link className="button secondary" href="/email-broadcasts">Back to broadcasts</Link></>}
     />
     <SectionCard
       title={email.subject}
@@ -62,7 +70,17 @@ export default async function EmailBroadcastPreviewPage({ params }: { params: Pr
         <div><dt>Created</dt><dd>{dateTime(email.createdAt)}</dd></div>
         <div><dt>Schedule</dt><dd>{dateTime(email.scheduledFor) ?? "Manual send after approval"}</dd></div>
         <div><dt>Attachments</dt><dd>{email.attachments.length}</dd></div>
+        {!isPreview ? <><div><dt>From</dt><dd>{email.senderAddress ?? runtime.from ?? "Not assigned"}</dd></div><div><dt>Replies go to</dt><dd>{email.replyToAddress ?? runtime.replyTo ?? "Not assigned"}</dd></div></> : null}
       </dl>
+      {!isPreview ? <section className={styles.attachments} aria-labelledby="delivery-report-title">
+        <div><h3 id="delivery-report-title">Delivery report</h3><p>Aggregate provider status; recipient addresses remain protected.</p></div>
+        <dl className={styles.deliveryDetails}>
+          <div><dt>Pending</dt><dd>{email.deliveryCounts.pending}</dd></div>
+          <div><dt>Accepted</dt><dd>{email.deliveryCounts.accepted}</dd></div>
+          <div><dt>Delivered</dt><dd>{email.deliveryCounts.delivered}</dd></div>
+          <div><dt>Failed</dt><dd>{email.deliveryCounts.failed}</dd></div>
+        </dl>
+      </section> : null}
       <div className={styles.emailFrame}>
         <div className={styles.emailHeader}>
           <span>Subject</span>
@@ -84,7 +102,7 @@ export default async function EmailBroadcastPreviewPage({ params }: { params: Pr
           </li>)}
         </ul>}
       </section>
-      <p className={styles.previewNotice}><strong>Preview boundary:</strong> member delivery remains simulated. Only the configured one-address test can leave CAT through Resend.</p>
+      <p className={styles.previewNotice}>{isPreview ? <><strong>Preview boundary:</strong> member delivery remains simulated. Only the configured one-address test can leave CAT through Resend.</> : <><strong>Production notice:</strong> delivery uses the independent CAT Resend integration. Replies route to {email.replyToAddress ?? runtime.replyTo ?? "the configured reply address"}.</>}</p>
     </SectionCard>
   </div></ProtectedPage>;
 }

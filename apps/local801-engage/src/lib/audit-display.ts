@@ -45,6 +45,13 @@ const EVENT_LABELS: Record<string, string> = {
   "broadcast.test_simulated": "Simulated email broadcast test",
   "broadcast.send_simulated": "Simulated email broadcast delivery",
   "broadcast.real_test_sent": "Sent one-address Preview email test",
+  "broadcast.send_queued": "Queued member email notice delivery",
+  "broadcast.send_paused": "Paused member email notice delivery",
+  "broadcast.send_resumed": "Resumed member email notice delivery",
+  "broadcast.send_cancelled": "Cancelled member email notice delivery",
+  "broadcast.send_failed": "Member email notice delivery failed",
+  "broadcast.template_create": "Created member email notice template",
+  "broadcast.send_completed": "Completed member email notice delivery",
 };
 
 const SUBJECT_LABELS: Record<string, string> = {

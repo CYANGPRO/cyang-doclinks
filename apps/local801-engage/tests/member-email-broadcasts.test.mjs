@@ -595,14 +595,18 @@ test("only System Owner and Local Administrator receive the broadcast permission
   }
 });
 
-test("migration and routes preserve Preview-only, protected, authenticated boundaries", () => {
+test("migrations and routes preserve protected authenticated boundaries across Preview and Production", () => {
   const migration = readFileSync(new URL("../db/migrations/0035__preview_member_email_broadcasts.sql", import.meta.url), "utf8");
   const audienceMigration = readFileSync(new URL("../db/migrations/0036__member_email_audience_selection.sql", import.meta.url), "utf8");
   const registeredUserMigration = readFileSync(new URL("../db/migrations/0037__registered_user_email_audience.sql", import.meta.url), "utf8");
   const attachmentMigration = readFileSync(new URL("../db/migrations/0038__member_email_document_attachments.sql", import.meta.url), "utf8");
+  const productionMigration = readFileSync(new URL("../db/migrations/0039__production_member_email_delivery.sql", import.meta.url), "utf8");
   const page = readFileSync(new URL("../src/app/email-broadcasts/page.tsx", import.meta.url), "utf8");
   const previewPage = readFileSync(new URL("../src/app/email-broadcasts/[handle]/page.tsx", import.meta.url), "utf8");
   const http = readFileSync(new URL("../src/lib/member-email-http.ts", import.meta.url), "utf8");
+  const production = readFileSync(new URL("../src/lib/member-email-production.ts", import.meta.url), "utf8");
+  const workflow = readFileSync(new URL("../src/workflows/deliver-member-email.ts", import.meta.url), "utf8");
+  const webhook = readFileSync(new URL("../src/app/api/webhooks/resend/route.ts", import.meta.url), "utf8");
   assert.match(migration, /email_encrypted_payload/);
   assert.match(migration, /email_blind_index/);
   assert.doesNotMatch(migration, /\bemail_address\b|\brecipient_email\b/i);
@@ -613,7 +617,11 @@ test("migration and routes preserve Preview-only, protected, authenticated bound
   assert.match(attachmentMigration, /member_email_broadcast_attachments/);
   assert.match(attachmentMigration, /document_id uuid references local801\.documents\(id\) on delete set null/);
   assert.doesNotMatch(attachmentMigration, /storage_key|encrypted_payload/);
-  assert.match(page, /memberEmailPreviewEnabled\(\)/);
+  assert.match(productionMigration, /provider_message_id/);
+  assert.match(productionMigration, /delivery_status/);
+  assert.match(productionMigration, /member_email_templates/);
+  assert.doesNotMatch(productionMigration, /recipient_email|email_address/i);
+  assert.match(page, /memberEmailRuntimeEnabled\(\)/);
   assert.match(page, /permission="sendMemberEmail"/);
   assert.match(page, /Promise\.allSettled/);
   assert.match(page, /local801-member-email-safe-failure/);
@@ -621,5 +629,15 @@ test("migration and routes preserve Preview-only, protected, authenticated bound
   assert.match(previewPage, /getMemberEmailBroadcastPreview/);
   assert.match(previewPage, /permission="sendMemberEmail"/);
   assert.match(http, /requirePreviewUser\("sendMemberEmail"\)/);
+  assert.match(http, /memberEmailRuntimeEnabled\(\)/);
   assert.match(http, /hasExactSameOrigin/);
+  assert.match(production, /maxRecipients: 1000|1,000 eligible recipients/);
+  assert.match(production, /resend\.batch\.send/);
+  assert.match(production, /idempotencyKey/);
+  assert.match(production, /memberEmailProductionBoundary\(\)/);
+  assert.match(production, /delivery_status='pending'/);
+  assert.match(workflow, /"use workflow"/);
+  assert.match(workflow, /directive === "paused"/);
+  assert.match(webhook, /applyResendWebhook/);
+  assert.match(webhook, /svix-signature/);
 });

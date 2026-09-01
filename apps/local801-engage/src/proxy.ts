@@ -13,6 +13,7 @@ export const config = {
     "/cat-actions/:path*",
     "/directory/:path*",
     "/documents/:path*",
+    "/email-broadcasts/:path*",
     "/follow-ups/:path*",
     "/imports/:path*",
     "/membership/:path*",

@@ -36,7 +36,14 @@ export type AuditEventType =
   | "broadcast.approve"
   | "broadcast.test_simulated"
   | "broadcast.send_simulated"
-  | "broadcast.real_test_sent";
+  | "broadcast.real_test_sent"
+  | "broadcast.send_queued"
+  | "broadcast.send_paused"
+  | "broadcast.send_resumed"
+  | "broadcast.send_cancelled"
+  | "broadcast.send_failed"
+  | "broadcast.template_create"
+  | "broadcast.send_completed";
 
 export type AuditEvent = {
   eventType: AuditEventType;

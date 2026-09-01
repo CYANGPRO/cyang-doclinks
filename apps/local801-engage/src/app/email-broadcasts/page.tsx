@@ -1,35 +1,44 @@
 import { notFound, redirect } from "next/navigation";
-import { MemberEmailBroadcastActions, MemberEmailBroadcastComposer } from "@/components/MemberEmailBroadcastControls";
-import { DataTable, EmptyState, PageHeader, SectionCard, StatusBadge, UnavailableState } from "@/components/DesignSystem";
+import { MemberEmailBroadcastComposer } from "@/components/MemberEmailBroadcastControls";
+import { MemberEmailBroadcastArchive } from "@/components/MemberEmailBroadcastArchive";
+import { PageHeader, SectionCard, StatusBadge, UnavailableState } from "@/components/DesignSystem";
 import { ProtectedPage } from "@/components/ProtectedPage";
 import { can } from "@/lib/access";
 import { safeProductionAuthInternalFailure } from "@/lib/auth-failure-diagnostics";
 import { getPreviewUser } from "@/lib/authz.server";
 import {
+  getMemberEmailBroadcastPreview,
   listMemberEmailAttachmentOptions,
   listMemberEmailAudienceOptions,
   listMemberEmailBroadcasts,
+  listMemberEmailTemplates,
 } from "@/lib/member-email-broadcasts";
-import { memberEmailPreviewEnabled, memberEmailRealTestSummary } from "@/lib/member-email-preview-policy";
+import { memberEmailRuntimeEnabled, memberEmailRuntimeSummary } from "@/lib/member-email-preview-policy";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
 
 export const dynamic = "force-dynamic";
 
-export default async function EmailBroadcastsPage() {
-  if (!memberEmailPreviewEnabled()) notFound();
+export default async function EmailBroadcastsPage({ searchParams }: { searchParams: Promise<{ copy?: string }> }) {
+  if (!memberEmailRuntimeEnabled()) notFound();
   const user = await getPreviewUser();
   if (!user) redirect("/sign-in");
   if (!can(user.role, "sendMemberEmail")) redirect("/unauthorized");
-  const realTest = memberEmailRealTestSummary();
+  const runtime = memberEmailRuntimeSummary();
+  const isPreview = runtime.mode === "preview";
   let broadcasts: Awaited<ReturnType<typeof listMemberEmailBroadcasts>> | null = null;
   let audienceOptions: Awaited<ReturnType<typeof listMemberEmailAudienceOptions>> | null = null;
   let attachmentOptions: Awaited<ReturnType<typeof listMemberEmailAttachmentOptions>> | null = null;
+  let initialDraft: Awaited<ReturnType<typeof getMemberEmailBroadcastPreview>> = null;
+  let templates: Awaited<ReturnType<typeof listMemberEmailTemplates>> | null = null;
   try {
+    const requestedCopy = (await searchParams).copy;
     const context = await resolveWorkspaceContext(user);
-    const [broadcastResult, audienceResult, attachmentResult] = await Promise.allSettled([
+    const [broadcastResult, audienceResult, attachmentResult, templateResult, copyResult] = await Promise.allSettled([
       listMemberEmailBroadcasts(context),
       listMemberEmailAudienceOptions(context),
       listMemberEmailAttachmentOptions(context),
+      listMemberEmailTemplates(context),
+      requestedCopy ? getMemberEmailBroadcastPreview(context, requestedCopy) : Promise.resolve(null),
     ]);
     if (broadcastResult.status === "fulfilled") broadcasts = broadcastResult.value;
     else console.error("[local801-member-email-safe-failure]", JSON.stringify({
@@ -46,6 +55,12 @@ export default async function EmailBroadcastsPage() {
       operation: "list-attachments",
       ...safeProductionAuthInternalFailure(attachmentResult.reason),
     }));
+    if (copyResult.status === "fulfilled") initialDraft = copyResult.value;
+    if (templateResult.status === "fulfilled") templates = templateResult.value;
+    else console.error("[local801-member-email-safe-failure]", JSON.stringify({
+      operation: "list-templates",
+      ...safeProductionAuthInternalFailure(templateResult.reason),
+    }));
   } catch (error) {
     console.error("[local801-member-email-safe-failure]", JSON.stringify({
       operation: "resolve-workspace",
@@ -55,27 +70,24 @@ export default async function EmailBroadcastsPage() {
 
   return <ProtectedPage permission="sendMemberEmail"><div className="content route-email-broadcasts-page queue-first-page">
     <PageHeader
-      eyebrow="Programs · Preview only"
+      eyebrow={`Programs · ${isPreview ? "Preview only" : "Member notices"}`}
       title="Email broadcasts"
-      description="Choose a higher-level audience, then build and approve a communication against a frozen synthetic recipient snapshot. Member delivery stays simulated; one configured test address can use Resend."
+      description={isPreview
+        ? "Choose a higher-level audience, then build and approve a communication against a frozen synthetic recipient snapshot. Member delivery stays simulated; one configured test address can use Resend."
+        : "Create a member notice against a frozen recipient snapshot, route it through two-person approval, and monitor delivery without exposing recipient addresses."}
     />
-    <SectionCard title="Create Preview broadcast" description="Check the latest approved snapshot, then encrypt the draft and freeze its synthetic recipient population." badge={<StatusBadge tone={realTest.enabled ? "info" : "pending"}>{realTest.enabled ? "One-address Resend test" : "Provider disabled"}</StatusBadge>}>
-      {audienceOptions ? <MemberEmailBroadcastComposer audienceOptions={audienceOptions} attachmentOptions={attachmentOptions} sender={realTest.from} replyTo={realTest.replyTo} />
-        : <UnavailableState title="Recipient audiences unavailable" description="CAT could not establish the protected Preview audience choices, so draft creation stays disabled." />}
+    <SectionCard title={`Create ${isPreview ? "Preview broadcast" : "member notice"}`} description={`Check the latest approved snapshot, then encrypt the draft and freeze its ${isPreview ? "synthetic " : ""}recipient population.`} badge={<StatusBadge tone={runtime.providerReady ? "info" : "pending"}>{runtime.providerReady ? isPreview ? "One-address Resend test" : "Production Resend ready" : "Provider disabled"}</StatusBadge>}>
+      {audienceOptions ? <MemberEmailBroadcastComposer audienceOptions={audienceOptions} attachmentOptions={attachmentOptions} templates={templates} sender={runtime.from} replyTo={runtime.replyTo} mode={runtime.mode} initialDraft={initialDraft ? {
+        subject: initialDraft.subject,
+        body: initialDraft.body,
+        audienceKey: initialDraft.audienceKey,
+        attachmentHandles: initialDraft.attachments.flatMap((attachment) => attachment.available && attachment.handle ? [attachment.handle] : []),
+      } : null} />
+        : <UnavailableState title="Recipient audiences unavailable" description={`CAT could not establish the protected ${isPreview ? "Preview " : ""}audience choices, so draft creation stays disabled.`} />}
     </SectionCard>
-    <SectionCard title="Preview workflow" description="The creator submits the draft; a different authorized administrator approves it; delivery remains simulated." badge={<StatusBadge tone="info">Two-person approval</StatusBadge>}>
-      {!broadcasts ? <UnavailableState title="Broadcast workflow unavailable" description="CAT could not establish the protected Preview broadcast state, so no incomplete results are shown." />
-        : broadcasts.length === 0 ? <EmptyState title="No Preview broadcasts" description="Create the first synthetic draft after checking the recipient preview." />
-          : <DataTable caption="Preview email broadcast workflow" headers={["Subject", "Status", "Snapshot", "Audience", "Schedule", "Actions"]}>
-            {broadcasts.map((broadcast) => <tr key={broadcast.handle}>
-              <td><strong>{broadcast.subject}</strong><br /><span className="muted">Created {new Date(broadcast.createdAt).toLocaleString()}</span>{broadcast.attachmentCount > 0 ? <><br /><span className="muted">{broadcast.attachmentCount} {broadcast.attachmentCount === 1 ? "attachment" : "attachments"}</span></> : null}</td>
-              <td><StatusBadge tone={broadcast.status === "simulated" ? "ready" : broadcast.status === "approved" ? "info" : "pending"}>{broadcast.status}</StatusBadge></td>
-              <td>{broadcast.snapshotDate}</td>
-              <td><strong>{broadcast.audienceLabel}</strong><br />{broadcast.eligible} eligible of {broadcast.representedRecipients}<br /><span className="muted">{broadcast.missing} missing · {broadcast.duplicate} duplicate · {broadcast.suppressed} suppressed</span></td>
-              <td>{broadcast.scheduledFor ? new Date(broadcast.scheduledFor).toLocaleString() : "Manual simulation"}</td>
-              <td><MemberEmailBroadcastActions handle={broadcast.handle} status={broadcast.status} requiresDifferentApprover={broadcast.requiresDifferentApprover} realTestRecipient={realTest.recipient} /></td>
-            </tr>)}
-          </DataTable>}
+    <SectionCard title={isPreview ? "Preview workflow" : "Notice archive and delivery"} description={isPreview ? "The creator submits the draft; a different authorized administrator approves it; delivery remains simulated." : "Search past notices, review delivery totals, and control active sends. The creator cannot approve their own notice."} badge={<StatusBadge tone="info">Two-person approval</StatusBadge>}>
+      {!broadcasts ? <UnavailableState title="Broadcast workflow unavailable" description={`CAT could not establish the protected ${isPreview ? "Preview " : ""}broadcast state, so no incomplete results are shown.`} />
+        : <MemberEmailBroadcastArchive broadcasts={broadcasts} mode={runtime.mode} providerReady={runtime.providerReady} sender={runtime.from} replyTo={runtime.replyTo} realTestRecipient={runtime.recipient} />}
     </SectionCard>
   </div></ProtectedPage>;
 }
