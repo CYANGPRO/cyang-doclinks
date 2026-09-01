@@ -233,49 +233,156 @@
   margin-bottom: 7px;
 }
 
-.attachmentPicker {
+.attachmentPanel {
+  background: #fff;
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.attachmentHeader {
+  align-items: center;
+  background: var(--surface-muted);
+  border-bottom: 1px solid var(--border-soft);
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  padding: 12px 14px;
+}
+
+.attachmentHeader > div:first-child {
   display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.attachmentHeader > div:first-child strong {
+  color: var(--brand-navy-deep);
+  font-size: .78rem;
+}
+
+.attachmentHeader > div:first-child span {
+  color: var(--text-muted);
+  font-size: .7rem;
+  line-height: 1.4;
+}
+
+.attachmentSummary {
+  align-items: flex-end;
+  display: grid;
+  flex: 0 0 auto;
   gap: 1px;
-  max-height: 280px;
-  overflow: auto;
-  padding: 1px;
+  text-align: right;
+}
+
+.attachmentSummary strong {
+  color: var(--brand-blue);
+  font-size: .72rem;
+}
+
+.attachmentSummary span {
+  color: var(--text-muted);
+  font-size: .66rem;
+}
+
+.attachmentPicker {
+  display: grid;
+  max-height: 260px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.attachmentChoice + .attachmentChoice {
+  border-top: 1px solid var(--border-soft);
 }
 
 .attachmentChoice {
-  align-items: flex-start;
+  align-items: center;
   background: #fff;
-  border-radius: 7px;
   cursor: pointer;
-  display: flex;
-  gap: 10px;
-  padding: 11px 12px;
+  display: grid;
+  gap: 11px;
+  grid-template-columns: 18px 32px minmax(0, 1fr) auto;
+  min-height: 62px;
+  padding: 10px 14px;
+  transition: background 120ms ease-out, box-shadow 120ms ease-out;
 }
 
 .attachmentChoice:hover { background: var(--surface-muted); }
 
-.attachmentChoice input {
-  flex: 0 0 auto;
-  margin-top: 2px;
+.attachmentChoice:focus-within {
+  box-shadow: inset 3px 0 0 var(--focus);
+  outline: 2px solid transparent;
 }
 
-.attachmentChoice span {
+.attachmentChoice[data-selected="true"] {
+  background: var(--brand-blue-soft);
+  box-shadow: inset 3px 0 0 var(--brand-blue);
+}
+
+.attachmentChoice input[type="checkbox"] {
+  accent-color: var(--brand-blue);
+  border: initial;
+  border-radius: 3px;
+  box-shadow: none;
+  flex: 0 0 auto;
+  height: 18px;
+  margin: 0;
+  min-height: 18px;
+  padding: 0;
+  width: 18px;
+}
+
+.fileIcon {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #b8c6cf;
+  border-radius: 4px;
+  color: var(--brand-blue);
+  display: flex;
+  font-size: .52rem;
+  font-weight: 900;
+  height: 36px;
+  justify-content: center;
+  letter-spacing: .02em;
+  overflow: hidden;
+  padding: 2px;
+  width: 30px;
+}
+
+.attachmentDetails {
   display: grid;
   gap: 3px;
   min-width: 0;
 }
 
-.attachmentChoice strong {
+.attachmentDetails strong {
   color: var(--brand-navy-deep);
   font-size: .78rem;
   overflow-wrap: anywhere;
 }
 
-.attachmentChoice small {
+.attachmentDetails small {
   color: var(--text-muted);
   font-size: .7rem;
   overflow-wrap: anywhere;
+}
+
+.attachmentState {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: .66rem;
+  font-weight: 800;
+  min-width: 58px;
+  padding: 5px 8px;
+  text-align: center;
+}
+
+.attachmentChoice[data-selected="true"] .attachmentState {
+  background: var(--brand-blue);
+  border-color: var(--brand-blue);
+  color: #fff;
 }
 
 .formatEditor,
@@ -552,6 +659,10 @@
   .addressGrid { grid-template-columns: 1fr; }
   .previewHeader, .deliverySummary, .breakdownSection { padding: 17px; }
   .privacyNote { padding-inline: 17px; }
+  .attachmentHeader { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .attachmentSummary { align-items: start; text-align: left; }
+  .attachmentChoice { gap: 9px; grid-template-columns: 18px 30px minmax(0, 1fr); padding-inline: 12px; }
+  .attachmentState { display: none; }
   .reviewDetails { grid-template-columns: 1fr; }
   .reviewDetails > div:last-child { grid-column: span 1; }
   .finalReviewHeader, .messageReview, .reviewActions { padding-inline: 17px; }

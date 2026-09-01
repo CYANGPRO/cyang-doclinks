@@ -68,6 +68,11 @@ function fileSize(value: number) {
   return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function fileType(value: string) {
+  const extension = value.match(/\.([A-Za-z0-9]{1,5})$/)?.[1];
+  return extension?.toUpperCase() ?? "FILE";
+}
+
 function isoDateTime(value: string) {
   if (!value) return null;
   const parsed = new Date(value);
@@ -143,6 +148,8 @@ export function MemberEmailBroadcastComposer({
   const [review, setReview] = useState<DraftReview | null>(null);
   const [pending, setPending] = useState<"preview" | "create" | "template" | null>(null);
   const [feedback, setFeedback] = useState<Feedback>(null);
+  const selectedAttachments = (attachmentOptions ?? []).filter((attachment) => selectedAttachmentHandles.includes(attachment.handle));
+  const selectedAttachmentBytes = selectedAttachments.reduce((total, attachment) => total + attachment.byteSize, 0);
 
   function applyTemplate(handle: string) {
     const template = templates?.find((item) => item.handle === handle);
@@ -440,17 +447,37 @@ export function MemberEmailBroadcastComposer({
       <p className="field-help">Use headings, bold, italic, lists, and safe web links. Raw HTML is shown as text, and CAT generates a plain-text fallback automatically. Private documents should stay in CAT.</p>
     </div>
     <div className="field">
-      <span className={styles.fieldLabel}>Attachments</span>
+      <span className={styles.fieldLabel} id="member-email-attachments-label">Attachments</span>
       {attachmentOptions === null ? <div className="callout neutral">
         <strong>Attachments are temporarily unavailable.</strong> You can still create the notice without a file.
       </div> : attachmentOptions.length === 0 ? <div className="callout neutral">
         <strong>No approved documents are available.</strong> Upload and approve a file in <Link href="/documents">Documents</Link>, then return here.
-      </div> : <div className={styles.attachmentPicker}>
-        {attachmentOptions.map((attachment) => <label key={attachment.handle} className={styles.attachmentChoice}>
-          <input type="checkbox" checked={selectedAttachmentHandles.includes(attachment.handle)}
-            onChange={(event) => toggleAttachment(attachment, event.target.checked)} />
-          <span><strong>{attachment.title}</strong><small>{attachment.originalFilename} · {fileSize(attachment.byteSize)}</small></span>
-        </label>)}
+      </div> : <div className={styles.attachmentPanel} aria-labelledby="member-email-attachments-label">
+        <header className={styles.attachmentHeader}>
+          <div>
+            <strong>Approved documents</strong>
+            <span>Select files already reviewed in CAT Documents.</span>
+          </div>
+          <div className={styles.attachmentSummary} aria-live="polite">
+            <strong>{selectedAttachments.length} of 5 selected</strong>
+            <span>{fileSize(selectedAttachmentBytes)} of 20 MB</span>
+          </div>
+        </header>
+        <div className={styles.attachmentPicker} role="group" aria-label="Approved documents available to attach">
+          {attachmentOptions.map((attachment) => {
+            const selected = selectedAttachmentHandles.includes(attachment.handle);
+            return <label key={attachment.handle} className={styles.attachmentChoice} data-selected={selected}>
+              <input type="checkbox" checked={selected} disabled={pending !== null}
+                onChange={(event) => toggleAttachment(attachment, event.target.checked)} />
+              <span className={styles.fileIcon} aria-hidden="true">{fileType(attachment.originalFilename)}</span>
+              <span className={styles.attachmentDetails}>
+                <strong>{attachment.title}</strong>
+                <small>{attachment.originalFilename} · {fileSize(attachment.byteSize)}</small>
+              </span>
+              <span className={styles.attachmentState}>{selected ? "Selected" : "Add"}</span>
+            </label>;
+          })}
+        </div>
       </div>}
       <p className="field-help">Optional. Choose up to 5 approved CAT Documents, totaling no more than 20 MB. Access and file integrity are checked again before {mode === "preview" ? "a real Preview test" : "member delivery"}.</p>
     </div>
