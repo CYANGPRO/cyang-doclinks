@@ -20,6 +20,7 @@ const assigneeId = "66666666-6666-4666-8666-666666666666";
 const campaignHandle = __testing.opaqueHandle("campaign", organizationId, campaignId);
 const personHandle = "a".repeat(64);
 const assigneeHandle = "b".repeat(64);
+const selfAssigneeHandle = __testing.opaqueUserHandle(organizationId, userId);
 const context = (role = "cat_admin") => ({ organizationId, organizationSlug: "local801-preview", userId, email: `${role}@example.test`, role });
 
 function deps(overrides = {}) {
@@ -84,13 +85,27 @@ test("campaign management options expose organizer handles without raw user ids"
   let sqlText = "";
   const result = await getCampaignManagementOptions(context(), async (sql, parameters) => {
     sqlText = sql;
-    assert.deepEqual(parameters, [organizationId]);
+    assert.deepEqual(parameters, [organizationId, true, userId]);
     return [{ handle: assigneeHandle, display_name: "Synthetic CAT Lead", role_codes: "cat_lead" }];
   });
-  assert.deepEqual(result, { assignees: [{ handle: assigneeHandle, label: "Synthetic CAT Lead", detail: "cat_lead" }] });
+  assert.deepEqual(result, {
+    assignees: [{ handle: assigneeHandle, label: "Synthetic CAT Lead", detail: "cat_lead" }],
+    selfHandle: selfAssigneeHandle,
+  });
   assert.match(sqlText, /app_user\.organization_id = \$1::uuid/);
   assert.match(sqlText, /role\.code IN \('system_owner','local_admin','cat_admin','cat_lead','cat_member'\)/);
   assert.equal(JSON.stringify(result).includes(assigneeId), false);
+});
+
+test("CAT members receive only their own campaign assignment option", async () => {
+  const result = await getCampaignManagementOptions(context("cat_member"), async (_sql, parameters) => {
+    assert.deepEqual(parameters, [organizationId, false, userId]);
+    return [{ handle: selfAssigneeHandle, display_name: "Synthetic CAT Member", role_codes: "cat_member" }];
+  });
+  assert.deepEqual(result, {
+    assignees: [{ handle: selfAssigneeHandle, label: "Synthetic CAT Member", detail: "cat_member" }],
+    selfHandle: selfAssigneeHandle,
+  });
 });
 
 test("create campaign is organization scoped, role rechecked in SQL, and atomic with audit", async () => {
@@ -263,6 +278,76 @@ test("campaign assignment can reassign/reschedule or explicitly unassign an open
   assert.equal(unassignState.audits[0].eventType, "record.archive");
 });
 
+test("CAT members can claim and remove only their own campaign assignments", async () => {
+  const newAssignmentId = "77777777-7777-4777-8777-777777777777";
+  const claim = deps({
+    uuid: () => newAssignmentId,
+    query: async (sql, parameters) => {
+      if (sql.includes("resolve-participant")) {
+        return [participantResolution({ assignment_id: null, assignment_status: null, primary_user_id: null, due_at: null })];
+      }
+      if (sql.includes("resolve-assignee")) {
+        assert.deepEqual(parameters, [organizationId, selfAssigneeHandle, false, userId]);
+        return [{ id: userId }];
+      }
+      throw new Error(`unexpected: ${sql}`);
+    },
+  });
+  const result = await updateCampaignAssignment(context("cat_member"), {
+    campaignHandle,
+    personHandle,
+    assigneeHandle: selfAssigneeHandle,
+  }, claim.values);
+  assert.equal(result.created, true);
+  assert.match(claim.transactions[0][0].sql, /actor\.organization_wide OR \$6::uuid = actor\.id/);
+  assert.match(claim.transactions[0][0].sql, /role\.code IN \('system_owner','local_admin','cat_admin','cat_lead','cat_member'\)/);
+  assert.equal(claim.transactions[0][0].parameters[3], "cat_member");
+  assert.equal(claim.transactions[0][0].parameters[5], userId);
+
+  const remove = deps({ query: async (sql) => sql.includes("resolve-participant")
+    ? [participantResolution({ primary_user_id: userId })]
+    : [] });
+  const removed = await updateCampaignAssignment(context("cat_member"), {
+    campaignHandle,
+    personHandle,
+    assigneeHandle: null,
+  }, remove.values);
+  assert.equal(removed.unassigned, true);
+  assert.match(remove.transactions[0][0].sql, /actor\.organization_wide OR assignment\.primary_user_id = actor\.id/);
+});
+
+test("CAT members cannot alter another organizer's assignment", async () => {
+  let calls = 0;
+  const state = deps({ query: async () => { calls += 1; return [participantResolution({ primary_user_id: assigneeId })]; } });
+  await assert.rejects(
+    updateCampaignAssignment(context("cat_member"), { campaignHandle, personHandle, assigneeHandle: selfAssigneeHandle }, state.values),
+    (error) => error instanceof CampaignMutationError && error.code === "ASSIGNMENT_OWNED_BY_ANOTHER",
+  );
+  assert.equal(calls, 1);
+  assert.equal(state.transactions.length, 0);
+});
+
+test("LCAT can assign or reassign campaign members across eligible organizer roles", async () => {
+  const state = deps({
+    query: async (sql, parameters) => {
+      if (sql.includes("resolve-participant")) return [participantResolution()];
+      if (sql.includes("resolve-assignee")) {
+        assert.deepEqual(parameters, [organizationId, assigneeHandle, true, userId]);
+        return [{ id: userId }];
+      }
+      throw new Error(`unexpected: ${sql}`);
+    },
+  });
+  const result = await updateCampaignAssignment(context("cat_lead"), {
+    campaignHandle,
+    personHandle,
+    assigneeHandle,
+  }, state.values);
+  assert.equal(result.updated, true);
+  assert.equal(state.transactions[0][0].parameters[3], "cat_lead");
+  assert.match(state.transactions[0][0].sql, /'cat_lead'/);
+});
+
 test("completed assignments and closed campaigns are immutable through campaign assignment management", async () => {
   const completed = deps({ query: async () => [participantResolution({ assignment_status: "completed" })] });
   await assert.rejects(
@@ -279,13 +364,21 @@ test("completed assignments and closed campaigns are immutable through campaign 
   assert.equal(closed.transactions.length, 0);
 });
 
-test("all campaign mutations deny non-management roles before SQL", async () => {
+test("campaign creation, settings, and deletion remain limited to campaign managers", async () => {
   for (const role of ["membership_data_manager", "cat_lead", "cat_member", "report_viewer"]) {
     let calls = 0;
     const denied = { query: async () => { calls += 1; return []; } };
     await assert.rejects(createCampaign(context(role), { name: "No" }, denied), /not authorized/i);
     await assert.rejects(updateCampaign(context(role), { campaignHandle, name: "No" }, denied), /not authorized/i);
     await assert.rejects(deleteCampaign(context(role), campaignHandle, denied), /not authorized/i);
+    assert.equal(calls, 0);
+  }
+});
+
+test("campaign assignment denies roles outside the organizing team before SQL", async () => {
+  for (const role of ["membership_data_manager", "report_viewer"]) {
+    let calls = 0;
+    const denied = { query: async () => { calls += 1; return []; } };
     await assert.rejects(updateCampaignAssignment(context(role), { campaignHandle, personHandle, assigneeHandle }, denied), /not authorized/i);
     assert.equal(calls, 0);
   }
@@ -300,11 +393,12 @@ test("campaign mutation HTTP routes are launch-gated, same-origin, permission ch
   assert.match(helper, /operationalRuntimeEnabled\(\)/);
   assert.match(helper, /enforceWorkspaceRateLimit\(context, "mutation"\)/);
   assert.match(helper, /hasExactSameOrigin\(request\)/);
-  assert.match(helper, /requirePreviewUser\("manageCampaigns"\)/);
+  assert.match(helper, /requirePreviewUser\(permission\)/);
   assert.match(helper, /MAX_JSON_BYTES = 8_192/);
   assert.match(createRoute, /createCampaign/);
   assert.match(campaignRoute, /updateCampaign/);
   assert.match(campaignRoute, /deleteCampaign/);
   assert.match(assignmentRoute, /updateCampaignAssignment/);
+  assert.match(assignmentRoute, /authorizeCampaignMutation\(request, "assignCampaignMembers"\)/);
   assert.doesNotMatch(combined, /campaign_instructions|DELETE FROM local801\.outreach_campaign_population/i);
 });

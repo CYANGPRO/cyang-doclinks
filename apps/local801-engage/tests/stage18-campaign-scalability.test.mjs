@@ -28,9 +28,7 @@ test("Stage 18 campaign page exposes bounded factual operations and strict keyse
   assert.doesNotMatch(campaigns, /\bOFFSET\b/i);
   assert.match(component, /Preview population change/);
   assert.match(component, /Confirm this exact population change/);
-  assert.match(component, /Preview bulk assignment/);
-  assert.match(component, /Choose the organizer who will own this work/);
-  assert.match(component, /CAT will not select or rank an organizer for you/);
+  assert.doesNotMatch(component, /bulk assignment|assignments\/bulk|assigneeHandle/i);
 });
 
 test("Stage 18 browser mutations send only criteria, bounded exceptions, opaque handles, and confirmation tokens", async () => {
@@ -39,7 +37,7 @@ test("Stage 18 browser mutations send only criteria, bounded exceptions, opaque 
   assert.match(component, /maxLength=\{3300\}/);
   assert.match(component, /includeHandles/);
   assert.match(component, /excludeHandles/);
-  assert.match(component, /assigneeHandle/);
+  assert.doesNotMatch(component, /assigneeHandle/);
   assert.doesNotMatch(component, /personIds|campaignId|organizationId|participantHandles/);
   assert.equal((component.match(/\.people/g) ?? []).length, 0);
 });

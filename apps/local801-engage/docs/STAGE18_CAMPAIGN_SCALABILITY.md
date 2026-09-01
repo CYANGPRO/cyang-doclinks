@@ -55,9 +55,9 @@ Preview returns only factual counts: matched, already present, would add/remove,
 
 Apply is draft-only for population changes. It uses set-based `INSERT ... ON CONFLICT DO NOTHING` or a protected set-based removal, checks actual mutation counts, and writes one aggregate audit event in the same transaction. Existing engagement activity and completed assignments prevent unsafe removal.
 
-### Bulk assignment
+### Individual assignment
 
-The initial safe assignment mode is one explicit eligible organizer. It does not infer, rank, optimize, or score organizers. The server selects only currently unassigned members matching bounded operational filters, previews the exact count, locks and revalidates the campaign and assignee, inserts assignments set-wise, verifies the affected count, and writes one aggregate audit event atomically. A later deterministic round-robin mode may be added only with stable sorted inputs and equivalent evidence.
+Bulk assignment was retired from campaign operations. Each organizer can search campaign members and claim or remove their own open assignments. LCAT and administrator roles can assign or reassign a member to any eligible organizer. The server rechecks both the actor role and assignment ownership in the same database statement, so a CAT member cannot change another organizer's work by bypassing the page.
 
 ### Operations page
 
@@ -65,7 +65,7 @@ The campaign participant table remains keyset paginated and accepts only 25, 50,
 
 ### Synthetic scale acceptance
 
-The Stage 18 scale harness creates synthetic `example.test`-only records in an explicitly authorized disposable database, executes the population and assignment flows for 20,000 represented people, captures query counts and `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)` plans, and measures response bytes, wall time, process memory, retry behavior, and aggregate audit writes. It refuses Production, refuses an unauthenticated target, and requires the database name `local801_sql_test`. The disposable database branch is deleted after final acceptance.
+The Stage 18 scale harness creates synthetic `example.test`-only records in an explicitly authorized disposable database, executes the population flow for 20,000 represented people, confirms the unassigned participant view remains bounded, captures query counts and `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)` plans, and measures response bytes, wall time, process memory, retry behavior, and aggregate audit writes. It refuses Production, refuses an unauthenticated target, and requires the database name `local801_sql_test`. The disposable database branch is deleted after final acceptance.
 
 ## Migration decision
 
@@ -77,7 +77,7 @@ Each focused wave must pass lint, typecheck, tests, migration verification, depe
 
 ### Authorized 20,000-person run
 
-The isolated `local801_sql_test` run on 2026-08-18 applied all 20 migrations and passed with exactly 20,000 synthetic people, 20,000 campaign members, 20,000 active assignments, and two aggregate campaign audit events. No migration was required.
+The isolated `local801_sql_test` run on 2026-08-18 applied all 20 migrations and passed with exactly 20,000 synthetic people. Its assignment results below are retained as historical evidence from before bulk assignment was retired; current acceptance expects 20,000 campaign members, no bulk-created assignments, and one aggregate population audit event. No migration was required.
 
 | Operation | Wall time | Queries | Response bytes |
 | --- | ---: | ---: | ---: |

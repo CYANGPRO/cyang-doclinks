@@ -93,14 +93,14 @@ test("invalid campaign handles fail closed before database work", async () => {
   assert.equal(calls, 0);
 });
 
-test("campaign read services deny roles without manageCampaigns before SQL", async () => {
-  for (const run of [
-    (query) => getCampaignsPage(context("cat_lead"), {}, query),
-    (query) => getCampaignDetail(context("cat_lead"), campaignHandle, query),
-    (query) => getCampaignPopulationPage(context("cat_lead"), campaignHandle, {}, query),
-  ]) {
+test("campaign read services allow organizers and deny non-organizer roles before SQL", async () => {
+  for (const role of ["cat_lead", "cat_member"]) {
+    const result = await getCampaignsPage(context(role), {}, async () => []);
+    assert.deepEqual(result.campaigns, []);
+  }
+  for (const role of ["membership_data_manager", "report_viewer"]) {
     let calls = 0;
-    await assert.rejects(run(async () => { calls += 1; return []; }), /Forbidden/);
+    await assert.rejects(getCampaignsPage(context(role), {}, async () => { calls += 1; return []; }), /Forbidden/);
     assert.equal(calls, 0);
   }
 });
@@ -112,6 +112,7 @@ test("campaign participant detail uses opaque employee handles and bounded keyse
     last_name: "Participant",
     department: "Synthetic",
     assignment_status: "open",
+    assignee_handle: "d".repeat(64),
     assignee_name: "Synthetic CAT Lead",
     assignment_due_at: "2026-08-20T12:00:00.000Z",
     contacted: true,
@@ -132,6 +133,7 @@ test("campaign participant detail uses opaque employee handles and bounded keyse
   assert.equal(detail.people[0].personHandle, "0".repeat(64));
   assert.equal("person_id" in detail.people[0], false);
   assert.equal(detail.people[0].assignee_name, "Synthetic CAT Lead");
+  assert.equal(detail.people[0].assignee_handle, "d".repeat(64));
   assert.equal(detail.people[0].assignment_due_at, "2026-08-20T12:00:00.000Z");
   assert.deepEqual(parameters.slice(0, 2), [organizationId, campaignHandle]);
   assert.deepEqual(parameters.slice(2, 4), ["all", "all"]);
@@ -206,6 +208,7 @@ test("campaign portfolio and detail routes use opaque handle navigation", async 
   assert.match(detail, /CampaignEditForm/);
   assert.match(detail, /CampaignAssignmentForm/);
   assert.match(detail, /href=\{`\/outreach\/\$\{person\.personHandle\}`\}/);
-  assert.match(detail, /permission="manageCampaigns"/);
+  assert.match(detail, /permission="viewCampaigns"/);
+  assert.match(detail, /canManageCampaign/);
   assert.doesNotMatch(detail, /campaignId/);
 });

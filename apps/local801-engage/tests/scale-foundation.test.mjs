@@ -171,6 +171,7 @@ test("large campaign populations stay aggregate-first, opaque, and detail-bounde
     last_name: "Participant",
     department: "Synthetic",
     assignment_status: "open",
+    assignee_handle: opaqueHandle(index + 30_000),
     assignee_name: "Synthetic CAT Lead",
     assignment_due_at: null,
     total_count: "20000",
@@ -203,11 +204,11 @@ test("campaign cursors reject malformed opaque handles and overlong text", () =>
 
 test("dashboard sections are permission-derived for all seven roles", () => {
   assert.deepEqual(dashboardForRole("membership_data_manager"), { membership: true, organizing: false, campaigns: false, catActions: false, reports: true });
-  assert.deepEqual(dashboardForRole("cat_member"), { membership: false, organizing: true, campaigns: false, catActions: false, reports: false });
+  assert.deepEqual(dashboardForRole("cat_member"), { membership: false, organizing: true, campaigns: true, catActions: false, reports: false });
   assert.deepEqual(dashboardForRole("report_viewer"), { membership: false, organizing: false, campaigns: false, catActions: false, reports: true });
   for (const role of ["system_owner", "local_admin"]) assert.deepEqual(dashboardForRole(role), { membership: true, organizing: true, campaigns: true, catActions: true, reports: true });
   assert.deepEqual(dashboardForRole("cat_admin"), { membership: false, organizing: true, campaigns: true, catActions: true, reports: true });
-  assert.deepEqual(dashboardForRole("cat_lead"), { membership: false, organizing: true, campaigns: false, catActions: false, reports: true });
+  assert.deepEqual(dashboardForRole("cat_lead"), { membership: false, organizing: true, campaigns: true, catActions: false, reports: true });
 });
 
 test("migration 0005 is additive, transactional, organization scoped, and contains no Phase 2B-2 writes", async () => {

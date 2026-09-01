@@ -13,7 +13,7 @@ export const runtime = "nodejs";
 type RouteContext = { params: Promise<{ campaignHandle: string; personHandle: string }> };
 
 export async function PATCH(request: Request, { params }: RouteContext) {
-  const authorized = await authorizeCampaignMutation(request);
+  const authorized = await authorizeCampaignMutation(request, "assignCampaignMembers");
   if ("response" in authorized) return authorized.response;
   try {
     const [{ campaignHandle, personHandle }, body, context] = await Promise.all([

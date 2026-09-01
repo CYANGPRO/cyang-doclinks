@@ -199,19 +199,29 @@ export function CampaignDeleteButton({ campaignHandle, campaignName }: { campaig
 export function CampaignAssignmentForm({
   campaignHandle,
   personHandle,
+  currentAssigneeHandle,
   currentAssigneeName,
   currentDueAt,
   assignees,
+  selfAssigneeHandle,
+  canAssignOrganizationWide,
 }: {
   campaignHandle: string;
   personHandle: string;
+  currentAssigneeHandle: string | null;
   currentAssigneeName: string | null;
   currentDueAt: string | null;
   assignees: Option[];
+  selfAssigneeHandle: string;
+  canAssignOrganizationWide: boolean;
 }) {
   const router = useRouter();
   const initialDue = useMemo(() => localDateTime(currentDueAt), [currentDueAt]);
-  const [assignee, setAssignee] = useState("__keep__");
+  const assignedToSelf = currentAssigneeHandle === selfAssigneeHandle;
+  const assignedToAnother = Boolean(currentAssigneeHandle && !assignedToSelf);
+  const [assignee, setAssignee] = useState(
+    canAssignOrganizationWide || currentAssigneeHandle ? "__keep__" : selfAssigneeHandle,
+  );
   const [dueAt, setDueAt] = useState(initialDue);
   const [pending, setPending] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(null);
@@ -246,15 +256,25 @@ export function CampaignAssignmentForm({
     }
   }
 
+  if (!canAssignOrganizationWide && assignedToAnother) {
+    return <span className="muted">Assigned to another organizer. Ask an LCAT to reassign.</span>;
+  }
+
+  const summary = canAssignOrganizationWide
+    ? "Assign or reschedule"
+    : assignedToSelf
+      ? "Update or remove my assignment"
+      : "Assign to me";
+
   return <details className="inline-disclosure">
-    <summary>Assign or reschedule</summary>
+    <summary>{summary}</summary>
     <form className="stack inline-disclosure-content" onSubmit={submit}>
       <div className="form-grid">
         <div className="field">
           <label htmlFor={`campaign-assignee-${personHandle}`}>CAT organizer</label>
           <select id={`campaign-assignee-${personHandle}`} value={assignee} onChange={(event) => setAssignee(event.target.value)}>
             <option value="__keep__">Keep current{currentAssigneeName ? ` · ${currentAssigneeName}` : " · unassigned"}</option>
-            <option value="__unassigned__">Unassigned</option>
+            {currentAssigneeHandle ? <option value="__unassigned__">Remove assignment</option> : null}
             {assignees.map((option) => <option key={option.handle} value={option.handle}>{option.label}{option.detail ? ` · ${option.detail}` : ""}</option>)}
           </select>
         </div>

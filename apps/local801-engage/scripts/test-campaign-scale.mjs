@@ -7,10 +7,6 @@ import {
   previewCampaignPopulationChange,
 } from "../src/lib/campaign-bulk-population.ts";
 import {
-  applyCampaignBulkAssignment,
-  previewCampaignBulkAssignment,
-} from "../src/lib/campaign-bulk-assignment.ts";
-import {
   getCampaignOrganizerProgress,
   getCampaignPopulationPage,
 } from "../src/lib/campaigns.ts";
@@ -139,8 +135,7 @@ try {
       SELECT organization_id, 'Stage 18 Synthetic Campaign', 'draft', id FROM actor RETURNING id, organization_id
     )
     SELECT actor.organization_id::text, actor.id::text AS actor_id, campaign.id::text AS campaign_id,
-      encode(public.digest('campaign:' || campaign.organization_id::text || ':' || campaign.id::text, 'sha256'), 'hex') AS campaign_handle,
-      encode(public.digest('user:' || actor.organization_id::text || ':' || actor.id::text, 'sha256'), 'hex') AS assignee_handle
+      encode(public.digest('campaign:' || campaign.organization_id::text || ':' || campaign.id::text, 'sha256'), 'hex') AS campaign_handle
     FROM actor CROSS JOIN campaign
   `);
   const insertStart = performance.now();
@@ -179,31 +174,8 @@ try {
     { operation: "add", criteria: populationCriteria, confirmationToken: populationPreview.value.confirmationToken },
     { query, transaction, tokenSecret, searchMaterial }), (error) => error?.code === "STALE_CONFIRMATION");
 
-  const assignmentCriteria = { membershipStatus: "member", department: "", classification: "",
-    workLocation: "", workflowState: "all" };
-  const assignmentPreview = await timed("assignmentPreview", () => previewCampaignBulkAssignment(
-    context, fixture.campaign_handle, { assigneeHandle: fixture.assignee_handle, criteria: assignmentCriteria },
-    { query, tokenSecret },
-  ));
-  assert.equal(assignmentPreview.value.wouldAssign, 20000);
-  const assignmentPreviewPlan = await explain("campaign-bulk-assignment:preview", true);
-
-  const assignmentApply = await timed("assignmentApply", () => applyCampaignBulkAssignment(
-    context, fixture.campaign_handle,
-    { assigneeHandle: fixture.assignee_handle, criteria: assignmentCriteria,
-      confirmationToken: assignmentPreview.value.confirmationToken },
-    { query, transaction, tokenSecret },
-  ));
-  assert.equal(assignmentApply.value.assigned, 20000);
-  const assignmentApplyPlan = await explain("campaign-bulk-assignment:apply", false);
-  phase = "assignmentRetry";
-  await assert.rejects(applyCampaignBulkAssignment(context, fixture.campaign_handle,
-    { assigneeHandle: fixture.assignee_handle, criteria: assignmentCriteria,
-      confirmationToken: assignmentPreview.value.confirmationToken },
-    { query, transaction, tokenSecret }), (error) => error?.code === "STALE_CONFIRMATION");
-
   const participantPage = await timed("participantPage", () => getCampaignPopulationPage(
-    context, fixture.campaign_handle, { pageSize: 100, assignment: "assigned", workflow: "not_contacted" }, query,
+    context, fixture.campaign_handle, { pageSize: 100, assignment: "unassigned", workflow: "not_contacted" }, query,
   ));
   assert.equal(participantPage.value.people.length, 100);
   assert.equal(participantPage.value.total, 20000);
@@ -214,7 +186,7 @@ try {
   const organizerProgress = await timed("organizerProgress", () => getCampaignOrganizerProgress(
     context, fixture.campaign_handle, query,
   ));
-  assert.deepEqual(organizerProgress.value.map((item) => item.assigned), [20000]);
+  assert.deepEqual(organizerProgress.value, []);
   const organizerProgressPlan = await explain("campaigns:organizer-progress", false);
 
   const [databaseState] = await sql.unsafe(`
@@ -223,9 +195,9 @@ try {
       (SELECT count(*)::int FROM local801.outreach_campaign_population WHERE organization_id = $1::uuid) AS population,
       (SELECT count(*)::int FROM local801.engagement_assignments WHERE organization_id = $1::uuid AND archived_at IS NULL) AS assignments,
       (SELECT count(*)::int FROM local801.audit_events WHERE organization_id = $1::uuid
-        AND subject_type = 'outreach_campaign' AND payload ?| array['bulkPopulation','bulkAssignment']) AS bulk_audits
+        AND subject_type = 'outreach_campaign' AND payload ? 'bulkPopulation') AS bulk_audits
   `, [fixture.organization_id]);
-  assert.deepEqual(databaseState, { people: 20000, population: 20000, assignments: 20000, bulk_audits: 2 });
+  assert.deepEqual(databaseState, { people: 20000, population: 20000, assignments: 0, bulk_audits: 1 });
 
   const evidence = {
     target: { database: currentDatabase, syntheticOnly: true, representedPeople: databaseState.people },
@@ -235,26 +207,19 @@ try {
       populationPreview: populationPreview.metrics,
       populationApply: populationApply.metrics,
       populationRetryQueries: queryCounts.get("populationRetry") ?? 0,
-      assignmentPreview: assignmentPreview.metrics,
-      assignmentApply: assignmentApply.metrics,
-      assignmentRetryQueries: queryCounts.get("assignmentRetry") ?? 0,
       participantPage: participantPage.metrics,
       organizerProgress: organizerProgress.metrics,
     },
     plans: { populationPreview: populationPreviewPlan, populationApply: populationApplyPlan,
-      assignmentPreview: assignmentPreviewPlan, assignmentApply: assignmentApplyPlan,
       participantPage: participantPagePlan, organizerProgress: organizerProgressPlan },
     databaseState,
   };
   assert.ok(populationPreview.metrics.responseBytes < 8_192);
-  assert.ok(assignmentPreview.metrics.responseBytes < 8_192);
   assert.ok(populationPreview.metrics.milliseconds < 30_000);
   assert.ok(populationApply.metrics.milliseconds < 30_000);
-  assert.ok(assignmentPreview.metrics.milliseconds < 30_000);
-  assert.ok(assignmentApply.metrics.milliseconds < 30_000);
   assert.ok(participantPage.metrics.milliseconds < 5_000);
   console.log(`STAGE18_SCALE_EVIDENCE ${JSON.stringify(evidence)}`);
-  console.log("PASS Stage 18 campaign scale: real 20K population, assignment, retry, audit, pagination, payload, memory, timing, and query-plan evidence.");
+  console.log("PASS Stage 18 campaign scale: real 20K population, retry, audit, pagination, payload, memory, timing, and query-plan evidence.");
 } finally {
   await sql.end({ timeout: 5 });
 }

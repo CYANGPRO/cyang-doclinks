@@ -255,6 +255,7 @@ export async function hydrateCampaignDetailFromProtectedPii(
         ...person,
         first_name: names.firstName,
         last_name: names.lastName,
+        assignee_handle: assignment?.user_id ? userHandle(organizationId, assignment.user_id) : null,
         assignee_name: assigneeName,
       };
     }),

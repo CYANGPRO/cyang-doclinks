@@ -19,9 +19,9 @@ const expectedNavigation = {
     "/", "/directory", "/new-hires", "/outreach", "/action-readiness", "/workload", "/follow-ups", "/notifications", "/campaigns", "/cat-actions", "/documents", "/reports",
   ],
   cat_lead: [
-    "/", "/directory", "/new-hires", "/outreach", "/action-readiness", "/workload", "/follow-ups", "/notifications", "/documents", "/reports",
+    "/", "/directory", "/new-hires", "/outreach", "/action-readiness", "/workload", "/follow-ups", "/notifications", "/campaigns", "/documents", "/reports",
   ],
-  cat_member: ["/", "/directory", "/outreach", "/action-readiness", "/workload", "/follow-ups", "/notifications", "/documents"],
+  cat_member: ["/", "/directory", "/outreach", "/action-readiness", "/workload", "/follow-ups", "/notifications", "/campaigns", "/documents"],
   report_viewer: ["/", "/documents", "/reports"],
 };
 
@@ -52,6 +52,16 @@ test("New Hires navigation follows the dedicated assignment permission", () => {
     const hasNewHires = navForRole(role).some((item) => item.href === "/new-hires");
     assert.equal(can(role, "assignNewHires"), allowed.has(role), `${role} assignNewHires permission is incorrect`);
     assert.equal(hasNewHires, allowed.has(role), `${role} New Hires navigation visibility is incorrect`);
+  }
+});
+
+test("campaign access separates self-assignment from organization-wide assignment", () => {
+  const campaignUsers = new Set(["system_owner", "local_admin", "cat_admin", "cat_lead", "cat_member"]);
+  const organizationWide = new Set(["system_owner", "local_admin", "cat_admin", "cat_lead"]);
+  for (const role of Object.keys(expectedNavigation)) {
+    assert.equal(can(role, "viewCampaigns"), campaignUsers.has(role), `${role} campaign visibility is incorrect`);
+    assert.equal(can(role, "assignCampaignMembers"), campaignUsers.has(role), `${role} campaign assignment access is incorrect`);
+    assert.equal(can(role, "assignCampaignMembersOrganizationWide"), organizationWide.has(role), `${role} organization-wide campaign assignment access is incorrect`);
   }
 });
 
@@ -151,7 +161,7 @@ for (const role of ["cat_lead", "cat_member"]) {
   test(`${role} does not receive organization administration links`, () => {
     const hrefs = new Set(navForRole(role).map((item) => item.href));
     const forbidden = [
-      "/membership", "/imports", "/membership/data-quality", "/membership/contact-corrections", "/campaigns", "/cat-actions",
+      "/membership", "/imports", "/membership/data-quality", "/membership/contact-corrections", "/cat-actions",
       "/audit", "/team", "/settings",
     ];
     if (role === "cat_member") forbidden.push("/new-hires");

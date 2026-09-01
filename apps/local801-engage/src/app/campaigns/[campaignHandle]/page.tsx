@@ -86,7 +86,9 @@ export default async function CampaignDetailPage({
   const hasCursor = typeof input.cursor === "string" && input.cursor.length > 0;
   const user = await getPreviewUser();
   if (!user) redirect("/sign-in");
-  if (!can(user.role, "manageCampaigns")) redirect("/unauthorized");
+  if (!can(user.role, "viewCampaigns")) redirect("/unauthorized");
+  const canManageCampaign = can(user.role, "manageCampaigns");
+  const canAssignOrganizationWide = can(user.role, "assignCampaignMembersOrganizationWide");
 
   const candidateTerm = scalar(input.candidate_q).trim();
   const populationSearch = scalar(input.q).trim();
@@ -116,10 +118,12 @@ export default async function CampaignDetailPage({
         getCampaignManagementOptions(context),
         getCampaignOrganizerProgress(context, campaignHandle),
       ]);
-      try {
-        readiness = await getCampaignActionReadiness(context, campaignHandle);
-      } catch {
-        readinessUnavailable = true;
+      if (canManageCampaign) {
+        try {
+          readiness = await getCampaignActionReadiness(context, campaignHandle);
+        } catch {
+          readinessUnavailable = true;
+        }
       }
       if (campaign.status !== "draft" && can(user.role, "manageCatActions")) {
         try {
@@ -133,7 +137,7 @@ export default async function CampaignDetailPage({
           handoffUnavailable = true;
         }
       }
-      if (campaign.status === "draft" && candidateTerm) {
+      if (canManageCampaign && campaign.status === "draft" && candidateTerm) {
         try {
           candidates = await getCampaignPopulationCandidates(context, campaignHandle, candidateTerm);
         } catch {
@@ -165,11 +169,11 @@ export default async function CampaignDetailPage({
   const notContacted = campaign ? Math.max(0, campaign.population - campaign.contacted) : 0;
   const timingAlert = campaign ? campaignTimingAlert(campaign.status, campaign.endsOn) : null;
 
-  return <ProtectedPage permission="manageCampaigns"><div className="content route-campaign-detail-page record-workspace-page">
+  return <ProtectedPage permission="viewCampaigns"><div className="content route-campaign-detail-page record-workspace-page">
     <PageHeader
       eyebrow="Campaigns"
       title={campaign?.name ?? "Campaign"}
-      description="Build the campaign list, assign people, follow contact and completion, and carry useful context into CAT Action planning."
+      description="Search campaign participants, manage assignments within your role, and follow contact and completion."
       actions={<Link className="button secondary" href="/campaigns">Back to campaigns</Link>}
     />
 
@@ -190,12 +194,12 @@ export default async function CampaignDetailPage({
         <StatCard label="Remaining" value={campaign.remaining} detail="Still not completed" tone="attention" />
       </section>
 
-      <SectionCard
+      {canManageCampaign && campaign.status === "draft" ? <SectionCard
         title="Campaign operations"
-        description="Build a server-derived draft population or assign a bounded group. Every bulk change requires a live count preview and a second confirmation."
+        description="Build or adjust the draft population. Every population change requires a live count preview and a second confirmation."
       >
-        <CampaignBulkOperations campaignHandle={campaign.handle} status={campaign.status} assignees={options.assignees} />
-      </SectionCard>
+        <CampaignBulkOperations campaignHandle={campaign.handle} status={campaign.status} />
+      </SectionCard> : null}
 
       <SectionCard
         title="People in this campaign"
@@ -209,7 +213,7 @@ export default async function CampaignDetailPage({
           <div className="field"><label htmlFor="campaign-assignment-filter">Assignment</label><select id="campaign-assignment-filter" name="assignment" defaultValue={population.filters.assignment}><option value="all">All</option><option value="assigned">Assigned</option><option value="unassigned">Unassigned</option></select></div>
           <div className="field"><label htmlFor="campaign-workflow-filter">Workflow</label><select id="campaign-workflow-filter" name="workflow" defaultValue={population.filters.workflow}><option value="all">All</option><option value="not_contacted">Not contacted</option><option value="contacted">Contacted</option><option value="completed">Completed</option><option value="overdue">Overdue</option></select></div>
           <div className="field"><label htmlFor="campaign-page-size">Rows</label><select id="campaign-page-size" name="limit" defaultValue={String(population.pageSize)}><option value="25">25</option><option value="50">50</option><option value="100">100</option></select></div>
-          <div className="form-actions"><button className="button secondary" type="submit">Search and filter</button>{population.filters.search ? <Link className="button tertiary" href={populationHref(campaignHandle, population.pageSize, null, population.filters.assignment, population.filters.workflow, "")}>Clear search</Link> : null}</div>
+          <div className="form-actions campaign-filter-actions"><button className="button secondary" type="submit">Search and filter</button>{population.filters.search ? <Link className="button tertiary" href={populationHref(campaignHandle, population.pageSize, null, population.filters.assignment, population.filters.workflow, "")}>Clear search</Link> : null}</div>
         </form>
         {population.people.length === 0 ? (
           <EmptyState title={campaign.population > 0 ? "No participants match these filters" : "No one in this campaign"} description={campaign.population > 0 ? "Change the assignment or workflow filters to see other participants." : campaign.status === "draft" ? "Use Campaign operations to build this draft population before activation." : "No active people are included in this campaign."} />
@@ -235,12 +239,15 @@ export default async function CampaignDetailPage({
                     <CampaignAssignmentForm
                       campaignHandle={campaign.handle}
                       personHandle={person.personHandle}
+                      currentAssigneeHandle={person.assignee_handle}
                       currentAssigneeName={person.assignee_name}
                       currentDueAt={person.assignment_due_at}
                       assignees={options.assignees}
+                      selfAssigneeHandle={options.selfHandle}
+                      canAssignOrganizationWide={canAssignOrganizationWide}
                     />
                   ) : <span className="muted">Assignment read-only</span>}
-                  {campaign.status === "draft" && person.assignment_status !== "completed" ? (
+                  {canManageCampaign && campaign.status === "draft" && person.assignment_status !== "completed" ? (
                     <CampaignPopulationRemoveButton
                       campaignHandle={campaign.handle}
                       personHandle={person.personHandle}
@@ -275,9 +282,9 @@ export default async function CampaignDetailPage({
         </DataTable> : <p className="muted">No current organizer assignments are recorded.</p>}
       </DisclosureCard>
 
-      <ActionReadinessSummary summary={readiness} unavailable={readinessUnavailable} subject="campaign" />
+      {canManageCampaign ? <ActionReadinessSummary summary={readiness} unavailable={readinessUnavailable} subject="campaign" /> : null}
 
-      {campaign.status !== "draft" ? <DisclosureCard
+      {campaign.status !== "draft" && can(user.role, "manageCatActions") ? <DisclosureCard
         title="Campaign-linked CAT Actions"
         description="Link this campaign to the CAT Actions used for planning the next work. Linking does not copy people, assignments, responses, or commitments."
         className="route-secondary-panel campaign-handoff-panel"
@@ -295,7 +302,7 @@ export default async function CampaignDetailPage({
         <p className="muted">Links are organization-scoped, auditable, and remain available across sessions. The CAT Action still owns its tasks and restricted strategy content.</p>
       </DisclosureCard> : null}
 
-      <DisclosureCard title="Campaign settings" description={`${dateRange(campaign.startsOn, campaign.endsOn)} · Current status: ${campaign.status}.`} className="route-secondary-panel record-settings-panel">
+      {canManageCampaign ? <DisclosureCard title="Campaign settings" description={`${dateRange(campaign.startsOn, campaign.endsOn)} · Current status: ${campaign.status}.`} className="route-secondary-panel record-settings-panel">
         {campaign.status === "closed" ? (
           <div className="grid">
             <p className="muted">This campaign is closed. Its main fields and participant assignments are read-only.</p>
@@ -316,9 +323,9 @@ export default async function CampaignDetailPage({
           <p className="muted">Deletion is available to 801 Administrators, Local Administrators, and System Owners. The campaign leaves operational views while its audit history is retained.</p>
           <CampaignDeleteButton campaignHandle={campaign.handle} campaignName={campaign.name} />
         </div>
-      </DisclosureCard>
+      </DisclosureCard> : null}
 
-      {campaign.status === "draft" ? (
+      {canManageCampaign && campaign.status === "draft" ? (
         <DisclosureCard
           title="Add people to this draft"
           description="Search active Local 801 employees who are not already in this draft. Contact details are not shown in these search results."

@@ -55,6 +55,7 @@ export type CampaignPopulationPerson = {
   last_name: string;
   department: string | null;
   assignment_status: string | null;
+  assignee_handle: string | null;
   assignee_name: string | null;
   assignment_due_at: string | null;
   contacted: boolean;
@@ -207,7 +208,7 @@ function campaignSummary(row: CampaignRow): CampaignSummary {
 }
 
 function requireAccess(context: WorkspaceContext) {
-  if (!can(context.role, "manageCampaigns")) throw new Error("Forbidden.");
+  if (!can(context.role, "viewCampaigns")) throw new Error("Forbidden.");
 }
 
 export async function getCampaignsPage(
@@ -343,6 +344,7 @@ type PopulationRow = {
   last_name: string;
   department: string | null;
   assignment_status: string | null;
+  assignee_handle: string | null;
   assignee_name: string | null;
   assignment_due_at: string | Date | null;
   contacted: boolean;
@@ -384,6 +386,9 @@ export async function getCampaignPopulationPage(
         person.last_name,
         person.department,
         assignment.status AS assignment_status,
+        CASE WHEN assignee.id IS NULL THEN NULL
+          ELSE encode(public.digest('user:' || $1::text || ':' || assignee.id::text, 'sha256'), 'hex')
+        END AS assignee_handle,
         assignee.display_name AS assignee_name,
         assignment.due_at AS assignment_due_at,
         COALESCE(contact.contacted, false) AS contacted,
@@ -492,6 +497,7 @@ export async function getCampaignPopulationPage(
     last_name: row.last_name,
     department: row.department,
     assignment_status: row.assignment_status,
+    assignee_handle: row.assignee_handle,
     assignee_name: row.assignee_name,
     assignment_due_at: timestamp(row.assignment_due_at),
     contacted: row.contacted,

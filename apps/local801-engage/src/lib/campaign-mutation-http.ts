@@ -1,6 +1,7 @@
 import "server-only";
 
 import { NextResponse } from "next/server";
+import type { Permission } from "./access.ts";
 import { requirePreviewUser } from "./authz.server.ts";
 import { CampaignMutationError } from "./campaign-management.ts";
 import { operationalRuntimeEnabled } from "./operational-runtime.ts";
@@ -16,7 +17,7 @@ export function campaignJson(body: Record<string, unknown>, status = 200) {
   return NextResponse.json(body, { status, headers: noStore });
 }
 
-export async function authorizeCampaignMutation(request: Request) {
+export async function authorizeCampaignMutation(request: Request, permission: Permission = "manageCampaigns") {
   if (!operationalRuntimeEnabled()) return { response: campaignJson({ error: "NOT_FOUND" }, 404) } as const;
   if (!hasExactSameOrigin(request)) {
     return {
@@ -26,7 +27,7 @@ export async function authorizeCampaignMutation(request: Request) {
       ),
     } as const;
   }
-  const auth = await requirePreviewUser("manageCampaigns");
+  const auth = await requirePreviewUser(permission);
   if (!auth.ok) {
     auth.response.headers.set("Cache-Control", noStore["Cache-Control"]);
     return { response: auth.response } as const;

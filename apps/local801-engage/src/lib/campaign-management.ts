@@ -34,6 +34,7 @@ export type CampaignManagementOption = {
 
 export type CampaignManagementOptions = {
   assignees: CampaignManagementOption[];
+  selfHandle: string;
 };
 
 export class CampaignMutationError extends Error {
@@ -75,6 +76,16 @@ function requireAccess(context: WorkspaceContext) {
   if (!can(context.role, "manageCampaigns")) {
     throw new CampaignMutationError("FORBIDDEN", "Campaign management is not authorized.", 403);
   }
+}
+
+function requireAssignmentAccess(context: WorkspaceContext) {
+  if (!can(context.role, "assignCampaignMembers")) {
+    throw new CampaignMutationError("FORBIDDEN", "Campaign assignment is not authorized.", 403);
+  }
+}
+
+function canAssignOrganizationWide(context: WorkspaceContext) {
+  return can(context.role, "assignCampaignMembersOrganizationWide");
 }
 
 function requireHandle(value: unknown, label: string) {
@@ -154,6 +165,10 @@ function opaqueHandle(kind: "campaign", organizationId: string, id: string) {
   return createHash("sha256").update(`${kind}:${organizationId}:${id}`).digest("hex");
 }
 
+function opaqueUserHandle(organizationId: string, userId: string) {
+  return createHash("sha256").update(`user:${organizationId}:${userId}`).digest("hex");
+}
+
 function actorCte() {
   return `
     actor AS (
@@ -172,6 +187,25 @@ function actorCte() {
             AND role.code = $4::text
             AND role.code IN ('system_owner','local_admin','cat_admin')
         )
+    )
+  `;
+}
+
+function assignmentActorCte() {
+  return `
+    actor AS (
+      SELECT app_user.id,
+        role.code IN ('system_owner','local_admin','cat_admin','cat_lead') AS organization_wide
+      FROM local801.users app_user
+      JOIN local801.workspace_user_roles user_role ON user_role.user_id = app_user.id
+      JOIN local801.workspace_roles role
+        ON role.id = user_role.role_id
+       AND role.organization_id = $1::uuid
+      WHERE app_user.id = $3::uuid
+        AND app_user.organization_id = $1::uuid
+        AND app_user.deactivated_at IS NULL
+        AND role.code = $4::text
+        AND role.code IN ('system_owner','local_admin','cat_admin','cat_lead','cat_member')
     )
   `;
 }
@@ -201,7 +235,7 @@ async function resolveParticipant(
   personHandleInput: unknown,
   query: DatabaseQuery,
 ) {
-  requireAccess(context);
+  requireAssignmentAccess(context);
   const campaignHandle = requireHandle(campaignHandleInput, "Campaign");
   const personHandle = requireHandle(personHandleInput, "Employee");
   const [row] = await query<ParticipantResolution>(`
@@ -247,6 +281,7 @@ async function resolveAssignee(context: WorkspaceContext, assigneeHandleInput: u
     WHERE candidate.organization_id = $1::uuid
       AND candidate.deactivated_at IS NULL
       AND encode(public.digest('user:' || $1::text || ':' || candidate.id::text, 'sha256'), 'hex') = $2::text
+      AND ($3::boolean OR candidate.id = $4::uuid)
       AND EXISTS (
         SELECT 1
         FROM local801.workspace_user_roles user_role
@@ -257,7 +292,7 @@ async function resolveAssignee(context: WorkspaceContext, assigneeHandleInput: u
           AND role.code IN ('system_owner','local_admin','cat_admin','cat_lead','cat_member')
       )
     LIMIT 1
-  `, [context.organizationId, handle]);
+  `, [context.organizationId, handle, canAssignOrganizationWide(context), context.userId]);
   if (!row) throw new CampaignMutationError("INVALID_ASSIGNEE", "The selected CAT organizer is not available.", 400);
   return row.id;
 }
@@ -266,7 +301,8 @@ export async function getCampaignManagementOptions(
   context: WorkspaceContext,
   query: DatabaseQuery = queryLocal801,
 ): Promise<CampaignManagementOptions> {
-  requireAccess(context);
+  requireAssignmentAccess(context);
+  const organizationWide = canAssignOrganizationWide(context);
   const rows = await query<AssigneeOptionRow>(`
     /* campaign-management:assignee-options */
     SELECT
@@ -281,16 +317,18 @@ export async function getCampaignManagementOptions(
     WHERE app_user.organization_id = $1::uuid
       AND app_user.deactivated_at IS NULL
       AND role.code IN ('system_owner','local_admin','cat_admin','cat_lead','cat_member')
+      AND ($2::boolean OR app_user.id = $3::uuid)
     GROUP BY app_user.id, app_user.display_name
     ORDER BY app_user.display_name ASC, app_user.id ASC
     LIMIT 200
-  `, [context.organizationId]);
+  `, [context.organizationId, organizationWide, context.userId]);
   return {
     assignees: rows.filter((row) => HANDLE_RE.test(row.handle)).map((row) => ({
       handle: row.handle,
       label: row.display_name,
       detail: row.role_codes,
     })),
+    selfHandle: opaqueUserHandle(context.organizationId, context.userId),
   };
 }
 
@@ -517,7 +555,7 @@ export async function updateCampaignAssignment(
   },
   dependencies: CampaignManagementDependencies = {},
 ) {
-  requireAccess(context);
+  requireAssignmentAccess(context);
   const query = dependencies.query ?? queryLocal801;
   const runTransaction = dependencies.runTransaction ?? runLocal801Transaction;
   const prepareAudit = dependencies.prepareAudit ?? prepareAtomicAuditStatement;
@@ -528,6 +566,10 @@ export async function updateCampaignAssignment(
   }
   if (participant.assignment_status === "completed") {
     throw new CampaignMutationError("ASSIGNMENT_COMPLETE", "Completed campaign assignments are read-only.", 409);
+  }
+  const organizationWide = canAssignOrganizationWide(context);
+  if (!organizationWide && participant.assignment_id && participant.primary_user_id !== context.userId) {
+    throw new CampaignMutationError("ASSIGNMENT_OWNED_BY_ANOTHER", "This member is assigned to another organizer. An LCAT or administrator can reassign them.", 403);
   }
 
   const hasAssignee = Object.prototype.hasOwnProperty.call(input, "assigneeHandle");
@@ -551,7 +593,7 @@ export async function updateCampaignAssignment(
     const id = (dependencies.uuid ?? randomUUID)();
     const insertStatement: DatabaseStatement = {
       sql: `
-        WITH ${actorCte()}, locked_campaign AS (
+        WITH ${assignmentActorCte()}, locked_campaign AS (
           SELECT campaign.id
           FROM local801.outreach_campaigns campaign
           WHERE campaign.id = $2::uuid
@@ -589,6 +631,7 @@ export async function updateCampaignAssignment(
                   AND role.code IN ('system_owner','local_admin','cat_admin','cat_lead','cat_member')
               )
           )
+          AND (actor.organization_wide OR $6::uuid = actor.id)
           AND NOT EXISTS (
             SELECT 1 FROM local801.engagement_assignments existing
             WHERE existing.organization_id = $1::uuid
@@ -618,7 +661,7 @@ export async function updateCampaignAssignment(
   if (hasAssignee && assigneeId === null) {
     const archiveStatement: DatabaseStatement = {
       sql: `
-        WITH ${actorCte()}, updated AS (
+        WITH ${assignmentActorCte()}, updated AS (
           UPDATE local801.engagement_assignments assignment
           SET archived_at = now()
           FROM actor
@@ -628,6 +671,7 @@ export async function updateCampaignAssignment(
             AND assignment.person_id = $6::uuid
             AND assignment.archived_at IS NULL
             AND assignment.status = 'open'
+            AND (actor.organization_wide OR assignment.primary_user_id = actor.id)
           RETURNING assignment.id
         )
         SELECT CASE WHEN count(*) = 1 THEN true ELSE 1 / count(*)::integer = 1 END AS assignment_archived
@@ -655,7 +699,7 @@ export async function updateCampaignAssignment(
 
   const updateStatement: DatabaseStatement = {
     sql: `
-      WITH ${actorCte()}, updated AS (
+      WITH ${assignmentActorCte()}, updated AS (
         UPDATE local801.engagement_assignments assignment
         SET
           primary_user_id = CASE WHEN $8::boolean THEN $5::uuid ELSE assignment.primary_user_id END,
@@ -667,6 +711,8 @@ export async function updateCampaignAssignment(
           AND assignment.person_id = $10::uuid
           AND assignment.archived_at IS NULL
           AND assignment.status = 'open'
+          AND (actor.organization_wide OR assignment.primary_user_id = actor.id)
+          AND (actor.organization_wide OR NOT $8::boolean OR $5::uuid = actor.id)
           AND EXISTS (
             SELECT 1 FROM local801.outreach_campaigns campaign
             WHERE campaign.id = assignment.campaign_id
@@ -728,6 +774,7 @@ export const __testing = {
   normalizeStatus,
   normalizeText,
   opaqueHandle,
+  opaqueUserHandle,
   requireHandle,
   sameTimestamp,
   validateDateRange,

@@ -26,8 +26,18 @@
   align-items: end;
 }
 
+.campaign-operation-filters {
+  grid-template-columns: minmax(280px, 2fr) repeat(3, minmax(150px, 1fr));
+}
+
 .campaign-operation-filters .campaign-participant-search {
-  grid-column: span 2;
+  grid-column: auto;
+}
+
+.campaign-operation-filters .campaign-filter-actions {
+  grid-column: 1 / -1;
+  margin-top: .15rem;
+  padding-top: .85rem;
 }
 
 .membership-breakdown-scroll {
@@ -90,8 +100,14 @@
   border-color: #9bc1aa;
 }
 
+@media (max-width: 1100px) {
+  .campaign-operation-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .campaign-operation-filters .campaign-participant-search { grid-column: 1 / -1; }
+}
+
 @media (max-width: 720px) {
-  .action-response-option { grid-template-columns: 1fr; }
+  .action-response-option,
+  .campaign-operation-filters { grid-template-columns: 1fr; }
   .campaign-operation-filters .campaign-participant-search { grid-column: auto; }
 }
 
@@ -189,12 +205,6 @@
 .policy-confirmation { align-items: flex-start; cursor: pointer; display: flex; font-weight: 700; gap: 10px; line-height: 1.45; }
 .policy-confirmation input { flex: 0 0 auto; height: 20px; margin-top: 1px; width: 20px; }
 .policy-form .button { justify-self: start; }
-
-@media (min-width: 920px) {
-  .campaign-operations-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
 
 @media (max-width: 600px) {
   .campaign-operation > summary,

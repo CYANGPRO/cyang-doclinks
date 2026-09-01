@@ -19,6 +19,9 @@ export const permissions = {
   assignOutreach: ["system_owner", "local_admin", "cat_admin", "cat_lead"],
   manageActionCatalog: ["system_owner", "local_admin", "membership_data_manager", "cat_admin", "cat_lead", "cat_member"],
   manageCampaigns: ["system_owner", "local_admin", "cat_admin"],
+  viewCampaigns: ["system_owner", "local_admin", "cat_admin", "cat_lead", "cat_member"],
+  assignCampaignMembers: ["system_owner", "local_admin", "cat_admin", "cat_lead", "cat_member"],
+  assignCampaignMembersOrganizationWide: ["system_owner", "local_admin", "cat_admin", "cat_lead"],
   sendMemberEmail: ["system_owner", "local_admin"],
   manageCatActions: ["system_owner", "local_admin", "cat_admin"],
   manageDocuments: ["system_owner", "local_admin", "membership_data_manager", "cat_admin"],
@@ -65,7 +68,7 @@ const navigationItems: readonly NavigationItem[] = [
   { href: "/workload", label: "Work planner", group: "My work", permission: "recordEngagement" },
   { href: "/follow-ups", label: "Follow-ups", group: "My work", permission: "recordEngagement" },
   { href: "/notifications", label: "To Do", group: "My work", permission: "viewPersonalWorkspace", mobilePriority: ["system_owner", "local_admin", "membership_data_manager", "cat_admin", "cat_lead", "cat_member"] },
-  { href: "/campaigns", label: "Campaigns", group: "Programs", permission: "manageCampaigns" },
+  { href: "/campaigns", label: "Campaigns", group: "Programs", permission: "viewCampaigns" },
   { href: "/email-broadcasts", label: "Email broadcasts", group: "Programs", permission: "sendMemberEmail" },
   { href: "/cat-actions", label: "CAT actions", group: "Programs", permission: "manageCatActions" },
   { href: "/imports", label: "Data imports", group: "Operations", permission: "manageImports", mobilePriority: ["membership_data_manager"] },
@@ -108,7 +111,7 @@ export function dashboardForRole(role: Role) {
   return {
     membership: can(role, "manageImports"),
     organizing: can(role, "recordEngagement"),
-    campaigns: can(role, "manageCampaigns"),
+    campaigns: can(role, "viewCampaigns"),
     catActions: can(role, "manageCatActions"),
     reports: can(role, "viewReports"),
   };

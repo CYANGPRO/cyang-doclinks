@@ -18,7 +18,8 @@ function dateRange(startsOn: string | null, endsOn: string | null) {
 export default async function CampaignsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const user = await getPreviewUser();
   if (!user) redirect("/sign-in");
-  if (!can(user.role, "manageCampaigns")) redirect("/unauthorized");
+  if (!can(user.role, "viewCampaigns")) redirect("/unauthorized");
+  const canManageCampaign = can(user.role, "manageCampaigns");
   const input = await searchParams;
   const hasCursor = typeof input.cursor === "string" && input.cursor.length > 0;
   let page: Awaited<ReturnType<typeof getCampaignsPage>> | null = null;
@@ -29,17 +30,17 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
     // Fail closed. Do not replace unavailable campaign data with placeholder records.
   }
 
-  return <ProtectedPage permission="manageCampaigns"><div className="content route-campaigns-page queue-first-page">
+  return <ProtectedPage permission="viewCampaigns"><div className="content route-campaigns-page queue-first-page">
     <PageHeader
       eyebrow="Programs"
       title="Campaigns"
-      description="Create a defined participant list, assign organizers, track contact and completion, and connect the work to CAT Actions."
+      description="Open a campaign to search its participants, manage assignments within your role, and track contact and completion."
     />
-    <SectionCard id="create-campaign" title="Create campaign" description="Start in draft while you prepare the population, or activate immediately when the campaign is ready." badge={<StatusBadge tone="ready">Audited operation</StatusBadge>}>
+    {canManageCampaign ? <SectionCard id="create-campaign" title="Create campaign" description="Start in draft while you prepare the population." badge={<StatusBadge tone="ready">Audited operation</StatusBadge>}>
       <CampaignCreateForm />
-    </SectionCard>
+    </SectionCard> : null}
     <SectionCard title="Campaign portfolio" badge={<StatusBadge tone="info">Aggregate SQL</StatusBadge>}>
-      {!page ? <UnavailableState title="Campaigns unavailable" description="We couldn’t load the campaign list, so CAT is not showing incomplete results." action={<Link className="button secondary" href="/campaigns">Try again</Link>} /> : page.campaigns.length === 0 ? <EmptyState title="No campaigns yet" description="Create a draft when you are ready to build a participant list and assign the work." action={<a className="button" href="#create-campaign">Create first campaign</a>} /> : <>
+      {!page ? <UnavailableState title="Campaigns unavailable" description="We couldn’t load the campaign list, so CAT is not showing incomplete results." action={<Link className="button secondary" href="/campaigns">Try again</Link>} /> : page.campaigns.length === 0 ? <EmptyState title="No campaigns yet" description={canManageCampaign ? "Create a draft when you are ready to build a participant list and assign the work." : "An administrator has not created a campaign yet."} action={canManageCampaign ? <a className="button" href="#create-campaign">Create first campaign</a> : undefined} /> : <>
         <DataTable caption="Campaign summaries" headers={["Campaign", "Status", "Dates", "Population", "Contacted", "Completed"]}>
           {page.campaigns.map((campaign) => <tr key={campaign.handle}>
             <td><strong><Link href={`/campaigns/${campaign.handle}`}>{campaign.name}</Link></strong></td>

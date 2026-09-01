@@ -89,6 +89,7 @@ function legacyBundle() {
         last_name: "LEGACY",
         department: "Health Licensing",
         assignment_status: "open",
+        assignee_handle: userHandle(),
         assignee_name: "WRONG LEGACY ASSIGNEE",
         assignment_due_at: "2026-08-20T15:00:00.000Z",
       }],
@@ -100,6 +101,7 @@ function legacyBundle() {
     },
     options: {
       assignees: [{ handle: userHandle(), label: "WRONG OPTION", detail: "cat_lead" }],
+      selfHandle: userHandle(),
     },
     candidates: {
       term: "Synthetic",
@@ -143,6 +145,7 @@ test("Campaign detail replaces participant, candidate, assignee, and option disp
   assert.equal(result.population.people[0].first_name, "Protected");
   assert.equal(result.population.people[0].last_name, "Participant");
   assert.equal(result.population.people[0].assignee_name, "Synthetic CAT Lead");
+  assert.equal(result.population.people[0].assignee_handle, userHandle());
   assert.equal(result.options.assignees[0].label, "Synthetic CAT Lead");
   assert.equal(result.candidates.candidates[0].displayName, "Synthetic Campaign Person");
   assert.equal(result.organizerProgress[0].assigneeName, "Synthetic CAT Lead");
