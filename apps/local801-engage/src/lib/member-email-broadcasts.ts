@@ -5,6 +5,7 @@ import { can } from "./access.ts";
 import { prepareAtomicAuditStatement } from "./audit.ts";
 import { queryLocal801, withLocal801Transaction, type DatabaseQuery } from "./db.ts";
 import { sendMemberEmailPreviewTest, type SendMemberEmailPreviewTestInput } from "./member-email-resend.ts";
+import { renderMemberEmailHtml, renderMemberEmailText } from "./member-email-format.ts";
 import {
   memberEmailDeliveryBoundary,
   memberEmailRealTestBoundary,
@@ -874,6 +875,8 @@ export async function sendMemberEmailRealTest(context: WorkspaceContext, handle:
   const keyConfig = dependencies.keyConfig ?? getPiiKeyConfiguration(env);
   const subject = decryptSubject(row, context.organizationId, keyConfig);
   const body = decryptBody(row, context.organizationId, keyConfig);
+  const formattedText = renderMemberEmailText(body);
+  const formattedHtml = renderMemberEmailHtml(body);
   const send = dependencies.sendPreviewTest ?? sendMemberEmailPreviewTest;
   let providerMessageId: string;
   try {
@@ -883,7 +886,8 @@ export async function sendMemberEmailRealTest(context: WorkspaceContext, handle:
       replyTo: boundary.replyTo,
       to: boundary.recipient,
       subject: `[CAT Preview Test] ${subject}`,
-      text: `${body}\n\n---\nCAT Preview one-address test. No member broadcast was delivered.`,
+      text: `${formattedText}\n\n---\nCAT Preview one-address test. No member broadcast was delivered.`,
+      html: `${formattedHtml}<hr style="border:0;border-top:1px solid #d9e0e7;margin:24px 0 12px;"><p style="color:#526171;font-size:12px;line-height:1.5;">CAT Preview one-address test. No member broadcast was delivered.</p>`,
       idempotencyKey: `cat-preview-test/${context.organizationId}/${row.id}`,
     }));
   } catch {

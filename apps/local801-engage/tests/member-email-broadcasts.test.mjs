@@ -153,7 +153,7 @@ function realTestRow() {
     recordId: broadcastId,
     field: "subject",
   }, keyConfig);
-  const body = encryptPiiField("This is a Preview-only message.", {
+  const body = encryptPiiField("This is a **Preview-only** message.", {
     organizationId,
     entity: "member-email-broadcast",
     recordId: broadcastId,
@@ -215,7 +215,11 @@ test("real Preview test sends exactly once to the configured address and never r
   assert.equal(providerCalls[0].from, "CAT Notices <notices@cat.cyang.io>");
   assert.equal(providerCalls[0].replyTo, "cyangprojects@gmail.com");
   assert.match(providerCalls[0].subject, /^\[CAT Preview Test\]/);
+  assert.match(providerCalls[0].text, /This is a Preview-only message\./);
+  assert.doesNotMatch(providerCalls[0].text, /\*\*/);
   assert.match(providerCalls[0].text, /No member broadcast was delivered/);
+  assert.match(providerCalls[0].html, /<strong>Preview-only<\/strong>/);
+  assert.match(providerCalls[0].html, /No member broadcast was delivered/);
   assert.equal(sqlCalls.some((sql) => sql.includes("member_email_broadcast_recipients")), false);
   const auditInsert = auditCalls.find((call) => call.sql.includes("INSERT INTO local801.audit_events"));
   assert.ok(auditInsert);

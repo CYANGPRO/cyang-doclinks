@@ -2,6 +2,7 @@
 
 import { FormEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { renderMemberEmailHtml } from "@/lib/member-email-format";
 import styles from "./MemberEmailBroadcastControls.module.css";
 
 const AUDIENCE_GROUPS = ["Membership", "Users", "CAT", "Departments", "Saved lists"] as const;
@@ -91,11 +92,55 @@ export function MemberEmailBroadcastComposer({
 }) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
   const [selectedAudience, setSelectedAudience] = useState(audienceOptions[0]?.key ?? "members");
   const [audience, setAudience] = useState<Audience | null>(null);
+  const [bodySource, setBodySource] = useState("");
   const [review, setReview] = useState<DraftReview | null>(null);
   const [pending, setPending] = useState<"preview" | "create" | null>(null);
   const [feedback, setFeedback] = useState<Feedback>(null);
+
+  function updateBody(next: string, selectionStart: number, selectionEnd: number) {
+    setBodySource(next);
+    setReview(null);
+    requestAnimationFrame(() => {
+      bodyRef.current?.focus();
+      bodyRef.current?.setSelectionRange(selectionStart, selectionEnd);
+    });
+  }
+
+  function wrapSelection(prefix: string, suffix: string, placeholder: string, selectUrl = false) {
+    const textarea = bodyRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selected = bodySource.slice(start, end) || placeholder;
+    const replacement = `${prefix}${selected}${suffix}`;
+    const next = `${bodySource.slice(0, start)}${replacement}${bodySource.slice(end)}`;
+    if (selectUrl) {
+      const urlStart = start + replacement.lastIndexOf("https://");
+      updateBody(next, urlStart, urlStart + "https://example.com".length);
+      return;
+    }
+    updateBody(next, start + prefix.length, start + prefix.length + selected.length);
+  }
+
+  function prefixSelectedLines(kind: "heading" | "bullets" | "numbers") {
+    const textarea = bodyRef.current;
+    if (!textarea) return;
+    const start = bodySource.lastIndexOf("\n", Math.max(0, textarea.selectionStart - 1)) + 1;
+    const nextLine = bodySource.indexOf("\n", textarea.selectionEnd);
+    const end = nextLine === -1 ? bodySource.length : nextLine;
+    let number = 1;
+    const replacement = bodySource.slice(start, end).split("\n").map((line) => {
+      if (!line.trim()) return line;
+      if (kind === "heading") return `# ${line}`;
+      if (kind === "bullets") return `- ${line}`;
+      return `${number++}. ${line}`;
+    }).join("\n");
+    const next = `${bodySource.slice(0, start)}${replacement}${bodySource.slice(end)}`;
+    updateBody(next, start, start + replacement.length);
+  }
 
   async function loadPreview() {
     setPending("preview");
@@ -157,6 +202,7 @@ export function MemberEmailBroadcastComposer({
         scheduledFor: review.scheduledFor,
       });
       formRef.current?.reset();
+      setBodySource("");
       setAudience(null);
       setReview(null);
       setFeedback({ tone: "success", message: "Preview broadcast draft created with a frozen synthetic recipient snapshot." });
@@ -254,9 +300,30 @@ export function MemberEmailBroadcastComposer({
       <input id="member-email-subject" name="subject" required maxLength={160} />
     </div>
     <div className="field">
-      <label htmlFor="member-email-body">Plain-text message</label>
-      <textarea id="member-email-body" name="body" required maxLength={20000} rows={10} />
-      <p className="field-help">Private documents should stay in CAT and be linked from the eventual production message.</p>
+      <label htmlFor="member-email-body">Message</label>
+      <div className={styles.editorWorkspace}>
+        <div className={styles.formatEditor}>
+          <div className={styles.formattingToolbar} role="toolbar" aria-label="Message formatting">
+            <button type="button" onClick={() => wrapSelection("**", "**", "bold text")} aria-label="Bold" title="Bold"><strong>B</strong></button>
+            <button type="button" onClick={() => wrapSelection("*", "*", "italic text")} aria-label="Italic" title="Italic"><em>I</em></button>
+            <button type="button" onClick={() => prefixSelectedLines("heading")} aria-label="Heading" title="Heading">Heading</button>
+            <button type="button" onClick={() => prefixSelectedLines("bullets")} aria-label="Bulleted list" title="Bulleted list">• List</button>
+            <button type="button" onClick={() => prefixSelectedLines("numbers")} aria-label="Numbered list" title="Numbered list">1. List</button>
+            <button type="button" onClick={() => wrapSelection("[", "](https://example.com)", "link text", true)} aria-label="Link" title="Link">Link</button>
+          </div>
+          <textarea ref={bodyRef} className={styles.messageEditor} id="member-email-body" name="body" required maxLength={20000} rows={13}
+            value={bodySource} onChange={(event) => {
+              setBodySource(event.target.value);
+              setReview(null);
+            }} />
+          <div className={styles.editorMeta}><span>Limited formatting only</span><span>{bodySource.length.toLocaleString()} / 20,000</span></div>
+        </div>
+        <div className={styles.livePreview} aria-live="polite">
+          <span className={styles.previewLabel}>Formatting preview</span>
+          <div className={styles.previewContent} dangerouslySetInnerHTML={{ __html: renderMemberEmailHtml(bodySource) }} />
+        </div>
+      </div>
+      <p className="field-help">Use headings, bold, italic, lists, and safe web links. Raw HTML is shown as text, and CAT generates a plain-text fallback automatically. Private documents should stay in CAT.</p>
     </div>
     <div className="field">
       <label htmlFor="member-email-schedule">Optional simulated send time</label>
@@ -287,7 +354,7 @@ export function MemberEmailBroadcastComposer({
         <span>Subject</span>
         <strong>{review.subject}</strong>
         <span>Message</span>
-        <div>{review.body}</div>
+        <div dangerouslySetInnerHTML={{ __html: renderMemberEmailHtml(review.body) }} />
       </div>
 
       <div className={styles.freezeNotice}>
