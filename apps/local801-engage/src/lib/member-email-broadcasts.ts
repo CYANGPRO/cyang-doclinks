@@ -880,6 +880,7 @@ export async function sendMemberEmailRealTest(context: WorkspaceContext, handle:
     ({ providerMessageId } = await send({
       apiKey: boundary.apiKey,
       from: boundary.from,
+      replyTo: boundary.replyTo,
       to: boundary.recipient,
       subject: `[CAT Preview Test] ${subject}`,
       text: `${body}\n\n---\nCAT Preview one-address test. No member broadcast was delivered.`,

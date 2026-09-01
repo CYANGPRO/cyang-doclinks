@@ -5,6 +5,7 @@ import { Resend } from "resend";
 export type SendMemberEmailPreviewTestInput = {
   apiKey: string;
   from: string;
+  replyTo: string;
   to: string;
   subject: string;
   text: string;
@@ -15,6 +16,7 @@ export async function sendMemberEmailPreviewTest(input: SendMemberEmailPreviewTe
   const resend = new Resend(input.apiKey);
   const { data, error } = await resend.emails.send({
     from: input.from,
+    replyTo: input.replyTo,
     to: [input.to],
     subject: input.subject,
     text: input.text,

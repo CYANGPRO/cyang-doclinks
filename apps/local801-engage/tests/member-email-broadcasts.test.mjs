@@ -37,6 +37,7 @@ const realTestEnv = {
   LOCAL801_EMAIL_BROADCAST_REAL_TEST_ENABLED: "1",
   LOCAL801_EMAIL_BROADCAST_TEST_RECIPIENT: "owner@example.test",
   LOCAL801_EMAIL_BROADCAST_FROM: "CAT Notices <notices@cat.cyang.io>",
+  LOCAL801_EMAIL_BROADCAST_REPLY_TO: "cyangprojects@gmail.com",
   RESEND_API_KEY: "test-only-key",
 };
 
@@ -132,6 +133,7 @@ test("Preview gate is intrinsically denied in Production and under the launch in
     provider: "resend",
     recipient: "owner@example.test",
     from: "CAT Notices <notices@cat.cyang.io>",
+    replyTo: "cyangprojects@gmail.com",
     apiKey: "test-only-key",
     maxRecipients: 1,
     memberDeliveryAllowed: false,
@@ -141,6 +143,7 @@ test("Preview gate is intrinsically denied in Production and under the launch in
   assert.throws(() => memberEmailRealTestBoundary({ ...realTestEnv, LOCAL801_EMAIL_BROADCAST_REAL_TEST_ENABLED: "0" }), /disabled/i);
   assert.throws(() => memberEmailRealTestBoundary({ ...realTestEnv, LOCAL801_EMAIL_BROADCAST_TEST_RECIPIENT: "one@example.test,two@example.test" }), /exactly one/i);
   assert.throws(() => memberEmailRealTestBoundary({ ...realTestEnv, LOCAL801_EMAIL_BROADCAST_FROM: "CAT Preview <cat@cyang.io>" }), /verified cat\.cyang\.io/i);
+  assert.throws(() => memberEmailRealTestBoundary({ ...realTestEnv, LOCAL801_EMAIL_BROADCAST_REPLY_TO: "one@example.test,two@example.test" }), /exactly one/i);
 });
 
 function realTestRow() {
@@ -210,6 +213,7 @@ test("real Preview test sends exactly once to the configured address and never r
   assert.equal(providerCalls.length, 1);
   assert.equal(providerCalls[0].to, "owner@example.test");
   assert.equal(providerCalls[0].from, "CAT Notices <notices@cat.cyang.io>");
+  assert.equal(providerCalls[0].replyTo, "cyangprojects@gmail.com");
   assert.match(providerCalls[0].subject, /^\[CAT Preview Test\]/);
   assert.match(providerCalls[0].text, /No member broadcast was delivered/);
   assert.equal(sqlCalls.some((sql) => sql.includes("member_email_broadcast_recipients")), false);

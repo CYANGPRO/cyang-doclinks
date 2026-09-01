@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import styles from "./MemberEmailBroadcastControls.module.css";
 
@@ -29,6 +29,13 @@ type AudienceOption = {
 
 type Feedback = { tone: "error" | "success"; message: string } | null;
 
+type DraftReview = {
+  subject: string;
+  body: string;
+  scheduledFor: string | null;
+  scheduledDisplay: string;
+};
+
 function isoDateTime(value: string) {
   if (!value) return null;
   const parsed = new Date(value);
@@ -48,6 +55,14 @@ function formatSnapshotDate(value: string) {
   }).format(parsed);
 }
 
+function formatSchedule(value: string | null) {
+  if (!value) return "Manual send after approval";
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
 async function post(url: string, body: Record<string, unknown>) {
   const response = await fetch(url, {
     method: "POST",
@@ -65,15 +80,26 @@ function FeedbackMessage({ value }: { value: Feedback }) {
     role={value.tone === "error" ? "alert" : "status"}>{value.message}</div>;
 }
 
-export function MemberEmailBroadcastComposer({ audienceOptions }: { audienceOptions: AudienceOption[] }) {
+export function MemberEmailBroadcastComposer({
+  audienceOptions,
+  sender,
+  replyTo,
+}: {
+  audienceOptions: AudienceOption[];
+  sender: string | null;
+  replyTo: string | null;
+}) {
   const router = useRouter();
+  const formRef = useRef<HTMLFormElement>(null);
   const [selectedAudience, setSelectedAudience] = useState(audienceOptions[0]?.key ?? "members");
   const [audience, setAudience] = useState<Audience | null>(null);
+  const [review, setReview] = useState<DraftReview | null>(null);
   const [pending, setPending] = useState<"preview" | "create" | null>(null);
   const [feedback, setFeedback] = useState<Feedback>(null);
 
   async function loadPreview() {
     setPending("preview");
+    setReview(null);
     setFeedback(null);
     try {
       const payload = await post("/api/email-broadcasts/preview", { audienceKey: selectedAudience });
@@ -87,7 +113,7 @@ export function MemberEmailBroadcastComposer({ audienceOptions }: { audienceOpti
     }
   }
 
-  async function create(event: FormEvent<HTMLFormElement>) {
+  function prepareReview(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!audience) {
       setFeedback({ tone: "error", message: "Preview the synthetic recipients before creating a draft." });
@@ -100,22 +126,39 @@ export function MemberEmailBroadcastComposer({ audienceOptions }: { audienceOpti
     }
     const form = event.currentTarget;
     const data = new FormData(form);
+    const subject = String(data.get("subject") ?? "").trim();
+    const body = String(data.get("body") ?? "").trim();
+    if (!subject || !body) {
+      setFeedback({ tone: "error", message: "Enter both a subject and message before reviewing the notice." });
+      return;
+    }
     const scheduledFor = isoDateTime(String(data.get("scheduledFor") ?? ""));
     if (scheduledFor === "invalid") {
       setFeedback({ tone: "error", message: "Enter a valid simulated send time." });
+      return;
+    }
+    setFeedback(null);
+    setReview({ subject, body, scheduledFor, scheduledDisplay: formatSchedule(scheduledFor) });
+  }
+
+  async function create() {
+    if (!audience || !review || audience.audienceKey !== selectedAudience) {
+      setReview(null);
+      setFeedback({ tone: "error", message: "Review the currently selected audience and notice before creating a draft." });
       return;
     }
     setPending("create");
     setFeedback(null);
     try {
       await post("/api/email-broadcasts", {
-        subject: String(data.get("subject") ?? ""),
-        body: String(data.get("body") ?? ""),
+        subject: review.subject,
+        body: review.body,
         audienceKey: selectedAudience,
-        scheduledFor,
+        scheduledFor: review.scheduledFor,
       });
-      form.reset();
+      formRef.current?.reset();
       setAudience(null);
+      setReview(null);
       setFeedback({ tone: "success", message: "Preview broadcast draft created with a frozen synthetic recipient snapshot." });
       router.refresh();
     } catch (error) {
@@ -125,7 +168,7 @@ export function MemberEmailBroadcastComposer({ audienceOptions }: { audienceOpti
     }
   }
 
-  return <form className="stack" onSubmit={create}>
+  return <form ref={formRef} className="stack" onSubmit={prepareReview} onInput={() => setReview(null)}>
     <div className="callout neutral">
       <strong>Member delivery stays simulated.</strong> Draft audiences remain locked to <code>example.test</code>. A separate action may send one configured external test through Resend, never the member list.
     </div>
@@ -136,6 +179,7 @@ export function MemberEmailBroadcastComposer({ audienceOptions }: { audienceOpti
         onChange={(event) => {
           setSelectedAudience(event.target.value);
           setAudience(null);
+          setReview(null);
           setFeedback(null);
         }} disabled={pending !== null}>
         {AUDIENCE_GROUPS.map((group) => {
@@ -219,10 +263,47 @@ export function MemberEmailBroadcastComposer({ audienceOptions }: { audienceOpti
       <input id="member-email-schedule" name="scheduledFor" type="datetime-local" />
     </div>
     <div className="form-actions">
-      <button className="button" type="submit" disabled={!audience || pending !== null}>
-        {pending === "create" ? "Creating…" : "Create Preview draft"}
-      </button>
+      {!review ? <button className="button" type="submit" disabled={!audience || pending !== null}>Review notice</button> : null}
     </div>
+    {review && audience ? <section className={styles.finalReview} aria-labelledby="final-review-title" aria-live="polite">
+      <header className={styles.finalReviewHeader}>
+        <div>
+          <span className={styles.eyebrow}>Final review</span>
+          <h3 id="final-review-title">Confirm this Preview draft</h3>
+          <p>Check the delivery details and message before freezing the recipient snapshot.</p>
+        </div>
+        <span className={styles.reviewBadge}>Not sent yet</span>
+      </header>
+
+      <dl className={styles.reviewDetails}>
+        <div><dt>Audience</dt><dd>{audience.audienceLabel}</dd></div>
+        <div><dt>Deliverable recipients</dt><dd>{audience.eligible}</dd></div>
+        <div><dt>From</dt><dd>{sender ?? "Sender not configured"}</dd></div>
+        <div><dt>Replies go to</dt><dd>{replyTo ?? "Reply-To not configured"}</dd></div>
+        <div><dt>Schedule</dt><dd>{review.scheduledDisplay}</dd></div>
+      </dl>
+
+      <div className={styles.messageReview}>
+        <span>Subject</span>
+        <strong>{review.subject}</strong>
+        <span>Message</span>
+        <div>{review.body}</div>
+      </div>
+
+      <div className={styles.freezeNotice}>
+        <strong>Creating this draft does not send an email.</strong>
+        It freezes this audience and message for the separate review and approval workflow.
+      </div>
+      <div className={styles.reviewActions}>
+        <button className="button secondary" type="button" onClick={() => {
+          setReview(null);
+          document.getElementById("member-email-subject")?.focus();
+        }} disabled={pending !== null}>Back to edit</button>
+        <button className="button" type="button" onClick={create} disabled={pending !== null}>
+          {pending === "create" ? "Creating…" : "Create Preview draft"}
+        </button>
+      </div>
+    </section> : null}
     <FeedbackMessage value={feedback} />
   </form>;
 }

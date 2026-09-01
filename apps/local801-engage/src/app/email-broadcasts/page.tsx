@@ -49,7 +49,7 @@ export default async function EmailBroadcastsPage() {
       description="Choose a higher-level audience, then build and approve a communication against a frozen synthetic recipient snapshot. Member delivery stays simulated; one configured test address can use Resend."
     />
     <SectionCard title="Create Preview broadcast" description="Check the latest approved snapshot, then encrypt the draft and freeze its synthetic recipient population." badge={<StatusBadge tone={realTest.enabled ? "info" : "pending"}>{realTest.enabled ? "One-address Resend test" : "Provider disabled"}</StatusBadge>}>
-      {audienceOptions ? <MemberEmailBroadcastComposer audienceOptions={audienceOptions} />
+      {audienceOptions ? <MemberEmailBroadcastComposer audienceOptions={audienceOptions} sender={realTest.from} replyTo={realTest.replyTo} />
         : <UnavailableState title="Recipient audiences unavailable" description="CAT could not establish the protected Preview audience choices, so draft creation stays disabled." />}
     </SectionCard>
     <SectionCard title="Preview workflow" description="The creator submits the draft; a different authorized administrator approves it; delivery remains simulated." badge={<StatusBadge tone="info">Two-person approval</StatusBadge>}>
