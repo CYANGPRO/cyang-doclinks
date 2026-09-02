@@ -72,7 +72,7 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "resend": "^6.25.0",
-    "zod": "^4.3.6"
+    "zod": "^4.5.4"
   },
   "overrides": {
     "@babel/core": "7.29.7",
