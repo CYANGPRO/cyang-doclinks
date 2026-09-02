@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Engaging Local 801 maskable icon">
-  <rect width="512" height="512" fill="#134D8C"/>
-  <circle cx="256" cy="256" r="204" fill="#ffffff"/>
-  <path d="M116 318h280v44H116z" fill="#134D8C"/>
-  <path d="M138 279c33-70 76-105 130-105 47 0 84 25 111 74l-38 20c-18-34-43-51-75-51-34 0-66 28-96 84z" fill="#97002E"/>
-  <text x="256" y="272" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="102" font-weight="800" fill="#134D8C">801</text>
-</svg>

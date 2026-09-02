@@ -1,7 +1,0 @@
-name: Local 801 CAT CodeQL scope
-paths:
-  - apps/local801-engage
-paths-ignore:
-  - apps/local801-engage/android
-  - apps/local801-engage/ios
-  - apps/local801-engage/node_modules

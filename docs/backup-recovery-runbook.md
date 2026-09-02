@@ -102,9 +102,3 @@ What `runtime:proof:live` adds beyond `restore:verify`:
 - `/api/health/ready` returns `200`.
 - `/api/health/deps` shows fresh backups and no critical dependency failures.
 - `npm run runtime:proof:live` passes against the named restored backup artifact before cutover.
-
-## Local 801 Engage Addendum
-
-Local 801 Engage needs its own database backups, private object-storage backups, encryption-key recovery records, restoration tests, and backup-owner assignment.
-
-Backups must not reuse DocLinks backup credentials or buckets. Restoration drills should verify membership snapshots, imports, documents, generated reports, and audit-chain continuity in the separate Local 801 database and R2 bucket.

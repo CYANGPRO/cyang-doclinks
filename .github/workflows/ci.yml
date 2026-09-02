@@ -11,44 +11,6 @@ on:
   workflow_dispatch:
 
 jobs:
-  local801-security:
-    if: github.event_name == 'push' || github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/local801-engage
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22.19.0
-          cache: npm
-          cache-dependency-path: apps/local801-engage/package-lock.json
-      - name: Install CAT dependencies
-        run: npm ci
-      - name: Lint CAT
-        run: npm run lint
-      - name: Typecheck CAT
-        run: npm run typecheck
-      - name: Verify CAT migrations
-        run: npm run db:migrations:verify
-      - name: Test CAT
-        run: npm test
-      - name: Audit CAT production dependencies
-        run: npm run security:audit
-      - name: Generate CAT CycloneDX SBOM
-        run: npm sbom --omit=dev --sbom-format=cyclonedx > local801-engage.cdx.json
-      - name: Upload CAT SBOM
-        uses: actions/upload-artifact@v4
-        with:
-          name: local801-engage-sbom
-          path: apps/local801-engage/local801-engage.cdx.json
-          if-no-files-found: error
-      - name: Build CAT
-        run: npm run build
-
   build-lint-audit:
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest

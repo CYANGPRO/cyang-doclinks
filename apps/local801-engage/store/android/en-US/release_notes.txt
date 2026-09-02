@@ -1,1 +1,0 @@
-Initial release of the secure Engaging Local 801 mobile workspace.

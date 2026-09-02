@@ -10,14 +10,6 @@ DocLinks is cyang.io's controlled document delivery product. It lets teams share
 
 This repo is the public codebase behind that product direction. It reflects a security-first sharing system, not a generic file-hosting demo.
 
-## Application Family
-
-This repository also contains a separate application project:
-
-- `apps/local801-engage`: Local 801 Engage, a private Local 801 membership, CAT engagement, campaign, reporting, document-storage, and PWA application prepared for `cat.cyang.io`.
-
-Local 801 Engage is part of the cyang.io application family through shared repository ownership, development standards, and selected generic patterns. It is not a rebuild of DocLinks and must use separate production authentication, database, object storage, encryption keys, secrets, deployment, and monitoring.
-
 ## Why It Exists
 
 Most document sharing tools make distribution easy, then give you very little control once the link leaves your hands.
@@ -144,18 +136,6 @@ npm run build
 npm run audit:bundle-budgets
 npm run production-readiness
 ```
-
-### Local 801 Engage commands
-
-```bash
-npm run local801:dev
-npm run local801:build
-npm run local801:typecheck
-npm run local801:test
-npm run local801:db:migrations:verify
-```
-
-Local 801 setup starts from `apps/local801-engage/.env.example`. Real membership or CAT sample files must stay in `local-sensitive-samples/`, which is ignored by git.
 
 ### Release proof sequence
 

@@ -48,8 +48,6 @@ const eslintConfig = defineConfig([
     "**/next-env.d.ts",
     "**/playwright-report/**",
     "**/test-results/**",
-    // Local 801 is an isolated application with its own lint configuration and gate.
-    "apps/local801-engage/**",
     // Disposable acceptance workspaces and generated proof artifacts are not source.
     ".tmp/**",
   ]),

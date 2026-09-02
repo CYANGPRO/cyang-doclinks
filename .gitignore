@@ -15,7 +15,6 @@
 /coverage
 /playwright-report
 /test-results
-local-sensitive-samples/
 /.tmp/
 /.artifacts/proof/*
 !/.artifacts/proof/.gitkeep

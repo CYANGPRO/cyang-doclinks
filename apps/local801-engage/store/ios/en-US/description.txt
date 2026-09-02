@@ -1,7 +1,0 @@
-Engaging Local 801 is the private work application for approved MAPE Local 801 users.
-
-Authorized users can coordinate member engagement, campaigns, CAT actions, follow-ups, documents, notifications, and secure web reports according to their assigned role. Microsoft Entra ID and multi-factor authentication verify identity, while Local 801 administrators control application access and roles.
-
-Mobile capabilities include secure document and QR scanning, device biometric confirmation, generic calendar reminders, notifications, and protected background uploads. Protected member records are not stored for offline browsing.
-
-An approved Local 801 account is required. The application does not provide public registration and cannot be used with an unapproved Microsoft account.

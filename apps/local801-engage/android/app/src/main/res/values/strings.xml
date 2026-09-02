@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">Engaging Local 801</string>
-    <string name="title_activity_main">Engaging Local 801</string>
-    <string name="package_name">io.cyang.local801.engage</string>
-    <string name="custom_url_scheme">io.cyang.local801.engage</string>
-</resources>
