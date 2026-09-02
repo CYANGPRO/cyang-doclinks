@@ -37,7 +37,7 @@ function deps(overrides = {}) {
   };
 }
 
-test("campaign population candidate search is bounded, protected, organization scoped, draft-only, and excludes contact values", async () => {
+test("campaign population candidate search is bounded, protected, organization scoped, available for draft and active campaigns, and excludes contact values", async () => {
   let sqlText = "";
   let parameters = [];
   const result = await getCampaignPopulationCandidates(context(), campaignHandle, "  Synthetic   Health ", async (sql, values) => {
@@ -66,7 +66,7 @@ test("campaign population candidate search is bounded, protected, organization s
   assert.deepEqual(parameters.slice(0, 2), [organizationId, campaignHandle]);
   assert.equal(parameters[3], __testing.MAX_CANDIDATES);
   assert.equal(__testing.MAX_CANDIDATES, 25);
-  assert.match(sqlText, /campaign\.status = 'draft'/);
+  assert.match(sqlText, /campaign\.status IN \('draft','active'\)/);
   assert.match(sqlText, /person\.organization_id = \$1::uuid/);
   assert.match(sqlText, /person\.archived_at IS NULL/);
   assert.match(sqlText, /person\.local_number = '0801'/);
@@ -78,7 +78,7 @@ test("campaign population candidate search is bounded, protected, organization s
   assert.equal(JSON.stringify(result).includes(personId), false);
 });
 
-test("campaign population dropdown choices are bounded, draft-only, and exclude current participants", async () => {
+test("campaign population dropdown choices are bounded, available for draft and active campaigns, and exclude current participants", async () => {
   let sqlText = "";
   const result = await getCampaignPopulationFilterOptions(context(), campaignHandle, async (sql, parameters) => {
     sqlText = sql;
@@ -94,7 +94,7 @@ test("campaign population dropdown choices are bounded, draft-only, and exclude 
     classifications: ["Planner"],
     workLocations: ["Central Office"],
   });
-  assert.match(sqlText, /campaign\.status = 'draft'/);
+  assert.match(sqlText, /campaign\.status IN \('draft','active'\)/);
   assert.match(sqlText, /person\.archived_at IS NULL/);
   assert.match(sqlText, /NOT EXISTS[\s\S]*outreach_campaign_population/);
   assert.match(sqlText, /PARTITION BY kind/);
@@ -112,12 +112,12 @@ test("blank candidate search does no database work", async () => {
   assert.equal(calls, 0);
 });
 
-test("adding a campaign population member is draft-only, deduplicated, role-rechecked, and atomic with audit", async () => {
+test("adding a campaign population member supports draft and active campaigns, is deduplicated, role-rechecked, and atomic with audit", async () => {
   const state = deps({
     query: async (sql, parameters) => {
       assert.equal(parameters[0], organizationId);
       assert.deepEqual(parameters.slice(1), [campaignHandle, personHandle]);
-      assert.match(sql, /campaign\.status = 'draft'/);
+      assert.match(sql, /campaign\.status IN \('draft','active'\)/);
       return [{ campaign_id: campaignId, person_id: personId, already_in_population: false }];
     },
   });
@@ -127,7 +127,7 @@ test("adding a campaign population member is draft-only, deduplicated, role-rech
   assert.equal(state.transactions[0].length, 2);
   const statement = state.transactions[0][0];
   assert.match(statement.sql, /INSERT INTO local801\.outreach_campaign_population/);
-  assert.match(statement.sql, /campaign\.status = 'draft'/);
+  assert.match(statement.sql, /campaign\.status IN \('draft','active'\)/);
   assert.match(statement.sql, /person\.organization_id = \$1::uuid/);
   assert.match(statement.sql, /person\.local_number = '0801'/);
   assert.match(statement.sql, /role\.code = \$4::text/);
@@ -139,7 +139,7 @@ test("adding a campaign population member is draft-only, deduplicated, role-rech
   assert.deepEqual(state.audits[0].payload, { campaignPopulation: true });
 });
 
-test("duplicate or unavailable draft population targets fail before transaction work", async () => {
+test("duplicate or unavailable campaign population targets fail before transaction work", async () => {
   const duplicate = deps({ query: async () => [{ campaign_id: campaignId, person_id: personId, already_in_population: true }] });
   await assert.rejects(
     addCampaignPopulationMember(context(), campaignHandle, personHandle, duplicate.values),
@@ -231,6 +231,7 @@ test("population APIs reuse the hardened Preview mutation guard and accept only 
   assert.match(removeRoute, /authorizeCampaignMutation\(request\)/);
   assert.match(removeRoute, /removeCampaignPopulationMember/);
   assert.match(source, /HANDLE_RE = \/\^\[0-9a-f\]\{64\}\$\/i/);
+  assert.match(source, /campaign\.status IN \('draft','active'\)/);
   assert.match(source, /campaign\.status = 'draft'/);
   assert.match(source, /MAX_CANDIDATES = 25/);
   assert.match(source, /person_search_tokens/);
@@ -238,7 +239,7 @@ test("population APIs reuse the hardened Preview mutation guard and accept only 
   assert.doesNotMatch(source, /contact_value|contact\.contact_value/i);
   assert.match(page, /Find and add employees/);
   assert.match(page, /Current campaign participants are excluded/);
-  assert.match(page, /canManageCampaign && campaign\.status === "draft"/);
+  assert.match(page, /canManageCampaign && campaign\.status !== "closed"/);
   assert.match(page, /candidate_q/);
   assert.match(page, /CampaignPopulationAddButton/);
   assert.match(page, /CampaignPopulationRemoveButton/);

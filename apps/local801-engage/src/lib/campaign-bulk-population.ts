@@ -228,7 +228,10 @@ function selectionCtes() {
       FROM local801.outreach_campaigns campaign
       WHERE campaign.organization_id = $1::uuid
         AND campaign.archived_at IS NULL
-        AND campaign.status = 'draft'
+        AND (
+          ($8::text = 'add' AND campaign.status IN ('draft','active'))
+          OR ($8::text = 'remove' AND campaign.status = 'draft')
+        )
         AND encode(public.digest('campaign:' || campaign.organization_id::text || ':' || campaign.id::text, 'sha256'), 'hex') = $2::text
       LIMIT 1
     ), include_handles AS (
@@ -370,7 +373,7 @@ async function livePreview(
     GROUP BY campaign.id
   `, selectionParameters(context, campaignHandle, criteria, operationValue, search));
   if (!row?.campaign_id || !HANDLE_RE.test(row.revision)) {
-    fail("CAMPAIGN_NOT_AVAILABLE", "The draft campaign is no longer available.", 409);
+    fail("CAMPAIGN_NOT_AVAILABLE", "The campaign is no longer available for this population change.", 409);
   }
   return {
     campaignId: row.campaign_id,
@@ -454,7 +457,10 @@ export async function applyCampaignPopulationChange(
       FROM local801.outreach_campaigns campaign
       WHERE campaign.organization_id = $1::uuid
         AND campaign.archived_at IS NULL
-        AND campaign.status = 'draft'
+        AND (
+          ($5::text = 'add' AND campaign.status IN ('draft','active'))
+          OR ($5::text = 'remove' AND campaign.status = 'draft')
+        )
         AND encode(public.digest('campaign:' || campaign.organization_id::text || ':' || campaign.id::text, 'sha256'), 'hex') = $2::text
         AND EXISTS (
           SELECT 1 FROM local801.users actor
@@ -464,8 +470,8 @@ export async function applyCampaignPopulationChange(
             AND role.code = $4::text AND role.code IN ('system_owner','local_admin','cat_admin')
         )
       FOR UPDATE OF campaign
-    `, [context.organizationId, campaignHandle, context.userId, context.role]);
-    if (!locked?.campaign_id) fail("CAMPAIGN_NOT_AVAILABLE", "The draft campaign is no longer available.", 409);
+    `, [context.organizationId, campaignHandle, context.userId, context.role, operationValue]);
+    if (!locked?.campaign_id) fail("CAMPAIGN_NOT_AVAILABLE", "The campaign is no longer available for this population change.", 409);
     const live = await livePreview(context, campaignHandle, criteria, operationValue, search, query);
     if (live.revision !== confirmation.revision || live.wouldChange !== confirmation.wouldChange) {
       fail("STALE_CONFIRMATION", "The campaign population changed. Preview it again.", 409);

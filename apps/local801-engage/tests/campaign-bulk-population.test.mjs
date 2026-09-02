@@ -102,6 +102,8 @@ test("population preview returns aggregate counts and an actor/campaign/criteria
   assert.equal(confirmation.campaignHandle, campaignHandle);
   assert.equal(confirmation.wouldChange, 10000);
   assert.match(sqlText, /campaign-bulk-population:preview/);
+  assert.match(sqlText, /\$8::text = 'add'[\s\S]*campaign\.status IN \('draft','active'\)/);
+  assert.match(sqlText, /\$8::text = 'remove'[\s\S]*campaign\.status = 'draft'/);
   assert.match(sqlText, /count\(state\.person_id\)/);
   assert.match(sqlText, /jsonb_to_recordset/);
   assert.match(sqlText, /person_search_tokens/);
@@ -160,7 +162,10 @@ test("population apply locks and rechecks the live set, mutates set-wise, verifi
   assert.deepEqual(result, { changed: 10000, operation: "add" });
   assert.equal(calls.length, 3);
   assert.match(calls[0].sql, /FOR UPDATE OF campaign/);
+  assert.match(calls[0].sql, /\$5::text = 'add'[\s\S]*campaign\.status IN \('draft','active'\)/);
+  assert.match(calls[0].sql, /\$5::text = 'remove'[\s\S]*campaign\.status = 'draft'/);
   assert.match(calls[0].sql, /role\.code IN \('system_owner','local_admin','cat_admin'\)/);
+  assert.deepEqual(calls[0].parameters, [organizationId, campaignHandle, userId, "cat_admin", "add"]);
   assert.match(calls[2].sql, /INSERT INTO local801\.outreach_campaign_population/);
   assert.match(calls[2].sql, /ON CONFLICT \(campaign_id, person_id\) DO NOTHING/);
   assert.equal(audits.length, 1);

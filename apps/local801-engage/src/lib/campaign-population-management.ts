@@ -137,7 +137,7 @@ export async function getCampaignPopulationCandidates(
       FROM local801.outreach_campaigns campaign
       WHERE campaign.organization_id = $1::uuid
         AND campaign.archived_at IS NULL
-        AND campaign.status = 'draft'
+        AND campaign.status IN ('draft','active')
         AND encode(public.digest('campaign:' || campaign.organization_id::text || ':' || campaign.id::text, 'sha256'), 'hex') = $2::text
       LIMIT 1
     ), search_tokens AS (
@@ -238,7 +238,7 @@ export async function getCampaignPopulationFilterOptions(
       FROM local801.outreach_campaigns campaign
       WHERE campaign.organization_id = $1::uuid
         AND campaign.archived_at IS NULL
-        AND campaign.status = 'draft'
+        AND campaign.status IN ('draft','active')
         AND encode(public.digest('campaign:' || campaign.organization_id::text || ':' || campaign.id::text, 'sha256'), 'hex') = $2::text
       LIMIT 1
     ), eligible AS (
@@ -309,13 +309,13 @@ async function resolveAddTarget(
      AND person.local_number = '0801'
     WHERE campaign.organization_id = $1::uuid
       AND campaign.archived_at IS NULL
-      AND campaign.status = 'draft'
+      AND campaign.status IN ('draft','active')
       AND encode(public.digest('campaign:' || campaign.organization_id::text || ':' || campaign.id::text, 'sha256'), 'hex') = $2::text
       AND encode(public.digest($1::text || ':' || person.id::text, 'sha256'), 'hex') = $3::text
     LIMIT 1
   `, [context.organizationId, campaignHandle, personHandle]);
   if (!row) {
-    throw new CampaignMutationError("POPULATION_TARGET_NOT_FOUND", "The draft campaign or employee is no longer available.", 409);
+    throw new CampaignMutationError("POPULATION_TARGET_NOT_FOUND", "The campaign or employee is no longer available.", 409);
   }
   if (row.already_in_population) {
     throw new CampaignMutationError("ALREADY_IN_POPULATION", "This employee is already in the campaign population.", 409);
@@ -402,7 +402,7 @@ export async function addCampaignPopulationMember(
           ON campaign.id = $2::uuid
          AND campaign.organization_id = $1::uuid
          AND campaign.archived_at IS NULL
-         AND campaign.status = 'draft'
+         AND campaign.status IN ('draft','active')
         JOIN local801.people person
           ON person.id = $6::uuid
          AND person.organization_id = $1::uuid

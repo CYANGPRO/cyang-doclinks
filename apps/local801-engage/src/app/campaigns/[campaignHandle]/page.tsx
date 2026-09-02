@@ -143,7 +143,7 @@ export default async function CampaignDetailPage({
           handoffUnavailable = true;
         }
       }
-      if (canManageCampaign && campaign.status === "draft") {
+      if (canManageCampaign && campaign.status !== "closed") {
         const [filterOptionsResult, candidateResult] = await Promise.allSettled([
           getCampaignPopulationFilterOptions(context, campaignHandle),
           candidateTerm ? getCampaignPopulationCandidates(context, campaignHandle, candidateTerm) : Promise.resolve(null),
@@ -203,9 +203,9 @@ export default async function CampaignDetailPage({
         <StatCard label="Remaining" value={campaign.remaining} detail="Still not completed" tone="attention" />
       </section>
 
-      {canManageCampaign && campaign.status === "draft" ? <SectionCard
+      {canManageCampaign && campaign.status !== "closed" ? <SectionCard
         title="Find and add employees"
-        description="Add an individual employee or build a group using current roster fields. Only active employees who are not already in this draft are offered."
+        description="Add an individual employee or build a group using current roster fields. Only active employees who are not already in this campaign are offered."
         badge={protectedReadEnabled ? <StatusBadge tone="info">Protected PII</StatusBadge> : null}
       >
         {populationFilterOptionsUnavailable ? <AlertBanner title="Group choices unavailable" tone="warning">The employee dropdowns could not be loaded. You can still search for one employee below.</AlertBanner>
@@ -228,7 +228,7 @@ export default async function CampaignDetailPage({
           {candidateUnavailable ? (
             <UnavailableState title="Employee search unavailable" description="We couldn’t complete the employee search, so no partial results are shown." />
           ) : candidateTerm && candidates?.candidates.length === 0 ? (
-            <EmptyState title="No available matches" description="No active employee matching that search is available to add to this draft campaign." />
+            <EmptyState title="No available matches" description="No active employee matching that search is available to add to this campaign." />
           ) : candidates && candidates.candidates.length > 0 ? (
             <DataTable caption="Employees available to add" headers={["Employee", "Membership", "Department", "Classification", "Office", "Action"]}>
               {candidates.candidates.map((candidate) => <tr key={candidate.personHandle}>
@@ -248,7 +248,7 @@ export default async function CampaignDetailPage({
         title="People in this campaign"
         description={`${population.total} ${population.total === 1 ? "person matches" : "people match"} the current filters. ${campaign.status === "draft"
           ? "People can still be removed from the draft if they have no campaign contact or completed assignment."
-          : "The campaign list is frozen. Organizer assignments and due dates can still change while the campaign is active."}`}
+          : "Employees can still be added while the campaign is active. Existing participants cannot be removed, preserving campaign history."}`}
         badge={protectedReadEnabled ? <StatusBadge tone="info">Protected PII</StatusBadge> : null}
       >
         <form method="get" className="form-grid campaign-operation-filters">
@@ -259,7 +259,7 @@ export default async function CampaignDetailPage({
           <div className="form-actions campaign-filter-actions"><button className="button secondary" type="submit">Search and filter</button>{population.filters.search ? <Link className="button tertiary" href={populationHref(campaignHandle, population.pageSize, null, population.filters.assignment, population.filters.workflow, "")}>Clear search</Link> : null}</div>
         </form>
         {population.people.length === 0 ? (
-          <EmptyState title={campaign.population > 0 ? "No participants match these filters" : "No one in this campaign"} description={campaign.population > 0 ? "Change the assignment or workflow filters to see other participants." : campaign.status === "draft" ? "Use Campaign operations to build this draft population before activation." : "No active people are included in this campaign."} />
+          <EmptyState title={campaign.population > 0 ? "No participants match these filters" : "No one in this campaign"} description={campaign.population > 0 ? "Change the assignment or workflow filters to see other participants." : campaign.status === "closed" ? "No active people are included in this closed campaign." : "Use Find and add employees to build this campaign population."} />
         ) : <>
           <DataTable caption={`${campaign.name} participants`} headers={["Person", "Work", "Workflow", "Assignment", "Actions"]}>
             {population.people.map((person) => <tr key={person.personHandle}>
@@ -352,7 +352,9 @@ export default async function CampaignDetailPage({
           </div>
         ) : (
           <div className="grid">
-            {campaign.status === "draft" ? <p className="muted">You can add or remove people while the campaign is still a draft. Once activated, the campaign list is frozen so its outreach history stays tied to the people who were actually included.</p> : null}
+            {campaign.status === "draft"
+              ? <p className="muted">You can add or remove people while the campaign is still a draft. After activation, employees may still be added, but existing participants cannot be removed so outreach history stays intact.</p>
+              : <p className="muted">Employees may still be added while this campaign is active. Existing participants cannot be removed so recorded outreach history stays intact.</p>}
             <CampaignEditForm
               campaignHandle={campaign.handle}
               initialName={campaign.name}

@@ -11,6 +11,7 @@ test("Stage 18 campaign page exposes bounded factual operations and strict keyse
     source("../src/components/CampaignBulkOperations.tsx"),
   ]);
   assert.match(page, /Find and add employees/);
+  assert.match(page, /canManageCampaign && campaign\.status !== "closed"/);
   assert.match(page, /Search available employees/);
   assert.match(page, /Current campaign participants are excluded/);
   assert.match(page, /name="assignment"/);
@@ -32,6 +33,7 @@ test("Stage 18 campaign page exposes bounded factual operations and strict keyse
   assert.match(component, /Any department/);
   assert.match(component, /Any classification/);
   assert.match(component, /Any office/);
+  assert.match(component, /status === "closed"/);
   assert.doesNotMatch(component, /bulk assignment|assignments\/bulk|assigneeHandle/i);
 });
 

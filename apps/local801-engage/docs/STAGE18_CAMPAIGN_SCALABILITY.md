@@ -53,7 +53,7 @@ Blank criteria are rejected instead of silently selecting the whole organization
 
 Preview returns only factual counts: matched, already present, would add/remove, explicitly excluded, unavailable, and protected-activity conflicts. It also returns an HMAC confirmation token bound to the organization, campaign, actor, canonical criteria, operation, live campaign state, live selected-set revision, and expiration. Confirm recomputes the set under a locked campaign row and rejects a stale or altered preview.
 
-Apply is draft-only for population changes. It uses set-based `INSERT ... ON CONFLICT DO NOTHING` or a protected set-based removal, checks actual mutation counts, and writes one aggregate audit event in the same transaction. Existing engagement activity and completed assignments prevent unsafe removal.
+Additions are available while a campaign is draft or active, so authorized administrators can bring newly identified employees into ongoing work. Removal remains draft-only to preserve active-campaign history. Population changes use set-based `INSERT ... ON CONFLICT DO NOTHING` or a protected set-based removal, check actual mutation counts, and write one aggregate audit event in the same transaction. Existing engagement activity and completed assignments prevent unsafe removal.
 
 ### Individual assignment
 

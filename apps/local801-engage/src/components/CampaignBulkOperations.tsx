@@ -179,7 +179,7 @@ export function CampaignBulkOperations({
   status: "draft" | "active" | "closed";
   filterOptions: PopulationFilterOptions;
 }) {
-  if (status !== "draft") return null;
+  if (status === "closed") return null;
   return <div className="campaign-operations-grid">
     <PopulationBuilder campaignHandle={campaignHandle} filterOptions={filterOptions} />
   </div>;
