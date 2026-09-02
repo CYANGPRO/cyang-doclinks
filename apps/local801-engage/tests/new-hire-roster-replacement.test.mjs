@@ -16,3 +16,14 @@ test("the New hires queue reads only active replacement-roster entries", async (
   assert.match(service, /JOIN local801\.new_hire_roster_entries roster/);
   assert.match(service, /roster\.archived_at IS NULL/);
 });
+
+test("migration 0043 gives the scoped runtime roles only the New hires access they need", async () => {
+  const migration = await readFile(new URL("../db/migrations/0043__new_hire_roster_runtime_privileges.sql", import.meta.url), "utf8");
+  assert.match(migration, /to_regrole\('local801_app'\)/);
+  assert.match(migration, /grant select, insert, update on table local801\.new_hire_roster_entries to local801_app/);
+  assert.match(migration, /grant select on table reporting\.new_hires to local801_app/);
+  assert.match(migration, /grant select on table local801\.new_hire_roster_entries to local801_backup/);
+  assert.match(migration, /grant select on table local801\.new_hire_roster_entries to local801_migrator/);
+  assert.doesNotMatch(migration, /grant[^;]*delete[^;]*new_hire_roster_entries/i);
+  assert.match(migration, /revoke all on table local801\.new_hire_roster_entries from public/);
+});
