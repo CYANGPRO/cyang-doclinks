@@ -19,7 +19,7 @@ test("native authentication stays in an exact CAT and Entra navigation allowlist
 test("Apple association is unavailable until a valid Team ID is configured", () => {
   assert.equal(appleAppSiteAssociation(undefined), null);
   assert.equal(appleAppSiteAssociation("invalid"), null);
-  assert.equal(appleAppSiteAssociation("A1B2C3D4E5").applinks.details[0].appID, "A1B2C3D4E5.io.cyang.local801.engage");
+  assert.equal(appleAppSiteAssociation("A1B2C3D4E5").applinks.details[0].appID, "A1B2C3D4E5.io.cyang.local801engage");
 });
 
 test("Android association accepts only canonical SHA-256 certificate fingerprints", () => {
