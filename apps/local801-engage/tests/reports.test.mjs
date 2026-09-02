@@ -63,6 +63,15 @@ test("membership classification report returns every classification", async () =
   assert.match(classificationQuery.sql, /ORDER BY label ASC/);
 });
 
+test("membership work-location report returns every office", async () => {
+  const { calls, query } = reportQueryRecorder();
+  await getMembershipReport(context(), query);
+  const workLocationQuery = calls.find((call) => call.sql.includes("reports:membership-by-work-location"));
+  assert.ok(workLocationQuery);
+  assert.doesNotMatch(workLocationQuery.sql, /\bLIMIT\b/i);
+  assert.match(workLocationQuery.sql, /ORDER BY label ASC/);
+});
+
 test("aggregate new-hire report is available to every viewReports role", async () => {
   for (const role of ["system_owner", "local_admin", "membership_data_manager", "cat_admin", "cat_lead", "report_viewer"]) {
     const { calls, query } = reportQueryRecorder();

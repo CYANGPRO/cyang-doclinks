@@ -67,7 +67,8 @@ test("Directory and New Hires expose the same compact employee summaries", () =>
 
 test("Membership names the roster location breakdown as the office view", () => {
   const membership = source("src/app/membership/page.tsx");
-  assert.match(membership, /key: "location", label: "Office", header: "Office \/ work location"/);
+  const groupPreference = source("src/lib/membership-group-preference.ts");
+  assert.match(groupPreference, /key: "location", label: "Office", header: "Office \/ work location"/);
   assert.match(membership, /membership-breakdown-scroll/);
 });
 

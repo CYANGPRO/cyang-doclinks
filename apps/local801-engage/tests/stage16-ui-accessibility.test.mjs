@@ -82,6 +82,13 @@ test("destructive and inline operational actions do not regress to undersized ta
   assert.match(populationControl, /className="inline-actions/);
 });
 
+test("dense filter panels retain clear separation from their result summaries", () => {
+  const css = source("src/app/stage18.css");
+  assert.match(css, /\.task-filter-panel \+ \.metrics-grid,[\s\S]*margin-top: 24px/);
+  assert.match(css, /\.data-quality-summary \+ \.data-quality-filter-card,[\s\S]*margin-top: 24px/);
+  assert.match(css, /\.data-quality-filter-card \+ \.data-quality-review-queue[\s\S]*margin-top: 24px/);
+});
+
 test("dashboard, membership, member detail, documents, and sign-in use Stage 16 layout utilities", () => {
   const dashboard = source("src/app/page.tsx");
   const membership = source("src/app/membership/page.tsx");

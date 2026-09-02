@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { getMembershipSummary, unavailableMembershipSummary } from "../src/lib/membership.ts";
+import { membershipGroupFromSearch } from "../src/lib/membership-group-preference.ts";
 
 const organizationId = "11111111-1111-4111-8111-111111111111";
 const context = {
@@ -48,14 +49,19 @@ test("unavailable membership summary withholds lifecycle values", () => {
 
 test("membership page consolidates the snapshot and keeps authorized lifecycle drill-throughs", () => {
   const source = readFileSync(new URL("../src/app/membership/page.tsx", import.meta.url), "utf8");
+  const tabs = readFileSync(new URL("../src/components/MembershipGroupTabs.tsx", import.meta.url), "utf8");
+  const groupPreference = readFileSync(new URL("../src/lib/membership-group-preference.ts", import.meta.url), "utf8");
   assert.match(source, /Membership snapshot/);
   assert.match(source, /Changes this month/);
   assert.match(source, /Related membership work/);
   assert.match(source, /Membership by group/);
-  assert.match(source, /group=\$\{item\.key\}/);
-  assert.match(source, /"classification"/);
-  assert.match(source, /"department"/);
-  assert.match(source, /"location"/);
+  assert.match(source, /MembershipGroupTabs/);
+  assert.match(tabs, /group=\$\{item\.key\}/);
+  assert.match(tabs, /localStorage\.getItem\(MEMBERSHIP_GROUP_STORAGE_KEY\)/);
+  assert.match(tabs, /router\.replace\(`/);
+  assert.match(groupPreference, /"classification"/);
+  assert.match(groupPreference, /"department"/);
+  assert.match(groupPreference, /"location"/);
   assert.match(source, /\/reports\?view=membership/);
   assert.match(source, /href="\/imports"/);
   assert.match(source, /href="\/new-hires"/);
@@ -63,6 +69,13 @@ test("membership page consolidates the snapshot and keeps authorized lifecycle d
   assert.match(source, /label\.localeCompare\(b\.label/);
   assert.match(source, /visibleBreakdowns[\s\S]*label\.localeCompare\(b\.label/);
   assert.match(source, /every office in the latest approved snapshot/);
+});
+
+test("membership group defaults to classification and preserves valid selections", () => {
+  assert.equal(membershipGroupFromSearch(undefined), "classification");
+  assert.equal(membershipGroupFromSearch("invalid"), "classification");
+  assert.equal(membershipGroupFromSearch("department"), "department");
+  assert.equal(membershipGroupFromSearch(["location", "classification"]), "location");
 });
 
 test("dashboard converts urgent aggregates and current work into scope-aware drill-through queues", () => {

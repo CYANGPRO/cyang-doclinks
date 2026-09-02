@@ -296,7 +296,6 @@ export async function getMembershipReport(
       WHERE organization_id = $1::uuid
       GROUP BY COALESCE(NULLIF(trim(work_location), ''), 'Unspecified')
       ORDER BY label ASC
-      LIMIT 50
     `, [context.organizationId]),
     query<DataQualityRow>(`
       /* reports:membership-data-quality */

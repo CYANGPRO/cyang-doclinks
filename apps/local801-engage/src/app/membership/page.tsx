@@ -1,25 +1,14 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { DataTable, DisclosureCard, EmptyState, PageHeader, SectionCard, StatCard, UnavailableState } from "@/components/DesignSystem";
+import { MembershipGroupTabs } from "@/components/MembershipGroupTabs";
 import { ProtectedPage } from "@/components/ProtectedPage";
 import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
 import { formatCatDate } from "@/lib/date-format";
 import { getMembershipBreakdowns, getMembershipSummary, unavailableMembershipSummary } from "@/lib/membership";
+import { isMembershipGroup, membershipGroupFromSearch, MEMBERSHIP_GROUPS, type MembershipGroup } from "@/lib/membership-group-preference";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
-
-type MembershipGroup = "classification" | "department" | "location";
-
-const membershipGroups: Array<{ key: MembershipGroup; label: string; header: string }> = [
-  { key: "classification", label: "Classification", header: "Classification" },
-  { key: "department", label: "Department", header: "Department" },
-  { key: "location", label: "Office", header: "Office / work location" },
-];
-
-function selectedGroup(value: string | string[] | undefined): MembershipGroup {
-  const selected = Array.isArray(value) ? value[0] : value;
-  return selected === "classification" || selected === "department" ? selected : "location";
-}
 
 function countLabel(value: number | "—", singular: string, plural: string) {
   if (typeof value !== "number") return `— ${plural}`;
@@ -48,7 +37,9 @@ export default async function MembershipPage({
   if (!can(user.role, "manageImports")) redirect("/unauthorized");
 
   const params = await searchParams;
-  const group = selectedGroup(params.group);
+  const requestedGroup = Array.isArray(params.group) ? params.group[0] : params.group;
+  const hasExplicitGroup = isMembershipGroup(requestedGroup);
+  const group = membershipGroupFromSearch(params.group);
   let summary = unavailableMembershipSummary();
   let breakdowns: Awaited<ReturnType<typeof getMembershipBreakdowns>> = [];
   try {
@@ -61,7 +52,7 @@ export default async function MembershipPage({
   const percentage = summary.source === "database" && represented ? `${((members / represented) * 100).toFixed(1)}%` : "—";
   const net = typeof summary.netChange === "number" && summary.netChange > 0 ? `+${summary.netChange}` : summary.netChange;
   const canViewReports = can(user.role, "viewReports");
-  const activeGroup = membershipGroups.find((item) => item.key === group) ?? membershipGroups[0];
+  const activeGroup = MEMBERSHIP_GROUPS.find((item) => item.key === group) ?? MEMBERSHIP_GROUPS[0];
   const visibleBreakdowns = breakdowns
     .filter((row) => row.dimension === group)
     .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
@@ -86,30 +77,7 @@ export default async function MembershipPage({
       </section>
 
       <SectionCard className="membership-breakdown-card" title="Membership by group" description="Compare current membership across one group at a time. The Office view includes every office in the latest approved snapshot.">
-        <nav
-          aria-label="Membership breakdown views"
-          style={{
-            display: "flex",
-            gap: 8,
-            margin: "0 0 14px",
-            overflowX: "auto",
-            padding: "2px 2px 6px",
-            scrollbarWidth: "thin",
-            WebkitOverflowScrolling: "touch",
-          }}
-        >
-          {membershipGroups.map((item) => (
-            <Link
-              key={item.key}
-              href={`/membership?group=${item.key}`}
-              aria-current={group === item.key ? "page" : undefined}
-              className={group === item.key ? "button" : "button secondary"}
-              style={{ flex: "0 0 auto", minHeight: 38, padding: "8px 12px", whiteSpace: "nowrap" }}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
+        <MembershipGroupTabs selectedGroup={group} hasExplicitSelection={hasExplicitGroup} />
 
         {visibleBreakdowns.length === 0 ? (
           <EmptyState title={`No ${activeGroup.label.toLowerCase()} data`} description="No current membership totals are available for this group." />
