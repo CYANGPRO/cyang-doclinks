@@ -54,6 +54,15 @@ test("aggregate membership report remains available to every viewReports role", 
   }
 });
 
+test("membership classification report returns every classification", async () => {
+  const { calls, query } = reportQueryRecorder();
+  await getMembershipReport(context(), query);
+  const classificationQuery = calls.find((call) => call.sql.includes("reports:membership-by-classification"));
+  assert.ok(classificationQuery);
+  assert.doesNotMatch(classificationQuery.sql, /\bLIMIT\b/i);
+  assert.match(classificationQuery.sql, /ORDER BY label ASC/);
+});
+
 test("aggregate new-hire report is available to every viewReports role", async () => {
   for (const role of ["system_owner", "local_admin", "membership_data_manager", "cat_admin", "cat_lead", "report_viewer"]) {
     const { calls, query } = reportQueryRecorder();

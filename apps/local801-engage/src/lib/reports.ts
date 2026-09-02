@@ -269,7 +269,6 @@ export async function getMembershipReport(
       WHERE organization_id = $1::uuid
       GROUP BY COALESCE(NULLIF(trim(classification), ''), 'Unspecified')
       ORDER BY label ASC
-      LIMIT 50
     `, [context.organizationId]),
     query<BreakdownRow>(`
       /* reports:membership-by-department */
