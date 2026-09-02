@@ -30,7 +30,11 @@ import { getCampaignActionReadiness } from "@/lib/action-readiness-summary";
 import { getPreviewUser } from "@/lib/authz.server";
 import { getCampaignManagementOptions } from "@/lib/campaign-management";
 import { listCampaignCatLinks } from "@/lib/campaign-cat-links";
-import { getCampaignPopulationCandidates } from "@/lib/campaign-population-management";
+import {
+  getCampaignPopulationCandidates,
+  getCampaignPopulationFilterOptions,
+  type CampaignPopulationFilterOptions,
+} from "@/lib/campaign-population-management";
 import { getCampaignDetail, getCampaignOrganizerProgress, getCampaignPopulationPage } from "@/lib/campaigns";
 import { getCatActionsPage, type CatActionPortfolioItem } from "@/lib/cat-actions";
 import { formatCatDate, formatCatDateTime } from "@/lib/date-format";
@@ -102,6 +106,8 @@ export default async function CampaignDetailPage({
   let readinessUnavailable = false;
   let candidates: Awaited<ReturnType<typeof getCampaignPopulationCandidates>> | null = null;
   let candidateUnavailable = false;
+  let populationFilterOptions: CampaignPopulationFilterOptions = { departments: [], classifications: [], workLocations: [] };
+  let populationFilterOptionsUnavailable = false;
   let catActionTargets: CatActionPortfolioItem[] = [];
   let durableCatLinks: Awaited<ReturnType<typeof listCampaignCatLinks>> = [];
   let handoffUnavailable = false;
@@ -137,12 +143,15 @@ export default async function CampaignDetailPage({
           handoffUnavailable = true;
         }
       }
-      if (canManageCampaign && campaign.status === "draft" && candidateTerm) {
-        try {
-          candidates = await getCampaignPopulationCandidates(context, campaignHandle, candidateTerm);
-        } catch {
-          candidateUnavailable = true;
-        }
+      if (canManageCampaign && campaign.status === "draft") {
+        const [filterOptionsResult, candidateResult] = await Promise.allSettled([
+          getCampaignPopulationFilterOptions(context, campaignHandle),
+          candidateTerm ? getCampaignPopulationCandidates(context, campaignHandle, candidateTerm) : Promise.resolve(null),
+        ]);
+        if (filterOptionsResult.status === "fulfilled") populationFilterOptions = filterOptionsResult.value;
+        else populationFilterOptionsUnavailable = true;
+        if (candidateResult.status === "fulfilled") candidates = candidateResult.value;
+        else candidateUnavailable = true;
       }
       const hydrated = await hydrateCampaignDetailFromProtectedPii(context.organizationId, campaignHandle, {
         population,
@@ -195,10 +204,44 @@ export default async function CampaignDetailPage({
       </section>
 
       {canManageCampaign && campaign.status === "draft" ? <SectionCard
-        title="Campaign operations"
-        description="Build or adjust the draft population. Every population change requires a live count preview and a second confirmation."
+        title="Find and add employees"
+        description="Add an individual employee or build a group using current roster fields. Only active employees who are not already in this draft are offered."
+        badge={protectedReadEnabled ? <StatusBadge tone="info">Protected PII</StatusBadge> : null}
       >
-        <CampaignBulkOperations campaignHandle={campaign.handle} status={campaign.status} />
+        {populationFilterOptionsUnavailable ? <AlertBanner title="Group choices unavailable" tone="warning">The employee dropdowns could not be loaded. You can still search for one employee below.</AlertBanner>
+          : <CampaignBulkOperations campaignHandle={campaign.handle} status={campaign.status} filterOptions={populationFilterOptions} />}
+        <div className="section-separator stack">
+          <div>
+            <h3>Add one employee</h3>
+            <p className="muted">Search the current employee roster by name, exact work email, department, classification, or office. Current campaign participants are excluded.</p>
+          </div>
+          <form method="get" className="form-grid campaign-operation-filters">
+            <div className="field campaign-participant-search">
+              <label htmlFor="candidate_q">Find an employee</label>
+              <input id="candidate_q" name="candidate_q" type="search" defaultValue={candidateTerm} maxLength={100} placeholder="Name, exact work email, department, classification, or office" />
+            </div>
+            <div className="form-actions campaign-filter-actions">
+              <button className="button secondary" type="submit">Search available employees</button>
+              {candidateTerm ? <Link className="button tertiary" href={`/campaigns/${campaign.handle}`}>Clear search</Link> : null}
+            </div>
+          </form>
+          {candidateUnavailable ? (
+            <UnavailableState title="Employee search unavailable" description="We couldn’t complete the employee search, so no partial results are shown." />
+          ) : candidateTerm && candidates?.candidates.length === 0 ? (
+            <EmptyState title="No available matches" description="No active employee matching that search is available to add to this draft campaign." />
+          ) : candidates && candidates.candidates.length > 0 ? (
+            <DataTable caption="Employees available to add" headers={["Employee", "Membership", "Department", "Classification", "Office", "Action"]}>
+              {candidates.candidates.map((candidate) => <tr key={candidate.personHandle}>
+                <td><strong>{candidate.displayName}</strong></td>
+                <td><StatusBadge tone={candidate.membershipStatus === "member" ? "ready" : candidate.membershipStatus === "nonmember" ? "pending" : "neutral"}>{candidate.membershipStatus === "member" ? "Member" : candidate.membershipStatus === "nonmember" ? "Nonmember" : "Unknown"}</StatusBadge></td>
+                <td>{candidate.department || "—"}</td>
+                <td>{candidate.classification || "—"}</td>
+                <td>{candidate.workLocation || "—"}</td>
+                <td><CampaignPopulationAddButton campaignHandle={campaign.handle} personHandle={candidate.personHandle} /></td>
+              </tr>)}
+            </DataTable>
+          ) : <p className="muted">Search for an employee or use the group dropdowns above.</p>}
+        </div>
       </SectionCard> : null}
 
       <SectionCard
@@ -325,39 +368,6 @@ export default async function CampaignDetailPage({
         </div>
       </DisclosureCard> : null}
 
-      {canManageCampaign && campaign.status === "draft" ? (
-        <DisclosureCard
-          title="Add people to this draft"
-          description="Search active Local 801 employees who are not already in this draft. Contact details are not shown in these search results."
-          badge={protectedReadEnabled ? <StatusBadge tone="info">Protected PII</StatusBadge> : null}
-          defaultOpen={Boolean(candidateTerm)}
-          className="route-secondary-panel campaign-population-add-panel"
-        >
-          <form method="get" className="grid">
-            <div className="field">
-              <label htmlFor="candidate_q">Find a person</label>
-              <input id="candidate_q" name="candidate_q" defaultValue={candidateTerm} maxLength={100} placeholder="Name, department, classification, or work location" />
-            </div>
-            <button className="button secondary" type="submit">Search</button>
-          </form>
-
-          {candidateUnavailable ? (
-            <UnavailableState title="Search unavailable" description="We couldn’t complete the member search, so no partial results are shown." />
-          ) : candidateTerm && candidates?.candidates.length === 0 ? (
-            <EmptyState title="No available matches" description="No active person matching that search is available to add to this draft campaign." />
-          ) : candidates && candidates.candidates.length > 0 ? (
-            <DataTable caption="People available to add" headers={["Person", "Department", "Classification", "Work location", "Action"]}>
-              {candidates.candidates.map((candidate) => <tr key={candidate.personHandle}>
-                <td><strong>{candidate.displayName}</strong></td>
-                <td>{candidate.department || "—"}</td>
-                <td>{candidate.classification || "—"}</td>
-                <td>{candidate.workLocation || "—"}</td>
-                <td><CampaignPopulationAddButton campaignHandle={campaign.handle} personHandle={candidate.personHandle} /></td>
-              </tr>)}
-            </DataTable>
-          ) : <p className="muted">Search to add people to the draft campaign.</p>}
-        </DisclosureCard>
-      ) : null}
     </>}
   </div></ProtectedPage>;
 }

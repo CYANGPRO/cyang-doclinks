@@ -6,6 +6,7 @@ import {
   __testing,
   addCampaignPopulationMember,
   getCampaignPopulationCandidates,
+  getCampaignPopulationFilterOptions,
   removeCampaignPopulationMember,
 } from "../src/lib/campaign-population-management.ts";
 
@@ -36,7 +37,7 @@ function deps(overrides = {}) {
   };
 }
 
-test("campaign population candidate search is bounded, organization scoped, draft-only, and excludes contact details", async () => {
+test("campaign population candidate search is bounded, protected, organization scoped, draft-only, and excludes contact values", async () => {
   let sqlText = "";
   let parameters = [];
   const result = await getCampaignPopulationCandidates(context(), campaignHandle, "  Synthetic   Health ", async (sql, values) => {
@@ -47,6 +48,7 @@ test("campaign population candidate search is bounded, organization scoped, draf
       preferred_name: "Synthetic Avery",
       first_name: "Synthetic",
       last_name: "Avery",
+      membership_status: "member",
       department: "Health Licensing",
       classification: "Clerical",
       work_location: "Downtown",
@@ -56,12 +58,13 @@ test("campaign population candidate search is bounded, organization scoped, draf
   assert.deepEqual(result.candidates, [{
     personHandle,
     displayName: "Synthetic Avery",
+    membershipStatus: "member",
     department: "Health Licensing",
     classification: "Clerical",
     workLocation: "Downtown",
   }]);
   assert.deepEqual(parameters.slice(0, 2), [organizationId, campaignHandle]);
-  assert.equal(parameters.at(-1), __testing.MAX_CANDIDATES);
+  assert.equal(parameters[3], __testing.MAX_CANDIDATES);
   assert.equal(__testing.MAX_CANDIDATES, 25);
   assert.match(sqlText, /campaign\.status = 'draft'/);
   assert.match(sqlText, /person\.organization_id = \$1::uuid/);
@@ -69,8 +72,34 @@ test("campaign population candidate search is bounded, organization scoped, draf
   assert.match(sqlText, /person\.local_number = '0801'/);
   assert.match(sqlText, /NOT EXISTS[\s\S]*outreach_campaign_population/);
   assert.match(sqlText, /LIMIT \$4::integer/);
-  assert.doesNotMatch(sqlText, /person_contact_methods|contact_value|work_email/i);
+  assert.match(sqlText, /person_search_tokens/);
+  assert.match(sqlText, /contact:work-email/);
+  assert.doesNotMatch(sqlText, /contact_value|contact\.contact_value/i);
   assert.equal(JSON.stringify(result).includes(personId), false);
+});
+
+test("campaign population dropdown choices are bounded, draft-only, and exclude current participants", async () => {
+  let sqlText = "";
+  const result = await getCampaignPopulationFilterOptions(context(), campaignHandle, async (sql, parameters) => {
+    sqlText = sql;
+    assert.deepEqual(parameters, [organizationId, campaignHandle, 200]);
+    return [
+      { kind: "department", label: "Transportation" },
+      { kind: "classification", label: "Planner" },
+      { kind: "work_location", label: "Central Office" },
+    ];
+  });
+  assert.deepEqual(result, {
+    departments: ["Transportation"],
+    classifications: ["Planner"],
+    workLocations: ["Central Office"],
+  });
+  assert.match(sqlText, /campaign\.status = 'draft'/);
+  assert.match(sqlText, /person\.archived_at IS NULL/);
+  assert.match(sqlText, /NOT EXISTS[\s\S]*outreach_campaign_population/);
+  assert.match(sqlText, /PARTITION BY kind/);
+  assert.match(sqlText, /COALESCE\(NULLIF\(btrim\(person\.section\)/);
+  assert.doesNotMatch(sqlText, /first_name|last_name|person_contact_methods|person_pii/i);
 });
 
 test("blank candidate search does no database work", async () => {
@@ -182,6 +211,7 @@ test("campaign population management denies non-management roles before SQL", as
     let calls = 0;
     const query = async () => { calls += 1; return []; };
     await assert.rejects(getCampaignPopulationCandidates(context(role), campaignHandle, "Synthetic", query), /not authorized/i);
+    await assert.rejects(getCampaignPopulationFilterOptions(context(role), campaignHandle, query), /not authorized/i);
     await assert.rejects(addCampaignPopulationMember(context(role), campaignHandle, personHandle, { query }), /not authorized/i);
     await assert.rejects(removeCampaignPopulationMember(context(role), campaignHandle, personHandle, { query }), /not authorized/i);
     assert.equal(calls, 0);
@@ -203,8 +233,11 @@ test("population APIs reuse the hardened Preview mutation guard and accept only 
   assert.match(source, /HANDLE_RE = \/\^\[0-9a-f\]\{64\}\$\/i/);
   assert.match(source, /campaign\.status = 'draft'/);
   assert.match(source, /MAX_CANDIDATES = 25/);
-  assert.doesNotMatch(source, /person_contact_methods|contact_value|work_email/i);
-  assert.match(page, /Build or adjust the draft population/);
+  assert.match(source, /person_search_tokens/);
+  assert.match(source, /contact:work-email/);
+  assert.doesNotMatch(source, /contact_value|contact\.contact_value/i);
+  assert.match(page, /Find and add employees/);
+  assert.match(page, /Current campaign participants are excluded/);
   assert.match(page, /canManageCampaign && campaign\.status === "draft"/);
   assert.match(page, /candidate_q/);
   assert.match(page, /CampaignPopulationAddButton/);

@@ -23,7 +23,7 @@ const CONFIRMATION_SECONDS = 10 * 60;
 const MEMBERSHIP_STATUSES = new Set(["member", "nonmember", "unknown"]);
 
 type SearchToken = { key_version: string; hash: string };
-type SearchMaterial = { protectedMode: boolean; tokens: SearchToken[]; email: SearchToken | null };
+export type CampaignPopulationSearchMaterial = { protectedMode: boolean; tokens: SearchToken[]; email: SearchToken | null };
 
 export type CampaignPopulationOperation = "add" | "remove";
 
@@ -80,7 +80,7 @@ export type CampaignBulkPopulationDependencies = {
   audit?: typeof writeAuditEvent;
   tokenSecret?: string;
   now?: () => number;
-  searchMaterial?: (criteria: CampaignPopulationCriteria, organizationId: string, query: DatabaseQuery) => Promise<SearchMaterial>;
+  searchMaterial?: (criteria: CampaignPopulationCriteria, organizationId: string, query: DatabaseQuery) => Promise<CampaignPopulationSearchMaterial>;
 };
 
 function fail(code: string, message: string, status = 400): never {
@@ -184,16 +184,16 @@ function readConfirmation(value: unknown, secret: string): Confirmation {
   }
 }
 
-async function defaultSearchMaterial(
-  criteria: CampaignPopulationCriteria,
+export async function prepareCampaignPopulationSearchTerm(
+  searchTerm: string,
   organizationId: string,
   query: DatabaseQuery,
-): Promise<SearchMaterial> {
+): Promise<CampaignPopulationSearchMaterial> {
   const mode = getPiiProtectedReadMode();
-  if (mode === "legacy" || !criteria.search) return { protectedMode: mode !== "legacy", tokens: [], email: null };
+  if (mode === "legacy" || !searchTerm) return { protectedMode: mode !== "legacy", tokens: [], email: null };
   await assertPiiProtectedReadState(organizationId, query, mode);
   const config = getPiiKeyConfiguration();
-  const normalizedName = normalizePiiNameForSearch(criteria.search);
+  const normalizedName = normalizePiiNameForSearch(searchTerm);
   const words = normalizedName.split(" ").filter((word) => Array.from(word).length >= 3);
   const tokens = words.map((word) => {
     const prefix = Array.from(word).slice(0, 20).join("");
@@ -202,13 +202,21 @@ async function defaultSearchMaterial(
   });
   let email: SearchToken | null = null;
   try {
-    const normalizedEmail = normalizePiiEmail(criteria.search);
+    const normalizedEmail = normalizePiiEmail(searchTerm);
     const index = createPiiBlindIndex(normalizedEmail, { organizationId, domain: "contact:work-email" }, config);
     email = { key_version: index.blindIndexKeyVersion, hash: index.blindIndex };
   } catch (error) {
     if (!(error instanceof PiiProtectionError) || error.code !== "NORMALIZATION_FAILED") throw error;
   }
   return { protectedMode: true, tokens, email };
+}
+
+async function defaultSearchMaterial(
+  criteria: CampaignPopulationCriteria,
+  organizationId: string,
+  query: DatabaseQuery,
+): Promise<CampaignPopulationSearchMaterial> {
+  return prepareCampaignPopulationSearchTerm(criteria.search, organizationId, query);
 }
 
 function selectionCtes() {
@@ -244,10 +252,11 @@ function selectionCtes() {
             ($3::text IS NULL OR person.membership_status = $3::text)
             AND ($4::text IS NULL OR person.department ILIKE $4::text ESCAPE '\\')
             AND ($5::text IS NULL OR lower(btrim(person.classification)) = lower(btrim($5::text)))
-            AND ($6::text IS NULL OR person.work_location ILIKE $6::text ESCAPE '\\')
+            AND ($6::text IS NULL OR COALESCE(NULLIF(btrim(person.section), ''), person.work_location) ILIKE $6::text ESCAPE '\\')
             AND ($7::text IS NULL
               OR person.department ILIKE $7::text ESCAPE '\\'
               OR person.classification ILIKE $7::text ESCAPE '\\'
+              OR person.section ILIKE $7::text ESCAPE '\\'
               OR person.work_location ILIKE $7::text ESCAPE '\\'
               OR (NOT $12::boolean AND (
                 person.first_name ILIKE $7::text ESCAPE '\\'
@@ -308,7 +317,7 @@ function selectionParameters(
   campaignHandle: string,
   criteria: CampaignPopulationCriteria,
   operationValue: CampaignPopulationOperation,
-  search: SearchMaterial,
+  search: CampaignPopulationSearchMaterial,
 ) {
   return [
     context.organizationId,
@@ -334,7 +343,7 @@ async function livePreview(
   campaignHandle: string,
   criteria: CampaignPopulationCriteria,
   operationValue: CampaignPopulationOperation,
-  search: SearchMaterial,
+  search: CampaignPopulationSearchMaterial,
   query: DatabaseQuery,
 ) {
   const [row] = await query<PreviewRow>(`

@@ -3,6 +3,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { can } from "./access.ts";
 import { prepareAtomicAuditStatement } from "./audit.ts";
+import { prepareCampaignPopulationSearchTerm } from "./campaign-bulk-population.ts";
 import { CampaignMutationError } from "./campaign-management.ts";
 import {
   queryLocal801,
@@ -15,6 +16,7 @@ import type { WorkspaceContext } from "./workspace-context.ts";
 const HANDLE_RE = /^[0-9a-f]{64}$/i;
 const MAX_SEARCH_LENGTH = 100;
 const MAX_CANDIDATES = 25;
+const MAX_FILTER_OPTIONS = 200;
 
 export type CampaignPopulationDependencies = {
   query?: DatabaseQuery;
@@ -26,9 +28,16 @@ export type CampaignPopulationDependencies = {
 export type CampaignPopulationCandidate = {
   personHandle: string;
   displayName: string;
+  membershipStatus: "member" | "nonmember" | "unknown";
   department: string | null;
   classification: string | null;
   workLocation: string | null;
+};
+
+export type CampaignPopulationFilterOptions = {
+  departments: string[];
+  classifications: string[];
+  workLocations: string[];
 };
 
 type CandidateRow = {
@@ -36,9 +45,15 @@ type CandidateRow = {
   preferred_name: string | null;
   first_name: string;
   last_name: string;
+  membership_status: string | null;
   department: string | null;
   classification: string | null;
   work_location: string | null;
+};
+
+type FilterOptionRow = {
+  kind: "department" | "classification" | "work_location";
+  label: string;
 };
 
 type AddResolution = {
@@ -113,6 +128,7 @@ export async function getCampaignPopulationCandidates(
   const campaignHandle = requireHandle(campaignHandleInput, "Campaign");
   const term = normalizeSearch(searchInput);
   if (!term) return { term, candidates: [] };
+  const search = await prepareCampaignPopulationSearchTerm(term, context.organizationId, query);
 
   const rows = await query<CandidateRow>(`
     /* campaign-population:candidate-search */
@@ -124,15 +140,19 @@ export async function getCampaignPopulationCandidates(
         AND campaign.status = 'draft'
         AND encode(public.digest('campaign:' || campaign.organization_id::text || ':' || campaign.id::text, 'sha256'), 'hex') = $2::text
       LIMIT 1
+    ), search_tokens AS (
+      SELECT value.key_version, value.hash
+      FROM jsonb_to_recordset($6::text::jsonb) AS value(key_version text, hash text)
     )
     SELECT
       encode(public.digest($1::text || ':' || person.id::text, 'sha256'), 'hex') AS person_handle,
       person.preferred_name,
       person.first_name,
       person.last_name,
+      person.membership_status,
       person.department,
       person.classification,
-      person.work_location
+      COALESCE(NULLIF(btrim(person.section), ''), person.work_location) AS work_location
     FROM local801.people person
     CROSS JOIN selected_campaign campaign
     WHERE person.organization_id = $1::uuid
@@ -146,27 +166,121 @@ export async function getCampaignPopulationCandidates(
           AND population.person_id = person.id
       )
       AND (
-        person.first_name ILIKE $3 ESCAPE '\\'
-        OR person.last_name ILIKE $3 ESCAPE '\\'
-        OR person.preferred_name ILIKE $3 ESCAPE '\\'
-        OR person.department ILIKE $3 ESCAPE '\\'
+        person.department ILIKE $3 ESCAPE '\\'
         OR person.classification ILIKE $3 ESCAPE '\\'
+        OR person.section ILIKE $3 ESCAPE '\\'
         OR person.work_location ILIKE $3 ESCAPE '\\'
+        OR (NOT $5::boolean AND (
+          person.first_name ILIKE $3 ESCAPE '\\'
+          OR person.last_name ILIKE $3 ESCAPE '\\'
+          OR person.preferred_name ILIKE $3 ESCAPE '\\'
+        ))
+        OR ($5::boolean AND jsonb_array_length($6::text::jsonb) > 0 AND NOT EXISTS (
+          SELECT 1 FROM search_tokens wanted
+          WHERE NOT EXISTS (
+            SELECT 1 FROM local801.person_search_tokens stored
+            WHERE stored.organization_id = $1::uuid AND stored.person_id = person.id
+              AND stored.token_domain = 'combined_name' AND stored.token_kind = 'prefix'
+              AND stored.token_key_version = wanted.key_version AND stored.token_hash = wanted.hash
+          )
+        ))
+        OR ($5::boolean AND $7::text IS NOT NULL AND EXISTS (
+          SELECT 1
+          FROM local801.person_contact_methods contact
+          JOIN local801.pii_exact_indexes email_index
+            ON email_index.organization_id = contact.organization_id
+           AND email_index.entity_type = 'person_contact_method'
+           AND email_index.entity_id = contact.id
+           AND email_index.index_domain = 'contact:work-email'
+           AND email_index.index_key_version = $7::text
+           AND email_index.index_hash = $8::text
+          WHERE contact.organization_id = $1::uuid AND contact.person_id = person.id
+            AND contact.contact_type = 'work_email' AND contact.archived_at IS NULL
+        ))
       )
     ORDER BY person.last_name ASC, person.first_name ASC, person.id ASC
     LIMIT $4::integer
-  `, [context.organizationId, campaignHandle, like(term), MAX_CANDIDATES]);
+  `, [
+    context.organizationId,
+    campaignHandle,
+    like(term),
+    MAX_CANDIDATES,
+    search.protectedMode,
+    JSON.stringify(search.tokens),
+    search.email?.key_version ?? null,
+    search.email?.hash ?? null,
+  ]);
 
   return {
     term,
     candidates: rows.filter((row) => HANDLE_RE.test(row.person_handle)).map((row) => ({
       personHandle: row.person_handle,
       displayName: row.preferred_name?.trim() || `${row.first_name} ${row.last_name}`,
+      membershipStatus: row.membership_status === "member" || row.membership_status === "nonmember" ? row.membership_status : "unknown",
       department: row.department,
       classification: row.classification,
       workLocation: row.work_location,
     })),
   };
+}
+
+export async function getCampaignPopulationFilterOptions(
+  context: WorkspaceContext,
+  campaignHandleInput: unknown,
+  query: DatabaseQuery = queryLocal801,
+): Promise<CampaignPopulationFilterOptions> {
+  requireAccess(context);
+  const campaignHandle = requireHandle(campaignHandleInput, "Campaign");
+  const rows = await query<FilterOptionRow>(`
+    /* campaign-population:filter-options */
+    WITH selected_campaign AS (
+      SELECT campaign.id
+      FROM local801.outreach_campaigns campaign
+      WHERE campaign.organization_id = $1::uuid
+        AND campaign.archived_at IS NULL
+        AND campaign.status = 'draft'
+        AND encode(public.digest('campaign:' || campaign.organization_id::text || ':' || campaign.id::text, 'sha256'), 'hex') = $2::text
+      LIMIT 1
+    ), eligible AS (
+      SELECT
+        NULLIF(btrim(person.department), '') AS department,
+        NULLIF(btrim(person.classification), '') AS classification,
+        COALESCE(NULLIF(btrim(person.section), ''), NULLIF(btrim(person.work_location), '')) AS work_location
+      FROM local801.people person
+      CROSS JOIN selected_campaign campaign
+      WHERE person.organization_id = $1::uuid
+        AND person.archived_at IS NULL
+        AND person.local_number = '0801'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM local801.outreach_campaign_population population
+          WHERE population.organization_id = $1::uuid
+            AND population.campaign_id = campaign.id
+            AND population.person_id = person.id
+        )
+    ), facets AS (
+      SELECT DISTINCT 'department'::text AS kind, department AS label FROM eligible WHERE department IS NOT NULL
+      UNION ALL
+      SELECT DISTINCT 'classification'::text, classification FROM eligible WHERE classification IS NOT NULL
+      UNION ALL
+      SELECT DISTINCT 'work_location'::text, work_location FROM eligible WHERE work_location IS NOT NULL
+    ), ranked AS (
+      SELECT kind, label, row_number() OVER (PARTITION BY kind ORDER BY lower(label), label) AS option_rank
+      FROM facets
+    )
+    SELECT kind, label
+    FROM ranked
+    WHERE option_rank <= $3::integer
+    ORDER BY kind, lower(label), label
+  `, [context.organizationId, campaignHandle, MAX_FILTER_OPTIONS]);
+
+  return rows.reduce<CampaignPopulationFilterOptions>((options, row) => {
+    if (!row.label) return options;
+    if (row.kind === "department") options.departments.push(row.label);
+    else if (row.kind === "classification") options.classifications.push(row.label);
+    else if (row.kind === "work_location") options.workLocations.push(row.label);
+    return options;
+  }, { departments: [], classifications: [], workLocations: [] });
 }
 
 async function resolveAddTarget(

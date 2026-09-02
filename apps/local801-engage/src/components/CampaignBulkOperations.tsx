@@ -26,6 +26,11 @@ type PopulationPreview = {
   expiresAt: string;
 };
 type Feedback = { tone: "error" | "success"; message: string } | null;
+type PopulationFilterOptions = {
+  departments: string[];
+  classifications: string[];
+  workLocations: string[];
+};
 
 async function postJson(url: string, body: Record<string, unknown>) {
   const response = await fetch(url, {
@@ -38,10 +43,6 @@ async function postJson(url: string, body: Record<string, unknown>) {
   return payload;
 }
 
-function handles(value: FormDataEntryValue | null) {
-  return String(value ?? "").split(/[\s,]+/).map((item) => item.trim()).filter(Boolean);
-}
-
 function criteriaFromForm(data: FormData): PopulationCriteria {
   return {
     membershipStatus: String(data.get("membershipStatus") ?? ""),
@@ -49,8 +50,8 @@ function criteriaFromForm(data: FormData): PopulationCriteria {
     classification: String(data.get("classification") ?? ""),
     workLocation: String(data.get("workLocation") ?? ""),
     search: String(data.get("search") ?? ""),
-    includeHandles: handles(data.get("includeHandles")),
-    excludeHandles: handles(data.get("excludeHandles")),
+    includeHandles: [],
+    excludeHandles: [],
   };
 }
 
@@ -60,7 +61,7 @@ function FeedbackMessage({ feedback }: { feedback: Feedback }) {
     role={feedback.tone === "error" ? "alert" : "status"}>{feedback.message}</div>;
 }
 
-function CriteriaFields({ prefix, includeSearch = false }: { prefix: string; includeSearch?: boolean }) {
+function CriteriaFields({ prefix, options }: { prefix: string; options: PopulationFilterOptions }) {
   return <div className="form-grid campaign-bulk-criteria">
     <div className="field">
       <label htmlFor={`${prefix}-membership`}>Membership status</label>
@@ -71,14 +72,32 @@ function CriteriaFields({ prefix, includeSearch = false }: { prefix: string; inc
         <option value="unknown">Unknown</option>
       </select>
     </div>
-    <div className="field"><label htmlFor={`${prefix}-department`}>Department</label><input id={`${prefix}-department`} name="department" maxLength={80} /></div>
-    <div className="field"><label htmlFor={`${prefix}-classification`}>Classification</label><input id={`${prefix}-classification`} name="classification" maxLength={80} /></div>
-    <div className="field"><label htmlFor={`${prefix}-location`}>Work location</label><input id={`${prefix}-location`} name="workLocation" maxLength={80} /></div>
-    {includeSearch ? <div className="field"><label htmlFor={`${prefix}-search`}>Directory search</label><input id={`${prefix}-search`} name="search" maxLength={100} placeholder="Name, email, department, classification, or location" /></div> : null}
+    <div className="field">
+      <label htmlFor={`${prefix}-department`}>Department</label>
+      <select id={`${prefix}-department`} name="department" defaultValue="">
+        <option value="">Any department</option>
+        {options.departments.map((option) => <option key={option} value={option}>{option}</option>)}
+      </select>
+    </div>
+    <div className="field">
+      <label htmlFor={`${prefix}-classification`}>Classification</label>
+      <select id={`${prefix}-classification`} name="classification" defaultValue="">
+        <option value="">Any classification</option>
+        {options.classifications.map((option) => <option key={option} value={option}>{option}</option>)}
+      </select>
+    </div>
+    <div className="field">
+      <label htmlFor={`${prefix}-location`}>Office / work location</label>
+      <select id={`${prefix}-location`} name="workLocation" defaultValue="">
+        <option value="">Any office</option>
+        {options.workLocations.map((option) => <option key={option} value={option}>{option}</option>)}
+      </select>
+    </div>
+    <div className="field"><label htmlFor={`${prefix}-search`}>Name or exact work email</label><input id={`${prefix}-search`} name="search" type="search" maxLength={100} placeholder="Optional employee search" /></div>
   </div>;
 }
 
-function PopulationBuilder({ campaignHandle }: { campaignHandle: string }) {
+function PopulationBuilder({ campaignHandle, filterOptions }: { campaignHandle: string; filterOptions: PopulationFilterOptions }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(null);
@@ -91,7 +110,7 @@ function PopulationBuilder({ campaignHandle }: { campaignHandle: string }) {
     setPrepared(null);
     const data = new FormData(event.currentTarget);
     const request: PopulationRequest = {
-      operation: data.get("operation") === "remove" ? "remove" : "add",
+      operation: "add",
       criteria: criteriaFromForm(data),
     };
     try {
@@ -116,7 +135,7 @@ function PopulationBuilder({ campaignHandle }: { campaignHandle: string }) {
         confirmationToken: prepared.preview.confirmationToken,
       });
       setPrepared(null);
-      setFeedback({ tone: "success", message: `Campaign population updated for ${prepared.preview.wouldChange} people.` });
+      setFeedback({ tone: "success", message: `Added ${prepared.preview.wouldChange} ${prepared.preview.wouldChange === 1 ? "employee" : "employees"} to the campaign.` });
       router.refresh();
     } catch (error) {
       setPrepared(null);
@@ -126,24 +145,16 @@ function PopulationBuilder({ campaignHandle }: { campaignHandle: string }) {
     }
   }
 
-  return <details className="campaign-operation" open>
-    <summary>Build or adjust the draft population</summary>
+  return <div className="campaign-operation">
     <div className="stack campaign-operation-content">
-      <p className="muted">Choose who should be included. The preview shows counts only, so names and roster details stay protected.</p>
+      <h3>Add employees by group</h3>
+      <p className="muted">Choose one or more filters. Combined filters narrow the group—for example, members in one department and office. Previewing does not add anyone.</p>
       <form className="stack" onSubmit={preview}>
-        <div className="field"><label htmlFor="population-operation">Change</label><select id="population-operation" name="operation" defaultValue="add"><option value="add">Add matching people</option><option value="remove">Remove eligible matching people</option></select></div>
-        <CriteriaFields prefix="population" includeSearch />
-        <details className="inline-disclosure">
-          <summary>Include or exclude specific people</summary>
-          <div className="form-grid inline-disclosure-content">
-            <div className="field"><label htmlFor="population-includes">Always include</label><textarea id="population-includes" name="includeHandles" maxLength={3300} rows={3} placeholder="Paste up to 50 CAT person IDs, separated by spaces or commas" /></div>
-            <div className="field"><label htmlFor="population-excludes">Always exclude</label><textarea id="population-excludes" name="excludeHandles" maxLength={3300} rows={3} placeholder="Paste up to 50 CAT person IDs, separated by spaces or commas" /></div>
-          </div>
-        </details>
-        <div className="form-actions"><button className="button" type="submit" disabled={pending}>{pending ? "Calculating…" : "Preview population change"}</button></div>
+        <CriteriaFields prefix="population" options={filterOptions} />
+        <div className="form-actions"><button className="button" type="submit" disabled={pending}>{pending ? "Calculating…" : "Preview employees to add"}</button></div>
       </form>
       {prepared ? <div className="confirmation-panel" aria-live="polite">
-        <h3>Confirm this exact population change</h3>
+        <h3>Confirm these employees</h3>
         <dl className="compact-facts">
           <div><dt>Matched</dt><dd>{prepared.preview.matched}</dd></div>
           <div><dt>Would change</dt><dd>{prepared.preview.wouldChange}</dd></div>
@@ -152,22 +163,24 @@ function PopulationBuilder({ campaignHandle }: { campaignHandle: string }) {
           <div><dt>Unavailable</dt><dd>{prepared.preview.unavailable}</dd></div>
         </dl>
         <p className="muted">Confirmation expires at {formatCatDateTime(prepared.preview.expiresAt)} and fails if the live set changes.</p>
-        <div className="form-actions"><button className="button" type="button" onClick={confirm} disabled={pending}>{pending ? "Applying…" : `Confirm ${prepared.request.operation}`}</button><button className="button secondary" type="button" onClick={() => setPrepared(null)} disabled={pending}>Cancel</button></div>
+        <div className="form-actions"><button className="button" type="button" onClick={confirm} disabled={pending}>{pending ? "Adding…" : `Add ${prepared.preview.wouldChange} to campaign`}</button><button className="button secondary" type="button" onClick={() => setPrepared(null)} disabled={pending}>Cancel</button></div>
       </div> : null}
       <FeedbackMessage feedback={feedback} />
     </div>
-  </details>;
+  </div>;
 }
 
 export function CampaignBulkOperations({
   campaignHandle,
   status,
+  filterOptions,
 }: {
   campaignHandle: string;
   status: "draft" | "active" | "closed";
+  filterOptions: PopulationFilterOptions;
 }) {
   if (status !== "draft") return null;
   return <div className="campaign-operations-grid">
-    <PopulationBuilder campaignHandle={campaignHandle} />
+    <PopulationBuilder campaignHandle={campaignHandle} filterOptions={filterOptions} />
   </div>;
 }

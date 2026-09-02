@@ -10,8 +10,9 @@ test("Stage 18 campaign page exposes bounded factual operations and strict keyse
     source("../src/lib/campaigns.ts"),
     source("../src/components/CampaignBulkOperations.tsx"),
   ]);
-  assert.match(page, /Campaign operations/);
-  assert.match(page, /live count preview and a second confirmation/);
+  assert.match(page, /Find and add employees/);
+  assert.match(page, /Search available employees/);
+  assert.match(page, /Current campaign participants are excluded/);
   assert.match(page, /name="assignment"/);
   assert.match(page, /name="workflow"/);
   assert.match(page, /name="q"/);
@@ -26,17 +27,21 @@ test("Stage 18 campaign page exposes bounded factual operations and strict keyse
   assert.match(campaigns, /contact:work-email/);
   assert.match(campaigns, /LIMIT 100/);
   assert.doesNotMatch(campaigns, /\bOFFSET\b/i);
-  assert.match(component, /Preview population change/);
-  assert.match(component, /Confirm this exact population change/);
+  assert.match(component, /Preview employees to add/);
+  assert.match(component, /Confirm these employees/);
+  assert.match(component, /Any department/);
+  assert.match(component, /Any classification/);
+  assert.match(component, /Any office/);
   assert.doesNotMatch(component, /bulk assignment|assignments\/bulk|assigneeHandle/i);
 });
 
-test("Stage 18 browser mutations send only criteria, bounded exceptions, opaque handles, and confirmation tokens", async () => {
+test("Stage 18 browser mutations send only dropdown criteria and confirmation tokens", async () => {
   const component = await source("../src/components/CampaignBulkOperations.tsx");
   assert.match(component, /MAXLENGTH|confirmationToken/i);
-  assert.match(component, /maxLength=\{3300\}/);
   assert.match(component, /includeHandles/);
   assert.match(component, /excludeHandles/);
+  assert.match(component, /includeHandles: \[\]/);
+  assert.match(component, /excludeHandles: \[\]/);
   assert.doesNotMatch(component, /assigneeHandle/);
   assert.doesNotMatch(component, /personIds|campaignId|organizationId|participantHandles/);
   assert.equal((component.match(/\.people/g) ?? []).length, 0);
