@@ -51,14 +51,18 @@ test("upload form keeps import semantics while hiding legacy processing under Pr
   assert.match(form, /<option value="durable">Secure background processing<\/option>/);
   assert.match(form, /<option value="synchronous">Legacy fallback · pre-cutover only<\/option>/);
 
-  for (const kind of ["current_roster", "new_hires", "recent_hires", "membership_additions", "membership_drops", "legacy_cat"]) {
+  for (const kind of ["current_roster", "new_hires"]) {
     assert.match(form, new RegExp(`<option value="${kind}">`));
+  }
+  for (const removedKind of ["recent_hires", "membership_additions", "membership_drops", "legacy_cat"]) {
+    assert.doesNotMatch(form, new RegExp(`<option value="${removedKind}">`));
   }
 
   assert.match(form, /fetch\("\/api\/imports\/validate"/);
   assert.match(form, /Upload for review/);
   assert.match(form, /Supported source datasets/);
-  assert.match(form, /CAT assignment workbooks:[\s\S]*remain review-only/);
+  assert.match(form, /Current roster:[\s\S]*derives the New Hires list/);
+  assert.match(form, /New hires:[\s\S]*replaces the current New Hires work list/);
 });
 
 test("new-hire datasets include a hired-within-14-days view", () => {

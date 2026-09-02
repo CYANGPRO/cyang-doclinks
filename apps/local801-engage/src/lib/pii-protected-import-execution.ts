@@ -250,11 +250,15 @@ export async function prepareProtectedImportExecution(
     query?: DatabaseQuery;
     transaction?: (statements: readonly DatabaseStatement[]) => Promise<void>;
     env?: NodeJS.ProcessEnv;
+    approvalFingerprint?: string;
   } = {},
 ): Promise<ProtectedImportPreparationResult> {
   if (!can(actor.role, "approveImports")) throw new Error("Forbidden.");
   if (!UUID_RE.test(batchId)) throw new Error("Import not found.");
   const env = dependencies.env ?? process.env;
+  if (dependencies.approvalFingerprint !== undefined && !HASH_RE.test(dependencies.approvalFingerprint)) {
+    throw new Error("Protected import approval fingerprint is invalid.");
+  }
   if (env.LOCAL801_PROTECTED_IMPORT_PREPARATION_ENABLED !== "1") throw new Error("Protected import preparation is disabled.");
   if (env.VERCEL_ENV === "production" && env.LOCAL801_DATABASE_PII_PROTECTION_ENABLED !== "1") {
     throw new Error("Production protected import preparation requires protected-only database mode.");
@@ -320,11 +324,11 @@ export async function prepareProtectedImportExecution(
     sql: `
       INSERT INTO local801.protected_import_execution_sets
         (id, organization_id, import_batch_id, source_fingerprint, review_fingerprint,
-         mutation_fingerprint, mutation_count, state, prepared_by)
-      VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7::integer, 'prepared', $8::uuid)
+         mutation_fingerprint, mutation_count, state, prepared_by, approval_fingerprint)
+      VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7::integer, 'prepared', $8::uuid, $9::text)
     `,
     parameters: [executionSetId, actor.organizationId, batchId, sourceFingerprint, currentReviewFingerprint,
-      mutationFingerprint, mutations.length, actor.userId],
+      mutationFingerprint, mutations.length, actor.userId, dependencies.approvalFingerprint ?? null],
   }];
   for (let start = 0; start < serializedMutations.length; start += 250) {
     const chunk = serializedMutations.slice(start, start + 250);

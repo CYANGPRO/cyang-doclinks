@@ -11,6 +11,7 @@ import {
   ImportExecutionLifecycleError,
 } from "@/lib/import-execution-lifecycle";
 import { applyPreparedProtectedImport, ProtectedImportApplyError } from "@/lib/pii-protected-import-apply";
+import { applyPreparedAttendanceImport, AttendanceImportApplyError } from "@/lib/attendance-import-apply";
 import { prepareProtectedImportExecution } from "@/lib/pii-protected-import-execution";
 import { protectedImportMembershipTransaction } from "@/lib/pii-protected-import-membership-transaction";
 import {
@@ -84,15 +85,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ bat
       executionStage = "review-transition";
       await enterImportReviewForProtectedExecution(actor, batchId);
       executionStage = "preparation";
-      const prepared = await prepareProtectedImportExecution(actor, batchId);
+      const prepared = await prepareProtectedImportExecution(actor, batchId, { approvalFingerprint: fingerprint });
       executionStage = "atomic-apply";
-      const result = await applyPreparedProtectedImport(
-        actor,
-        batchId,
-        prepared.executionSetId,
-        prepared.mutationFingerprint,
-        { transaction: protectedImportMembershipTransaction },
-      );
+      const result = preflight.importKind === "attendance_roster"
+        ? await applyPreparedAttendanceImport(
+          actor,
+          batchId,
+          prepared.executionSetId,
+          prepared.mutationFingerprint,
+          fingerprint,
+          { transaction: protectedImportMembershipTransaction },
+        )
+        : await applyPreparedProtectedImport(
+          actor,
+          batchId,
+          prepared.executionSetId,
+          prepared.mutationFingerprint,
+          { transaction: protectedImportMembershipTransaction },
+        );
       return json({
         importExecution: "ok",
         protectionMode: "protected",
@@ -109,7 +119,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ bat
     if (error instanceof RateLimitError) return rateLimitResponse(error);
     if (error instanceof ImportExecutionError
       || error instanceof ImportExecutionLifecycleError
-      || error instanceof ProtectedImportApplyError) {
+      || error instanceof ProtectedImportApplyError
+      || error instanceof AttendanceImportApplyError) {
       return json({ error: error.code, message: error.message }, error.status);
     }
     const diagnostic = safeProtectedImportExecutionDiagnostic(executionStage, error);

@@ -7,6 +7,7 @@ export { XLSX_IMPORT_LIMITS, XlsxImportError, parseXlsxImportSheets } from "./xl
 export const importKindSchema = z.enum([
   "current_roster",
   "new_hires",
+  "attendance_roster",
   "recent_hires",
   "membership_additions",
   "membership_drops",
@@ -14,6 +15,18 @@ export const importKindSchema = z.enum([
 ]);
 
 export type ImportKind = z.infer<typeof importKindSchema>;
+
+// Keep historical import kinds readable, but limit all new intake to the two
+// authoritative Local 801 files that remain part of the operating workflow.
+export const uploadImportKindSchema = z.enum(["current_roster", "new_hires", "attendance_roster"]);
+
+export const attendanceImportMetadataSchema = z.object({
+  description: z.string().trim().min(1).max(120).refine((value) => !/[\u0000-\u001f\u007f]/.test(value)),
+  meetingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
+    const parsed = new Date(`${value}T00:00:00.000Z`);
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+  }),
+});
 
 export const canonicalRosterColumns = [
   "member_identifier",

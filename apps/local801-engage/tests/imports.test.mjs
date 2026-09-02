@@ -125,7 +125,10 @@ test("normalizes Excel hire-date serials and uses preferred/first as a safe firs
   );
 });
 
-test("accepts the hired-within-two-weeks import kind", () => {
+test("new uploads accept only current roster and new hires while historical kinds remain readable", () => {
+  assert.equal(imports.uploadImportKindSchema.parse("current_roster"), "current_roster");
+  assert.equal(imports.uploadImportKindSchema.parse("new_hires"), "new_hires");
+  assert.equal(imports.uploadImportKindSchema.safeParse("recent_hires").success, false);
   assert.equal(imports.importKindSchema.parse("recent_hires"), "recent_hires");
 });
 

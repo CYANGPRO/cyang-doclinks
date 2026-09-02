@@ -98,7 +98,7 @@ export function ImportExecutionPreflightControls(props: Props) {
         </div>
         <div className="form-actions"><button className="button secondary" type="submit" disabled={pending !== null}>{pending === "plan" ? "Saving…" : "Save snapshot date"}</button></div>
       </form>
-    ) : props.importKind && props.importKind !== "legacy_cat" ? (
+    ) : props.importKind && props.importKind !== "legacy_cat" && props.importKind !== "attendance_roster" ? (
       <form className="stack" onSubmit={savePlan}>
         <div className="form-grid">
           <div className="field">

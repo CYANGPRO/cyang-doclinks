@@ -14,7 +14,7 @@ import { ControlledImportError } from "./import-errors.ts";
 import { IMPORT_PROCESSING_VERSION } from "./import-processing.ts";
 import { durableImportProcessingEnabled, isStrictSyntheticPreviewCsv } from "./import-scanner.ts";
 import { startQueuedImportWorkflow } from "./import-workflow-starter.ts";
-import { importKindSchema } from "./imports.ts";
+import { attendanceImportMetadataSchema, uploadImportKindSchema } from "./imports.ts";
 import type { ImportActor } from "./import-persistence.ts";
 
 type AcceptanceDependencies = {
@@ -31,6 +31,8 @@ export async function acceptDurableImport(input: {
   actor: ImportActor;
   file: File;
   importKind: unknown;
+  attendanceDescription?: unknown;
+  attendanceMeetingDate?: unknown;
   dependencies?: AcceptanceDependencies;
 }) {
   if (!can(input.actor.role, "manageImports")) throw new Error("Forbidden.");
@@ -38,8 +40,15 @@ export async function acceptDurableImport(input: {
   if (!durableImportProcessingEnabled(env)) {
     throw new ControlledImportError("SERVICE_UNAVAILABLE", "service_unavailable", "availability");
   }
-  const kind = importKindSchema.safeParse(input.importKind || "current_roster");
+  const kind = uploadImportKindSchema.safeParse(input.importKind || "current_roster");
   if (!kind.success) throw new ControlledImportError("IMPORT_VALIDATION_FAILED", "validation_failed");
+  const attendance = kind.data === "attendance_roster"
+    ? attendanceImportMetadataSchema.safeParse({
+      description: input.attendanceDescription,
+      meetingDate: input.attendanceMeetingDate,
+    })
+    : null;
+  if (attendance && !attendance.success) throw new ControlledImportError("IMPORT_VALIDATION_FAILED", "validation_failed");
   const lowerName = input.file.name.toLowerCase();
   const lowerType = input.file.type.toLowerCase();
   const csv = lowerName.endsWith(".csv") && (!lowerType || lowerType === "text/csv");
@@ -114,7 +123,35 @@ export async function acceptDurableImport(input: {
         processing: csv ? "durable_csv" : "durable_xlsx",
       },
     }, query);
-    await transaction([queueStatement, audit]);
+    const statements: DatabaseStatement[] = [queueStatement];
+    if (attendance?.success) {
+      statements.push({
+        sql: `WITH actor AS (
+            SELECT id FROM local801.users
+            WHERE id = $3::uuid AND organization_id = $1::uuid AND deactivated_at IS NULL
+          ), attendance_plan AS (
+            INSERT INTO local801.import_attendance_plans
+              (organization_id, import_batch_id, description, meeting_date, response_key, created_by)
+            SELECT $1::uuid, batch.id, $4::text, $5::date,
+              'custom:' || replace(batch.id::text, '-', ''), actor.id
+            FROM local801.import_batches batch CROSS JOIN actor
+            WHERE batch.organization_id = $1::uuid AND batch.id = $2::uuid
+              AND batch.import_kind = 'attendance_roster' AND batch.state = 'uploaded'
+            RETURNING import_batch_id
+          ), approval_plan AS (
+            INSERT INTO local801.import_approval_plans
+              (organization_id, import_batch_id, effective_date, created_by, updated_by)
+            SELECT $1::uuid, attendance_plan.import_batch_id, $5::date, actor.id, actor.id
+            FROM attendance_plan CROSS JOIN actor
+            RETURNING import_batch_id
+          )
+          SELECT CASE WHEN count(*) = 1 THEN true ELSE 1 / count(*)::integer = 1 END AS attendance_plan_saved
+          FROM approval_plan`,
+        parameters: [input.actor.organizationId, batchId, input.actor.userId, attendance.data.description, attendance.data.meetingDate],
+      });
+    }
+    statements.push(audit);
+    await transaction(statements);
   } catch (error) {
     if (stored && !input.dependencies?.storeFile) {
       try {

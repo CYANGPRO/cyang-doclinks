@@ -152,6 +152,9 @@ export default async function ImportDetailPage({ params, searchParams }: { param
             <div className="section-card"><h3>Confirmation code</h3><p><strong>{preflight.fingerprintShort ?? "Unavailable"}</strong></p><p className="muted">This code identifies the source file, review decisions, counts, import type, and dates you are about to apply. CAT checks the same set again before changing the roster.</p></div>
             <div className="section-card"><h3>Source file check</h3><p>{preflight.source.fileCount} source file · malware scan {preflight.source.malwareStatus ?? "unknown"}</p><p className="muted">{preflight.source.duplicateApprovedSource ? "This matches a source file that was approved before." : "CAT did not find this exact source file in an earlier approved import."}</p></div>
           </div>
+          {preflight.importKind === "attendance_roster" && preflight.plan.attendanceDescription ? <AlertBanner title="Attendance action ready" tone="info">
+            CAT will create <strong>{preflight.plan.attendanceDescription}</strong> for the recorded meeting date and mark every approved existing employee in this file as <strong>Attended</strong>. Employee directory fields will not be changed, and unmatched rows cannot create employees.
+          </AlertBanner> : null}
           <ImportExecutionPreflightControls
             batchId={batchId}
             importKind={preflight.importKind}
@@ -168,9 +171,11 @@ export default async function ImportDetailPage({ params, searchParams }: { param
           {preflight.ready && preflight.fingerprint && preflight.fingerprintShort ? (
             executionMode ? (
               <div className="section-card">
-                <h3>{executionMode === "protected" ? "Apply approved roster changes" : "Apply Preview changes"}</h3>
-                <p className="muted">Before changing the roster, CAT rechecks your role, the clean malware scan, review decisions, dates, duplicate-file acknowledgement, large-decrease acknowledgement, and confirmation code. A full roster also archives the reviewed active people who no longer appear. It saves the roster changes and audit record together—or saves none of them.</p>
-                <ImportExecutionControl batchId={batchId} fingerprint={preflight.fingerprint} fingerprintShort={preflight.fingerprintShort} removalCount={summary.snapshot?.leaving ?? 0} mode={executionMode} />
+                <h3>{preflight.importKind === "attendance_roster" ? "Create attendance action" : executionMode === "protected" ? "Apply approved roster changes" : "Apply Preview changes"}</h3>
+                <p className="muted">{preflight.importKind === "attendance_roster"
+                  ? "CAT rechecks every employee match, the meeting details, source file, approval code, and your role. It then saves the dated Action Catalog item, all Attended responses, the approval, and the audit record together—or saves none of them."
+                  : "Before changing the roster, CAT rechecks your role, the clean malware scan, review decisions, dates, duplicate-file acknowledgement, large-decrease acknowledgement, and confirmation code. A full roster also archives the reviewed active people who no longer appear. It saves the roster changes and audit record together—or saves none of them."}</p>
+                <ImportExecutionControl batchId={batchId} fingerprint={preflight.fingerprint} fingerprintShort={preflight.fingerprintShort} removalCount={summary.snapshot?.leaving ?? 0} mode={executionMode} importKind={preflight.importKind} />
               </div>
             ) : (
               <AlertBanner title="Applying changes is temporarily unavailable" tone="warning">Your review has been saved and no member records have changed. An 801 Administrator must complete the protected import setup before this batch can be applied.</AlertBanner>

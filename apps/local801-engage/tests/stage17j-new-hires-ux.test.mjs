@@ -9,7 +9,8 @@ function source(path) {
 test("Stage 17J New Hires prioritizes the operational queue without removing filters", () => {
   const page = source("src/app/new-hires/page.tsx");
 
-  assert.match(page, /Track new Local 801 hires from assignment through first conversation and membership resolution\./);
+  assert.match(page, /Track employees newly identified by the latest approved roster or an authoritative New Hires file/);
+  assert.match(page, /MAPE Hire Date falls after the previous snapshot/);
   assert.match(page, /className="new-hire-journey"/);
   assert.match(page, /className="new-hire-search-form"/);
   assert.match(page, /className="field new-hire-search-field"/);

@@ -31,6 +31,7 @@ export function ImportPreviewForm({ previewMode }: { previewMode: boolean }) {
   const [summary, setSummary] = useState<ImportReviewSummary | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [importKind, setImportKind] = useState("current_roster");
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -106,17 +107,27 @@ export function ImportPreviewForm({ previewMode }: { previewMode: boolean }) {
           </div>
           <div className="field">
             <label htmlFor="importKind">What kind of file is this?</label>
-            <select id="importKind" name="importKind" defaultValue="current_roster">
+            <select id="importKind" name="importKind" value={importKind} onChange={(event) => setImportKind(event.target.value)}>
               <option value="current_roster">Current roster</option>
               <option value="new_hires">New hires</option>
-              <option value="recent_hires">Hired within the last two weeks</option>
-              <option value="membership_additions">Membership additions</option>
-              <option value="membership_drops">Membership drops</option>
-              <option value="legacy_cat">Legacy CAT workbook</option>
+              <option value="attendance_roster">Attendance roster</option>
             </select>
-            <span className="field-help">Choose the source purpose so the right validation rules are used.</span>
+            <span className="field-help">Choose the authoritative employee file or record attendance for an existing Action Catalog meeting.</span>
           </div>
         </div>
+
+        {importKind === "attendance_roster" ? <div className="form-grid" aria-label="Attendance meeting details">
+          <div className="field">
+            <label htmlFor="attendanceDescription">Description</label>
+            <input id="attendanceDescription" name="attendanceDescription" maxLength={120} required />
+            <span className="field-help">This becomes the Action Catalog item, with the meeting date included in its name.</span>
+          </div>
+          <div className="field">
+            <label htmlFor="attendanceMeetingDate">When was the meeting?</label>
+            <input id="attendanceMeetingDate" name="attendanceMeetingDate" type="date" required />
+            <span className="field-help">Every matched employee in the approved file receives the response Attended on this date.</span>
+          </div>
+        </div> : null}
 
         {previewMode ? <details className="inline-disclosure import-preview-options">
           <summary>Preview test options</summary>
@@ -142,9 +153,9 @@ export function ImportPreviewForm({ previewMode }: { previewMode: boolean }) {
         <h3>Supported source datasets</h3>
         <p className="muted">The importer recognizes the column names used by the current Local 801 reports, including preferred name, MAPE hire date, department, section, classification, office or work location, work email, and personal email.</p>
         <ul>
-          <li><strong>Membership and personal-email reports:</strong> match people by work email and stage supported profile fields for review.</li>
-          <li><strong>New hires and hired within the last two weeks:</strong> create hire-date review records and use the batch effective date only when a row has no valid hire date.</li>
-          <li><strong>CAT assignment workbooks:</strong> remain review-only; CAT/LCAT assignment decisions are not applied automatically.</li>
+          <li><strong>Current roster:</strong> updates the employee directory, archives people omitted from the approved snapshot, and derives the New Hires list from MAPE Hire Date and prior roster history.</li>
+          <li><strong>New hires:</strong> replaces the current New Hires work list and uses the batch effective date only when a row has no valid MAPE Hire Date.</li>
+          <li><strong>Attendance roster:</strong> matches only existing employees, creates one dated Action Catalog item, and records Attended for each approved match. Unmatched rows cannot create employees.</li>
           <li><strong>Phone and address columns:</strong> stay in the encrypted source file and are not applied automatically.</li>
         </ul>
       </div>

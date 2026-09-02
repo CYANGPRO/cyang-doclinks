@@ -28,7 +28,8 @@ export type ImportExecutionReasonCode =
   | "SNAPSHOT_DATE_REQUIRED"
   | "EFFECTIVE_DATE_REQUIRED"
   | "DUPLICATE_SOURCE_ACK_REQUIRED"
-  | "LARGE_ROSTER_SHRINK_ACK_REQUIRED";
+  | "LARGE_ROSTER_SHRINK_ACK_REQUIRED"
+  | "ATTENDANCE_EXISTING_EMPLOYEES_ONLY";
 
 export type ImportExecutionReason = { code: ImportExecutionReasonCode; message: string };
 
@@ -51,6 +52,7 @@ export type ImportExecutionPreflight = {
     duplicateSourceAcknowledged: boolean;
     largeRosterShrinkAcknowledged: boolean;
     migrationPending: boolean;
+    attendanceDescription: string | null;
   };
   review: {
     total: number;
@@ -84,6 +86,7 @@ type MetaRow = {
   large_roster_shrink_set_hash?: string | null;
   duplicate_source_exists: boolean;
   row_set_hash: string;
+  attendance_description: string | null;
 };
 
 export class ImportExecutionPreflightError extends Error {
@@ -120,12 +123,13 @@ function dateOnly(value: string | Date | null | undefined) {
 }
 
 function isMissingPreflightMigration(error: unknown) {
-  return Boolean(error && typeof error === "object" && "code" in error && (error as { code?: string }).code === "42703");
+  return Boolean(error && typeof error === "object" && "code" in error
+    && ["42703", "42P01"].includes((error as { code?: string }).code ?? ""));
 }
 
 function supportedImportKind(value: string) {
   return value === "current_roster" || value === "new_hires" || value === "recent_hires"
-    || value === "membership_additions" || value === "membership_drops";
+    || value === "membership_additions" || value === "membership_drops" || value === "attendance_roster";
 }
 
 function canonical(value: Record<string, unknown>) {
@@ -181,13 +185,16 @@ async function loadMeta(actor: ImportReviewActor, batchId: string, query: Databa
         source.file_count, source.source_sha256, source.malware_scan_status,
         plan.snapshot_date, plan.effective_date, plan.duplicate_source_acknowledged,
         plan.large_roster_shrink_acknowledged, plan.large_roster_shrink_set_hash,
-        duplicate_source.duplicate_source_exists, row_fingerprint.row_set_hash
+        duplicate_source.duplicate_source_exists, row_fingerprint.row_set_hash,
+        attendance.description AS attendance_description
       FROM selected_batch batch
       CROSS JOIN source
       CROSS JOIN duplicate_source
       CROSS JOIN row_fingerprint
       LEFT JOIN local801.import_approval_plans plan
         ON plan.organization_id = $1::uuid AND plan.import_batch_id = batch.id
+      LEFT JOIN local801.import_attendance_plans attendance
+        ON attendance.organization_id = $1::uuid AND attendance.import_batch_id = batch.id
     `, [actor.organizationId, batchId]);
     return { row: row ?? null, migrationPending: false };
   } catch (error) {
@@ -196,7 +203,8 @@ async function loadMeta(actor: ImportReviewActor, batchId: string, query: Databa
       SELECT batch.id, batch.import_kind, batch.state, batch.processing_stage,
         source.file_count, source.source_sha256, source.malware_scan_status,
         plan.snapshot_date, plan.effective_date, plan.duplicate_source_acknowledged,
-        duplicate_source.duplicate_source_exists, row_fingerprint.row_set_hash
+        duplicate_source.duplicate_source_exists, row_fingerprint.row_set_hash,
+        NULL::text AS attendance_description
       FROM selected_batch batch
       CROSS JOIN source
       CROSS JOIN duplicate_source
@@ -248,6 +256,7 @@ export async function getImportExecutionPreflight(
     ],
     snapshotDate,
     effectiveDate,
+    attendanceDescription: row.attendance_description,
   } : null;
   const fingerprint = fingerprintInput
     ? createHash("sha256").update(canonical(fingerprintInput)).digest("hex")
@@ -273,8 +282,11 @@ export async function getImportExecutionPreflight(
   }
   if (!summary.decisions.proposedNew) reasons.push(reason("PROPOSED_NEW_DECISION_REQUIRED", "The current proposed-new set must be explicitly allowed."));
   if (!summary.decisions.existingChanges) reasons.push(reason("EXISTING_CHANGES_ACK_REQUIRED", "The current existing-change set must be acknowledged."));
+  if (row.import_kind === "attendance_roster" && summary.counts.proposedNew > 0) {
+    reasons.push(reason("ATTENDANCE_EXISTING_EMPLOYEES_ONLY", "Attendance can be recorded only for employees already in the current directory. Resolve unmatched rows before applying this file."));
+  }
   if (row.import_kind === "current_roster" && !snapshotDate) reasons.push(reason("SNAPSHOT_DATE_REQUIRED", "Set the authoritative roster snapshot date before execution."));
-  if (["new_hires", "recent_hires", "membership_additions", "membership_drops"].includes(row.import_kind) && !effectiveDate) {
+  if (["new_hires", "recent_hires", "membership_additions", "membership_drops", "attendance_roster"].includes(row.import_kind) && !effectiveDate) {
     reasons.push(reason("EFFECTIVE_DATE_REQUIRED", "Set the batch effective date before execution."));
   }
   if (row.duplicate_source_exists && row.duplicate_source_acknowledged !== true) {
@@ -303,6 +315,7 @@ export async function getImportExecutionPreflight(
       duplicateSourceAcknowledged: row.duplicate_source_acknowledged === true,
       largeRosterShrinkAcknowledged: shrinkAck && shrinkRequired,
       migrationPending: meta.migrationPending,
+      attendanceDescription: row.attendance_description,
     },
     review: {
       total: summary.counts.total,

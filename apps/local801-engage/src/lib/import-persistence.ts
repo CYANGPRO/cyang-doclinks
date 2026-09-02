@@ -5,7 +5,7 @@ import { getAppConfig } from "./config.ts";
 import { queryLocal801, runLocal801Transaction, type DatabaseQuery, type DatabaseStatement } from "./db.ts";
 import { storeEncryptedImportFile, type StorageActor } from "./document-storage.ts";
 import {
-  importKindSchema,
+  uploadImportKindSchema,
   normalizeImportRow,
   parseImportSheets,
   recognizedMappings,
@@ -194,7 +194,7 @@ export async function persistImportReview(input: {
   const maxBytes = getAppConfig().LOCAL801_IMPORT_MAX_BYTES;
   const maxRows = getAppConfig().LOCAL801_IMPORT_MAX_ROWS;
   ensureCandidateFile(input.file, maxBytes);
-  const parsedKind = importKindSchema.safeParse(input.importKind || "current_roster");
+  const parsedKind = uploadImportKindSchema.safeParse(input.importKind || "current_roster");
   if (!parsedKind.success) fail("IMPORT_VALIDATION_FAILED", "validation_failed");
   const importKind = parsedKind.data;
   let sheets;

@@ -58,6 +58,8 @@ export async function POST(request: Request) {
         actor: { organizationId: context.organizationId, role: context.role, userId: context.userId },
         file,
         importKind: form.get("importKind"),
+        attendanceDescription: form.get("attendanceDescription"),
+        attendanceMeetingDate: form.get("attendanceMeetingDate"),
       });
       return NextResponse.json(accepted, {
         status: 202,
@@ -70,6 +72,12 @@ export async function POST(request: Request) {
           error: "PROTECTED_DURABLE_IMPORT_REQUIRED",
           message: "Protected-only imports require the scanner-backed durable worker.",
         },
+        { status: 409, headers: { "Cache-Control": "no-store, max-age=0" } },
+      );
+    }
+    if (form.get("importKind") === "attendance_roster") {
+      return NextResponse.json(
+        { error: "DURABLE_ATTENDANCE_IMPORT_REQUIRED", message: "Attendance rosters require secure background processing." },
         { status: 409, headers: { "Cache-Control": "no-store, max-age=0" } },
       );
     }

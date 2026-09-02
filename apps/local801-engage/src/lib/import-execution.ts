@@ -321,6 +321,25 @@ export const IMPORT_EXECUTION_SQL = `
     CROSS JOIN guard
     WHERE categorized.category IN ('unchanged_existing','existing_with_changes','proposed_new')
       AND guard.ok = 1
+  ), current_roster_new_hires AS MATERIALIZED (
+    SELECT target.target_person_id
+    FROM target_rows target
+    CROSS JOIN gate_facts batch
+    WHERE batch.import_kind = 'current_roster'
+      AND NULLIF(btrim(target.normalized_json ->> 'hire_date'), '')::date IS NOT NULL
+      AND NULLIF(btrim(target.normalized_json ->> 'hire_date'), '')::date <= batch.snapshot_date
+      AND NULLIF(btrim(target.normalized_json ->> 'hire_date'), '')::date > COALESCE(
+        (SELECT snapshot_date FROM previous_snapshot),
+        batch.snapshot_date - INTERVAL '30 days'
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM previous_snapshot snapshot
+        JOIN local801.membership_snapshot_rows previous_row
+          ON previous_row.organization_id = $1::uuid
+         AND previous_row.snapshot_id = snapshot.id
+         AND previous_row.person_id = target.target_person_id
+      )
   ), omitted_active_people AS MATERIALIZED (
     SELECT DISTINCT snapshot_row.person_id
     FROM previous_snapshot snapshot
@@ -509,35 +528,52 @@ export const IMPORT_EXECUTION_SQL = `
     UPDATE local801.new_hire_roster_entries roster
     SET archived_at = now()
     FROM gate_facts batch
-    WHERE batch.import_kind IN ('new_hires','recent_hires')
+    WHERE batch.import_kind IN ('current_roster','new_hires','recent_hires')
       AND roster.organization_id = $1::uuid
       AND roster.archived_at IS NULL
-      AND NOT EXISTS (
-        SELECT 1 FROM target_rows target WHERE target.target_person_id = roster.person_id
-      )
-      AND EXISTS (
-        SELECT 1
-        FROM local801.engagement_assignments assignment
-        JOIN local801.workspace_user_roles organizer_role
-          ON organizer_role.user_id IN (assignment.primary_user_id, assignment.backup_user_id)
-        JOIN local801.workspace_roles role
-          ON role.organization_id = $1::uuid
-         AND role.id = organizer_role.role_id
-         AND role.code IN ('system_owner','local_admin','cat_admin','cat_lead','cat_member')
-        WHERE assignment.organization_id = $1::uuid
-          AND assignment.person_id = roster.person_id
-          AND assignment.archived_at IS NULL
-          AND assignment.status = 'open'
+      AND (
+        (
+          batch.import_kind = 'current_roster'
+          AND NOT EXISTS (
+            SELECT 1 FROM current_roster_new_hires current_hire
+            WHERE current_hire.target_person_id = roster.person_id
+          )
+        ) OR (
+          batch.import_kind IN ('new_hires','recent_hires')
+          AND NOT EXISTS (
+            SELECT 1 FROM target_rows target WHERE target.target_person_id = roster.person_id
+          )
+          AND EXISTS (
+            SELECT 1
+            FROM local801.engagement_assignments assignment
+            JOIN local801.workspace_user_roles organizer_role
+              ON organizer_role.user_id IN (assignment.primary_user_id, assignment.backup_user_id)
+            JOIN local801.workspace_roles role
+              ON role.organization_id = $1::uuid
+             AND role.id = organizer_role.role_id
+             AND role.code IN ('system_owner','local_admin','cat_admin','cat_lead','cat_member')
+            WHERE assignment.organization_id = $1::uuid
+              AND assignment.person_id = roster.person_id
+              AND assignment.archived_at IS NULL
+              AND assignment.status = 'open'
+          )
+        )
       )
     RETURNING roster.person_id
   ), upserted_new_hire_queue AS (
     INSERT INTO local801.new_hire_roster_entries (
       organization_id, person_id, source_import_file_id, first_listed_at, last_listed_at, archived_at
     )
-    SELECT $1::uuid, target.target_person_id, batch.source_file_id, now(), now(), NULL
-    FROM target_rows target CROSS JOIN gate_facts batch
+    SELECT $1::uuid, listed.target_person_id, batch.source_file_id, now(), now(), NULL
+    FROM (
+      SELECT target.target_person_id
+      FROM target_rows target CROSS JOIN gate_facts selected
+      WHERE selected.import_kind IN ('new_hires','recent_hires')
+      UNION
+      SELECT current_hire.target_person_id FROM current_roster_new_hires current_hire
+    ) listed
+    CROSS JOIN gate_facts batch
     CROSS JOIN (SELECT count(*) FROM inserted_people) people_barrier
-    WHERE batch.import_kind IN ('new_hires','recent_hires')
     ON CONFLICT (organization_id, person_id) DO UPDATE SET
       source_import_file_id = excluded.source_import_file_id,
       last_listed_at = now(),

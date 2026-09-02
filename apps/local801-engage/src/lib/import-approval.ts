@@ -227,7 +227,7 @@ function identities(values: Record<string, string | null>) {
 
 function validImportKind(value: string): value is ImportKind {
   return value === "current_roster" || value === "new_hires" || value === "recent_hires"
-    || value === "membership_additions" || value === "membership_drops" || value === "legacy_cat";
+    || value === "membership_additions" || value === "membership_drops" || value === "attendance_roster" || value === "legacy_cat";
 }
 
 function validIsoDate(value: unknown): value is string {

@@ -9,6 +9,7 @@ type Props = {
   fingerprintShort: string;
   removalCount?: number;
   mode?: "synthetic_preview" | "protected";
+  importKind?: string | null;
 };
 
 type Feedback = { tone: "error" | "success"; message: string } | null;
@@ -34,13 +35,14 @@ function failureMessage(payload: ExecutionResponse) {
   return [message, ...recovery, supportReference ? `Support reference: ${supportReference}` : ""].filter(Boolean).join(" ");
 }
 
-export function ImportExecutionControl({ batchId, fingerprint, fingerprintShort, removalCount = 0, mode = "synthetic_preview" }: Props) {
+export function ImportExecutionControl({ batchId, fingerprint, fingerprintShort, removalCount = 0, mode = "synthetic_preview", importKind = null }: Props) {
   const router = useRouter();
   const [confirmation, setConfirmation] = useState("");
   const [pending, setPending] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(null);
   const protectedMode = mode === "protected";
-  const noun = protectedMode ? "approved roster import" : "Preview import";
+  const attendance = importKind === "attendance_roster";
+  const noun = attendance ? "approved attendance roster" : protectedMode ? "approved roster import" : "Preview import";
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -63,7 +65,9 @@ export function ImportExecutionControl({ batchId, fingerprint, fingerprintShort,
       });
       const payload = await response.json().catch(() => ({})) as ExecutionResponse;
       if (!response.ok) throw new Error(failureMessage(payload));
-      setFeedback({ tone: "success", message: protectedMode ? "The approved roster changes were applied." : "The Preview import was applied." });
+      setFeedback({ tone: "success", message: attendance
+        ? "The attendance action and Attended responses were recorded."
+        : protectedMode ? "The approved roster changes were applied." : "The Preview import was applied." });
       setConfirmation("");
       router.refresh();
     } catch (error) {
@@ -92,7 +96,7 @@ export function ImportExecutionControl({ batchId, fingerprint, fingerprintShort,
     </div>
     <div className="form-actions">
       <button className="button" type="submit" disabled={pending}>
-        {pending ? "Executing…" : protectedMode ? "Execute protected import" : "Execute Preview import"}
+        {pending ? "Executing…" : attendance ? "Create attendance action" : protectedMode ? "Execute protected import" : "Execute Preview import"}
       </button>
     </div>
     {feedback ? <div className={`form-message${feedback.tone === "success" ? " success" : ""}`} role={feedback.tone === "error" ? "alert" : "status"}>{feedback.message}</div> : null}

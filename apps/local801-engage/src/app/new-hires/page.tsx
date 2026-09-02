@@ -168,7 +168,7 @@ export default async function NewHiresPage({ searchParams }: { searchParams: Sea
     <PageHeader
       eyebrow="Members"
       title="New hires"
-      description="Track new Local 801 hires from assignment through first conversation and membership resolution."
+      description="Track employees newly identified by the latest approved roster or an authoritative New Hires file, from assignment through first conversation and membership resolution."
     />
 
     <DisclosureCard className="new-hires-filter-card queue-filter-panel" title="Find new hires" description={filterSummary.length ? `${filterSummary.length} filter${filterSummary.length === 1 ? "" : "s"} applied. Open to change the current view.` : "Narrow the list by contact, assignment, membership status, or hire date."} defaultOpen={filterSummary.length === 0}>
@@ -227,7 +227,7 @@ export default async function NewHiresPage({ searchParams }: { searchParams: Sea
     {!unavailable ? <AppliedFilterSummary items={filterSummary} clearHref="/new-hires" /> : null}
 
     {!unavailable ? <section className="metrics-grid new-hire-summary" aria-label="New-hire summary">
-      <StatCard label="New hires" value={results.total} detail="People in this view" tone="brand" />
+      <StatCard label="New hires" value={results.total} detail="Current tracked cohort" tone="brand" />
       <StatCard label="No conversation yet" value={results.summary.neverEngaged} detail="No recorded contact" tone="attention" />
       <StatCard label="Unassigned" value={results.summary.unassigned} detail="No current organizer assignment" tone="attention" />
       <StatCard label="Open follow-up" value={results.summary.openFollowups} detail="Follow-up still outstanding" />
@@ -344,8 +344,9 @@ export default async function NewHiresPage({ searchParams }: { searchParams: Sea
         </>}
     </SectionCard>
 
-    <DisclosureCard className="new-hires-journey-disclosure" title="How new-hire follow-up works" description="The stages come from recorded work. They show progress, not performance.">
+    <DisclosureCard className="new-hires-journey-disclosure" title="How new hires are identified" description="A current-roster import compares the approved snapshot with the previous approved snapshot.">
       <div className="new-hire-journey">
+        <p className="muted">An employee qualifies when their MAPE Hire Date falls after the previous snapshot and on or before the current snapshot, and they did not appear on the previous list. The first snapshot uses a 30-day lookback. A separate authoritative New Hires file can replace this cohort.</p>
         <div className="workflow-step-list" aria-label="New-hire stages">
           {[
             ["1", "New", "No organizer assignment or contact recorded"],

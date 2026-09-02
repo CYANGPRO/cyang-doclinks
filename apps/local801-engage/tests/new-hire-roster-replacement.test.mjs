@@ -27,3 +27,25 @@ test("migration 0043 gives the scoped runtime roles only the New hires access th
   assert.doesNotMatch(migration, /grant[^;]*delete[^;]*new_hire_roster_entries/i);
   assert.match(migration, /revoke all on table local801\.new_hire_roster_entries from public/);
 });
+
+test("migration 0044 preserves employee history and rebuilds New hires from roster snapshots", async () => {
+  const migration = await readFile(new URL("../db/migrations/0044__durable_employee_history_and_roster_new_hires.sql", import.meta.url), "utf8");
+  assert.match(migration, /before delete on local801\.people/i);
+  assert.match(migration, /Employee records must be archived and cannot be deleted/);
+  assert.match(migration, /person\.hire_date > coalesce\(prior\.snapshot_date, latest\.snapshot_date - 30\)/i);
+  assert.match(migration, /person\.hire_date <= latest\.snapshot_date/i);
+  assert.match(migration, /not exists \([\s\S]*previous_row\.snapshot_id = prior\.id[\s\S]*previous_row\.person_id = current_row\.person_id/i);
+  assert.match(migration, /update local801\.new_hire_roster_entries roster[\s\S]*set archived_at = now\(\)/i);
+  assert.doesNotMatch(migration, /delete\s+from\s+local801\.people/i);
+});
+
+test("current-roster execution derives and replaces the New hires cohort in both apply paths", async () => {
+  for (const relativePath of ["../src/lib/import-execution.ts", "../src/lib/pii-protected-import-apply.ts"]) {
+    const service = await readFile(new URL(relativePath, import.meta.url), "utf8");
+    assert.match(service, /current_roster_new_hires AS MATERIALIZED/i);
+    assert.match(service, /batch\.import_kind = 'current_roster'/);
+    assert.match(service, /snapshot_date - INTERVAL '30 days'/i);
+    assert.match(service, /previous_row\.person_id = (?:target|mutation)\.target_person_id/);
+    assert.match(service, /batch\.import_kind IN \('current_roster','new_hires','recent_hires'\)/);
+  }
+});

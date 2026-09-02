@@ -48,7 +48,7 @@ test("protected execute route confirms preflight fingerprint before entering rev
   const preflight = route.indexOf("getImportExecutionPreflight(actor, batchId)");
   const stale = route.indexOf("preflight.fingerprint !== fingerprint");
   const enterReview = route.indexOf("enterImportReviewForProtectedExecution(actor, batchId)");
-  const prepare = route.indexOf("prepareProtectedImportExecution(actor, batchId)");
+  const prepare = route.indexOf("prepareProtectedImportExecution(actor, batchId,");
   const apply = route.indexOf("applyPreparedProtectedImport(");
   assert.ok(preflight >= 0 && stale > preflight && enterReview > stale && prepare > enterReview && apply > prepare);
   assert.match(route, /ImportExecutionLifecycleError/);
