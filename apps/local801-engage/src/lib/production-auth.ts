@@ -2,7 +2,7 @@ import "server-only";
 
 import { queryLocal801, runLocal801Transaction, type DatabaseQuery, type DatabaseStatement } from "./db.ts";
 import type { Role } from "./access.ts";
-import { CURRENT_ACCESS_POLICY } from "./policy-contract.ts";
+import { REQUIRED_ACCESS_POLICY_PARAMETERS } from "./policy-contract.ts";
 
 const subjectPattern = /^[\x21-\x7e]{1,255}$/;
 const providerPattern = /^[a-z0-9][a-z0-9._-]{0,63}$/;
@@ -226,12 +226,14 @@ export async function authorizeProductionIdentity(
     SELECT organization.slug AS organization_slug, organization.id::text AS organization_id,
       app_user.id AS user_id, app_user.email,
       app_user.auth_session_version, role.code AS role, identity.provider_subject AS linked_subject,
-      EXISTS (
-        SELECT 1 FROM local801.user_policy_acknowledgements acknowledgement
+      2 = (
+        SELECT count(*) FROM local801.user_policy_acknowledgements acknowledgement
         WHERE acknowledgement.organization_id = organization.id
           AND acknowledgement.user_id = app_user.id
-          AND acknowledgement.policy_key = $4::text
-          AND acknowledgement.policy_version = $5::text
+          AND (
+            (acknowledgement.policy_key = $4::text AND acknowledgement.policy_version = $5::text)
+            OR (acknowledgement.policy_key = $6::text AND acknowledgement.policy_version = $7::text)
+          )
       ) AS policy_acknowledged
     FROM local801.organizations organization
     JOIN local801.users app_user
@@ -253,8 +255,7 @@ export async function authorizeProductionIdentity(
     config.organizationSlug,
     identity.email,
     identity.providerId,
-    CURRENT_ACCESS_POLICY.key,
-    CURRENT_ACCESS_POLICY.version,
+    ...REQUIRED_ACCESS_POLICY_PARAMETERS,
   ]);
   if (rows.length !== 1) throw new ProductionAuthError("USER_NOT_PROVISIONED", "No unique active Local 801 account is provisioned for this identity.");
   const row = rows[0];
@@ -337,12 +338,14 @@ export async function resolveProductionSessionBinding(
     SELECT organization.slug AS organization_slug, organization.id::text AS organization_id,
       app_user.id AS user_id, app_user.email,
       app_user.auth_session_version, role.code AS role, NULL::text AS linked_subject,
-      EXISTS (
-        SELECT 1 FROM local801.user_policy_acknowledgements acknowledgement
+      2 = (
+        SELECT count(*) FROM local801.user_policy_acknowledgements acknowledgement
         WHERE acknowledgement.organization_id = organization.id
           AND acknowledgement.user_id = app_user.id
-          AND acknowledgement.policy_key = $4::text
-          AND acknowledgement.policy_version = $5::text
+          AND (
+            (acknowledgement.policy_key = $4::text AND acknowledgement.policy_version = $5::text)
+            OR (acknowledgement.policy_key = $6::text AND acknowledgement.policy_version = $7::text)
+          )
       ) AS policy_acknowledged
     FROM local801.organizations organization
     JOIN local801.users app_user
@@ -361,8 +364,7 @@ export async function resolveProductionSessionBinding(
     session.organizationSlug,
     session.userId,
     session.sessionVersion,
-    CURRENT_ACCESS_POLICY.key,
-    CURRENT_ACCESS_POLICY.version,
+    ...REQUIRED_ACCESS_POLICY_PARAMETERS,
   ]);
   if (rows.length !== 1) return null;
   const row = rows[0];

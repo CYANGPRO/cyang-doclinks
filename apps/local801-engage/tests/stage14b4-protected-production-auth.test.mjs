@@ -369,6 +369,8 @@ test("protected session validation combines organization and active-user authori
       4,
       "privacy-acceptable-use",
       "2026-08-18",
+      "mape-data-privacy-agreement",
+      "2026-09-02",
     ]);
     assert.equal(binding?.organizationId, organizationId);
     assert.equal(binding?.email, "owner@example.test");
@@ -521,6 +523,8 @@ test("first sign-in binds the exact CAT account recorded by Entra onboarding reg
       "bbbbbbbb-0000-4000-8000-000000000002",
       "privacy-acceptable-use",
       "2026-08-18",
+      "mape-data-privacy-agreement",
+      "2026-09-02",
     ]);
     const subjectLookup = sqlCalls.find(({ sql }) => sql.includes("protected-subject-lookup"));
     assert.equal(subjectLookup.parameters.length, 5);

@@ -222,7 +222,11 @@ test("production identity binding requires one active provisioned user with one 
   const result = await authorizeProductionIdentity(identity, config, {
     query: async (sql, parameters) => {
       sqlText = sql;
-      assert.deepEqual(parameters, ["local801", "person@example.test", "local801-oidc", "privacy-acceptable-use", "2026-08-18"]);
+      assert.deepEqual(parameters, [
+        "local801", "person@example.test", "local801-oidc",
+        "privacy-acceptable-use", "2026-08-18",
+        "mape-data-privacy-agreement", "2026-09-02",
+      ]);
       return [bindingRow()];
     },
     transaction: async (statements) => transactions.push(statements),
@@ -279,7 +283,11 @@ test("production session is revalidated against live active user, role, organiza
   assert.equal(valid?.organizationId, organizationId);
   assert.equal(valid?.email, "person@example.test");
   assert.equal(valid?.policyAcknowledged, true);
-  assert.deepEqual(parameters, ["local801", userId, 3, "privacy-acceptable-use", "2026-08-18"]);
+  assert.deepEqual(parameters, [
+    "local801", userId, 3,
+    "privacy-acceptable-use", "2026-08-18",
+    "mape-data-privacy-agreement", "2026-09-02",
+  ]);
   const pending = await resolveProductionSessionBinding({ organizationSlug: "local801", userId, sessionVersion: 3 }, async () => [bindingRow({ policy_acknowledged: false })]);
   assert.equal(pending?.policyAcknowledged, false);
   const revoked = await resolveProductionSessionBinding({ organizationSlug: "local801", userId, sessionVersion: 3 }, async () => []);

@@ -13,7 +13,7 @@ import {
   type EncryptedPiiField,
 } from "./pii-protection.ts";
 import type { ProductionAuthBinding, ProductionAuthConfig, ProductionIdentity } from "./production-auth.ts";
-import { CURRENT_ACCESS_POLICY } from "./policy-contract.ts";
+import { REQUIRED_ACCESS_POLICY_PARAMETERS } from "./policy-contract.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -140,12 +140,14 @@ async function resolveUserByProtectedEmail(
     SELECT organization.slug AS organization_slug, organization.id::text AS organization_id,
       app_user.id::text AS user_id, app_user.auth_session_version, role.code AS role,
       protected.email_encrypted_payload, protected.email_encryption_key_version, protected.email_encryption_format_version,
-      EXISTS (
-        SELECT 1 FROM local801.user_policy_acknowledgements acknowledgement
+      2 = (
+        SELECT count(*) FROM local801.user_policy_acknowledgements acknowledgement
         WHERE acknowledgement.organization_id = organization.id
           AND acknowledgement.user_id = app_user.id
-          AND acknowledgement.policy_key = $4::text
-          AND acknowledgement.policy_version = $5::text
+          AND (
+            (acknowledgement.policy_key = $4::text AND acknowledgement.policy_version = $5::text)
+            OR (acknowledgement.policy_key = $6::text AND acknowledgement.policy_version = $7::text)
+          )
       ) AS policy_acknowledged
     FROM local801.organizations organization
     JOIN local801.pii_exact_indexes email_index
@@ -169,8 +171,7 @@ async function resolveUserByProtectedEmail(
     organization.id,
     lookup.blindIndexKeyVersion,
     lookup.blindIndex,
-    CURRENT_ACCESS_POLICY.key,
-    CURRENT_ACCESS_POLICY.version,
+    ...REQUIRED_ACCESS_POLICY_PARAMETERS,
   ]);
   if (rows.length !== 1) authError("USER_NOT_PROVISIONED", "No unique active Local 801 account is provisioned for this identity.");
   const account = protectedUserAccount(organization, rows[0]);
@@ -312,12 +313,14 @@ async function resolveUserByOnboardingObjectId(
     SELECT organization.slug AS organization_slug, organization.id::text AS organization_id,
       app_user.id::text AS user_id, app_user.auth_session_version, role.code AS role,
       protected.email_encrypted_payload, protected.email_encryption_key_version, protected.email_encryption_format_version,
-      EXISTS (
-        SELECT 1 FROM local801.user_policy_acknowledgements acknowledgement
+      2 = (
+        SELECT count(*) FROM local801.user_policy_acknowledgements acknowledgement
         WHERE acknowledgement.organization_id = organization.id
           AND acknowledgement.user_id = app_user.id
-          AND acknowledgement.policy_key = $3::text
-          AND acknowledgement.policy_version = $4::text
+          AND (
+            (acknowledgement.policy_key = $3::text AND acknowledgement.policy_version = $4::text)
+            OR (acknowledgement.policy_key = $5::text AND acknowledgement.policy_version = $6::text)
+          )
       ) AS policy_acknowledged
     FROM local801.user_identity_onboarding onboarding
     JOIN local801.organizations organization
@@ -337,7 +340,7 @@ async function resolveUserByOnboardingObjectId(
       AND onboarding.provider_user_id = $2::uuid
       AND onboarding.status = 'ready'
     LIMIT 2
-  `, [organization.id, providerUserId, CURRENT_ACCESS_POLICY.key, CURRENT_ACCESS_POLICY.version]);
+  `, [organization.id, providerUserId, ...REQUIRED_ACCESS_POLICY_PARAMETERS]);
   if (rows.length !== 1) authError("USER_NOT_PROVISIONED", "No unique active Local 801 account is approved for this directory identity.");
   const row = rows[0];
   const role = asRole(row.role);
@@ -378,12 +381,14 @@ async function resolveAccountByProtectedSubject(
       identity_protected.provider_subject_encrypted_payload,
       identity_protected.provider_subject_encryption_key_version,
       identity_protected.provider_subject_encryption_format_version,
-      EXISTS (
-        SELECT 1 FROM local801.user_policy_acknowledgements acknowledgement
+      2 = (
+        SELECT count(*) FROM local801.user_policy_acknowledgements acknowledgement
         WHERE acknowledgement.organization_id = organization.id
           AND acknowledgement.user_id = app_user.id
-          AND acknowledgement.policy_key = $6::text
-          AND acknowledgement.policy_version = $7::text
+          AND (
+            (acknowledgement.policy_key = $6::text AND acknowledgement.policy_version = $7::text)
+            OR (acknowledgement.policy_key = $8::text AND acknowledgement.policy_version = $9::text)
+          )
       ) AS policy_acknowledged
     FROM local801.pii_exact_indexes subject_index
     JOIN local801.auth_identities auth_identity
@@ -420,8 +425,7 @@ async function resolveAccountByProtectedSubject(
     identity.providerId,
     subjectIndex.blindIndexKeyVersion,
     subjectIndex.blindIndex,
-    CURRENT_ACCESS_POLICY.key,
-    CURRENT_ACCESS_POLICY.version,
+    ...REQUIRED_ACCESS_POLICY_PARAMETERS,
   ]);
   if (rows.length > 1) authError("IDENTITY_MISMATCH", "The identity-provider subject is not uniquely linked.");
   if (rows.length === 0) return null;
@@ -834,12 +838,14 @@ export async function resolveProtectedProductionSessionBinding(
     SELECT organization.slug AS organization_slug, organization.id::text AS organization_id,
       app_user.id::text AS user_id, app_user.auth_session_version, role.code AS role,
       protected.email_encrypted_payload, protected.email_encryption_key_version, protected.email_encryption_format_version,
-      EXISTS (
-        SELECT 1 FROM local801.user_policy_acknowledgements acknowledgement
+      2 = (
+        SELECT count(*) FROM local801.user_policy_acknowledgements acknowledgement
         WHERE acknowledgement.organization_id = organization.id
           AND acknowledgement.user_id = app_user.id
-          AND acknowledgement.policy_key = $4::text
-          AND acknowledgement.policy_version = $5::text
+          AND (
+            (acknowledgement.policy_key = $4::text AND acknowledgement.policy_version = $5::text)
+            OR (acknowledgement.policy_key = $6::text AND acknowledgement.policy_version = $7::text)
+          )
       ) AS policy_acknowledged
     FROM local801.organizations organization
     JOIN local801.users app_user
@@ -856,8 +862,7 @@ export async function resolveProtectedProductionSessionBinding(
     session.organizationSlug,
     session.userId,
     session.sessionVersion,
-    CURRENT_ACCESS_POLICY.key,
-    CURRENT_ACCESS_POLICY.version,
+    ...REQUIRED_ACCESS_POLICY_PARAMETERS,
   ]);
   if (rows.length !== 1) return null;
   const row = rows[0];

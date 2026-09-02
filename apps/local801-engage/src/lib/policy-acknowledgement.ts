@@ -2,7 +2,7 @@ import "server-only";
 
 import { writeAuditEvent } from "./audit.ts";
 import { withLocal801Transaction, type DatabaseQuery } from "./db.ts";
-import { CURRENT_ACCESS_POLICY } from "./policy-contract.ts";
+import { REQUIRED_ACCESS_POLICIES, REQUIRED_ACCESS_POLICY_PARAMETERS } from "./policy-contract.ts";
 
 type PolicyAcknowledgementInput = Readonly<{
   organizationSlug: string;
@@ -13,6 +13,8 @@ type PolicyAcknowledgementInput = Readonly<{
 type PolicyAcknowledgementRow = {
   acknowledgement_id: string;
   organization_id: string;
+  policy_key: string;
+  policy_version: string;
   inserted: boolean;
 };
 
@@ -27,7 +29,7 @@ export class PolicyAcknowledgementError extends Error {
   }
 }
 
-export async function acceptCurrentAccessPolicy(
+export async function acceptRequiredAccessPolicies(
   input: PolicyAcknowledgementInput,
   dependencies: {
     transaction?: TransactionRunner;
@@ -45,7 +47,7 @@ export async function acceptCurrentAccessPolicy(
   const audit = dependencies.audit ?? writeAuditEvent;
   return transaction(async (query) => {
     const rows = await query<PolicyAcknowledgementRow>(`
-      /* policy-acknowledgement:accept-current */
+      /* policy-acknowledgement:accept-required */
       WITH target AS (
         SELECT organization.id AS organization_id, app_user.id AS user_id
         FROM local801.organizations organization
@@ -57,63 +59,79 @@ export async function acceptCurrentAccessPolicy(
         WHERE organization.slug = $1::text
           AND organization.archived_at IS NULL
         FOR UPDATE OF app_user
+      ), required_policies(policy_key, policy_version) AS (
+        VALUES ($4::text, $5::text), ($6::text, $7::text)
       ), inserted AS (
         INSERT INTO local801.user_policy_acknowledgements
           (organization_id, user_id, policy_key, policy_version)
-        SELECT target.organization_id, target.user_id, $4::text, $5::text
-        FROM target
+        SELECT target.organization_id, target.user_id, required_policies.policy_key, required_policies.policy_version
+        FROM target CROSS JOIN required_policies
         ON CONFLICT (organization_id, user_id, policy_key, policy_version) DO NOTHING
-        RETURNING id, organization_id
+        RETURNING id, organization_id, policy_key, policy_version
       ), accepted AS (
-        SELECT inserted.id AS acknowledgement_id, inserted.organization_id, true AS inserted
+        SELECT inserted.id AS acknowledgement_id, inserted.organization_id,
+          inserted.policy_key, inserted.policy_version, true AS inserted
         FROM inserted
         UNION ALL
-        SELECT existing.id AS acknowledgement_id, existing.organization_id, false AS inserted
+        SELECT existing.id AS acknowledgement_id, existing.organization_id,
+          existing.policy_key, existing.policy_version, false AS inserted
         FROM local801.user_policy_acknowledgements existing
         JOIN target
           ON target.organization_id = existing.organization_id
          AND target.user_id = existing.user_id
-        WHERE existing.policy_key = $4::text
-          AND existing.policy_version = $5::text
-          AND NOT EXISTS (SELECT 1 FROM inserted)
+        JOIN required_policies
+          ON required_policies.policy_key = existing.policy_key
+         AND required_policies.policy_version = existing.policy_version
+        WHERE NOT EXISTS (
+          SELECT 1 FROM inserted
+          WHERE inserted.policy_key = existing.policy_key
+            AND inserted.policy_version = existing.policy_version
+        )
       )
-      SELECT acknowledgement_id::text, organization_id::text, inserted
+      SELECT acknowledgement_id::text, organization_id::text, policy_key, policy_version, inserted
       FROM accepted
-      LIMIT 2
+      ORDER BY policy_key
+      LIMIT 3
     `, [
       input.organizationSlug,
       input.userId,
       input.sessionVersion,
-      CURRENT_ACCESS_POLICY.key,
-      CURRENT_ACCESS_POLICY.version,
+      ...REQUIRED_ACCESS_POLICY_PARAMETERS,
     ]);
 
-    const row = rows.length === 1 ? rows[0] : undefined;
-    if (!row
-      || !uuidPattern.test(row.acknowledgement_id)
-      || !uuidPattern.test(row.organization_id)
-      || typeof row.inserted !== "boolean") {
+    const expectedPolicies = new Set(REQUIRED_ACCESS_POLICIES.map((policy) => `${policy.key}:${policy.version}`));
+    if (rows.length !== REQUIRED_ACCESS_POLICIES.length
+      || rows.some((row) => !uuidPattern.test(row.acknowledgement_id)
+        || !uuidPattern.test(row.organization_id)
+        || typeof row.inserted !== "boolean"
+        || !expectedPolicies.delete(`${row.policy_key}:${row.policy_version}`))
+      || expectedPolicies.size !== 0) {
       throw new PolicyAcknowledgementError();
     }
 
-    if (row.inserted) {
-      await audit({
-        eventType: "policy.acknowledged",
-        actorId: input.userId,
-        organizationId: row.organization_id,
-        subjectType: "policy_acknowledgement",
-        subjectId: row.acknowledgement_id,
-        payload: {
-          policyKey: CURRENT_ACCESS_POLICY.key,
-          policyVersion: CURRENT_ACCESS_POLICY.version,
-        },
-      }, query);
+    for (const row of rows) {
+      if (row.inserted) {
+        await audit({
+          eventType: "policy.acknowledged",
+          actorId: input.userId,
+          organizationId: row.organization_id,
+          subjectType: "policy_acknowledgement",
+          subjectId: row.acknowledgement_id,
+          payload: {
+            policyKey: row.policy_key,
+            policyVersion: row.policy_version,
+          },
+        }, query);
+      }
     }
 
     return Object.freeze({
-      acknowledgementId: row.acknowledgement_id,
-      newlyAcknowledged: row.inserted,
-      policy: CURRENT_ACCESS_POLICY,
+      acknowledgements: Object.freeze(rows.map((row) => Object.freeze({
+        acknowledgementId: row.acknowledgement_id,
+        newlyAcknowledged: row.inserted,
+        policy: REQUIRED_ACCESS_POLICIES.find((policy) => policy.key === row.policy_key && policy.version === row.policy_version),
+      }))),
+      newlyAcknowledgedCount: rows.filter((row) => row.inserted).length,
     });
   });
 }

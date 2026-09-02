@@ -1,7 +1,7 @@
 import "server-only";
 
 import { roleLabels, type Role } from "./access.ts";
-import { CURRENT_ACCESS_POLICY } from "./policy-contract.ts";
+import { CURRENT_ACCESS_POLICY, MAPE_DATA_PRIVACY_POLICY } from "./policy-contract.ts";
 import { queryLocal801, type DatabaseQuery } from "./db.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -132,7 +132,7 @@ export function buildOnboardingInvitationMessage(
     `   If registration does not open automatically, use this tenant-specific Security info page while signed in as ${target.email}: ${securityInfoUrl}`,
     `4. Go to ${config.appUrl}/sign-in, choose Continue with Microsoft Entra ID, and select exactly ${target.email}. Microsoft might label the Local 801 guest entry as a work or school account; that label identifies Local 801's guest directory and does not connect your employer. Do not select another personal or employer account.`,
     "5. Approve the Microsoft Authenticator sign-in request and enter the displayed number when prompted.",
-    `6. Accept ${CURRENT_ACCESS_POLICY.title} (${CURRENT_ACCESS_POLICY.version}) before using the workspace.`,
+    `6. Separately acknowledge ${CURRENT_ACCESS_POLICY.title} (${CURRENT_ACCESS_POLICY.version}) and the ${MAPE_DATA_PRIVACY_POLICY.title} before using the workspace. Review the MAPE form at ${MAPE_DATA_PRIVACY_POLICY.url}.`,
     "",
     "By accessing the workspace, you agree to use it only for authorized Local 801 work; protect member and employee information; avoid shared accounts, forwarded invitations, and unapproved offline copies; follow records, privacy, and incident-reporting requirements; and understand that security-relevant activity is audited. Your access is limited to the assigned CAT role and may be changed or revoked.",
     "",

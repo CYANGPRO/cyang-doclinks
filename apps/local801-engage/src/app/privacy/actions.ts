@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { getPolicyAcknowledgementUser, getPreviewUser } from "@/lib/authz.server";
-import { acceptCurrentAccessPolicy } from "@/lib/policy-acknowledgement";
+import { acceptRequiredAccessPolicies } from "@/lib/policy-acknowledgement";
 import { safePolicyReturnPath } from "@/lib/policy-return-path";
 
 function policyUrl(nextPath: string, error: "required" | "unavailable") {
@@ -12,7 +12,9 @@ function policyUrl(nextPath: string, error: "required" | "unavailable") {
 
 export async function acknowledgePrivacyAndAcceptableUse(formData: FormData) {
   const nextPath = safePolicyReturnPath(formData.get("next"));
-  if (formData.get("accepted") !== "yes") redirect(policyUrl(nextPath, "required"));
+  if (formData.get("acceptedCatPolicy") !== "yes" || formData.get("acceptedMapePolicy") !== "yes") {
+    redirect(policyUrl(nextPath, "required"));
+  }
 
   const pendingUser = await getPolicyAcknowledgementUser();
   if (!pendingUser) {
@@ -23,7 +25,7 @@ export async function acknowledgePrivacyAndAcceptableUse(formData: FormData) {
   let failed = false;
   try {
     if (pendingUser.sessionVersion === null) throw new Error("Production session version is unavailable.");
-    await acceptCurrentAccessPolicy({
+    await acceptRequiredAccessPolicies({
       organizationSlug: pendingUser.organizationId,
       userId: pendingUser.id,
       sessionVersion: pendingUser.sessionVersion,

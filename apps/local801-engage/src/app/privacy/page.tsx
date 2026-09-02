@@ -1,12 +1,12 @@
 import { redirect } from "next/navigation";
 import { AlertBanner, PageHeader, SectionCard } from "@/components/DesignSystem";
 import { getPolicyAcknowledgementUser, getPreviewUser } from "@/lib/authz.server";
-import { CURRENT_ACCESS_POLICY } from "@/lib/policy-contract";
+import { CURRENT_ACCESS_POLICY, MAPE_DATA_PRIVACY_POLICY } from "@/lib/policy-contract";
 import { safePolicyReturnPath } from "@/lib/policy-return-path";
 import { acknowledgePrivacyAndAcceptableUse } from "./actions";
 
 const errorMessages = {
-  required: "You must confirm the privacy and acceptable-use requirements before continuing.",
+  required: "You must separately confirm both the CAT privacy and acceptable-use policy and MAPE's Data Privacy Agreement before continuing.",
   unavailable: "The acknowledgment could not be recorded. No access was granted. Please try again or contact an administrator.",
 } as const;
 
@@ -46,9 +46,22 @@ export default async function PrivacyAcknowledgementPage({
       <form action={acknowledgePrivacyAndAcceptableUse} className="policy-form">
         <input name="next" type="hidden" value={nextPath} />
         <label className="policy-confirmation">
-          <input name="accepted" required type="checkbox" value="yes" />
+          <input name="acceptedCatPolicy" required type="checkbox" value="yes" />
           <span>I understand and agree to follow this privacy and acceptable-use policy.</span>
         </label>
+        <div className="policy-external-agreement">
+          <p><strong>You must follow MAPE&apos;s Data Privacy Agreement to safeguard member and employee data.</strong></p>
+          <p>
+            Review and complete the{" "}
+            <a href={MAPE_DATA_PRIVACY_POLICY.url} rel="noopener noreferrer" target="_blank">
+              MAPE Data Privacy Agreement Form
+            </a>.
+          </p>
+          <label className="policy-confirmation">
+            <input name="acceptedMapePolicy" required type="checkbox" value="yes" />
+            <span>I separately acknowledge that I must follow MAPE&apos;s Data Privacy Agreement to safeguard member and employee data.</span>
+          </label>
+        </div>
         <button className="button" type="submit">Acknowledge and continue</button>
       </form>
     </SectionCard>
