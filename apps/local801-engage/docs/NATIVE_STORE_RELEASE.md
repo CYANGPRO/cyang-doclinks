@@ -32,7 +32,7 @@ acceptance evidence plus Apple identifiers. It intentionally does not require An
 4. In App Store Connect, create the iOS app with name **Engaging Local 801**, primary language English (U.S.), bundle ID above, and an owner-controlled SKU such as `local801-engage-ios`.
 5. On a trusted Mac with current Xcode, open `ios/App/App.xcodeproj`, select the **App** target, choose the Local 801 team, and leave automatic signing enabled.
 6. Confirm Release entitlements show Production App Attest, Production APS, and `applinks:cat.cyang.io`.
-7. Run `npm ci`, `npm run native:sync`, then select **Any iOS Device (arm64)** and use **Product → Archive**.
+7. Run `npm ci`, `npm run mobile:sync`, then select **Any iOS Device (arm64)** and use **Product → Archive**.
 8. In Organizer, run **Validate App**, then **Distribute App → App Store Connect → Upload**. Do not use Development or Ad Hoc distribution for the store build.
 9. In App Store Connect, use the repository text in `store/ios/en-US`, category **Business**, privacy URL above, support URL above, and synthetic iPhone screenshots.
 10. Complete App Privacy consistently with `PrivacyInfo.xcprivacy`: app functionality collects linked identity/contact/member-sensitive/user-content/device/interaction data; limited diagnostics are not linked; no tracking; no advertising.
