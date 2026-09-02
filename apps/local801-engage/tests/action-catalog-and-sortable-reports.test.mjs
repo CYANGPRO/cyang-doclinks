@@ -29,6 +29,7 @@ test("catalog page exposes all four current response states and custom action ma
   const additionalResponsesMigration = await read("../db/migrations/0042__additional_custom_action_responses.sql");
   for (const state of ["Willing", "Considering", "Declined", "Completed"]) assert.match(migration, new RegExp(state));
   assert.match(page, /ActionResponseEditor/);
+  assert.match(page, /ActionArchiveControl/);
   assert.match(page, /action\.responseOptions\.filter/);
   assert.match(manager, /Customize responses/);
   assert.match(manager, /\+ Add response choice/);
@@ -37,8 +38,13 @@ test("catalog page exposes all four current response states and custom action ma
   assert.match(additionalResponsesMigration, /custom:\[0-9a-f\]/);
   assert.match(additionalResponsesMigration, /response_status <> 'declined'/);
   assert.match(manager, /method: "PATCH"/);
+  assert.match(manager, /method: "DELETE"/);
+  assert.match(manager, /Confirm archive/);
+  assert.match(manager, /retain past responses and audit history/);
   assert.match(manager, /Escalation level/);
   assert.match(route, /requirePreviewUser\("manageActionCatalog"\)/);
+  assert.match(route, /archiveEmployeeActionDefinition/);
+  assert.match(route, /export async function DELETE/);
   assert.match(route, /hasExactSameOrigin/);
   assert.match(route, /enforceWorkspaceRateLimit/);
   assert.match(route, /request\.headers\.get\("content-length"\)/);

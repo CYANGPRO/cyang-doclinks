@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   __testing,
+  archiveEmployeeActionDefinition,
   createEmployeeActionDefinition,
   getEmployeeActionProfile,
   listEmployeeActionDefinitions,
@@ -107,6 +108,7 @@ test("employee action profile is a persistent running list without person contac
   assert.doesNotMatch(serialized, /personId|email|phone|address|note|contactValue/i);
   assert.match(calls[0].sql, /assignment\.primary_user_id = \$4::uuid OR assignment\.backup_user_id = \$4::uuid/);
   assert.match(calls[2].sql, /local801\.employee_action_responses history/);
+  assert.match(calls[2].sql, /action\.archived_at IS NULL/);
 });
 
 test("roles without recordEngagement cannot read person-level action willingness", async () => {
@@ -252,6 +254,42 @@ test("approved CAT, LCAT, data, and administrator roles can create audited actio
   }, { query }), /not authorized/i);
 });
 
+test("action managers archive definitions without deleting response history", async () => {
+  const statements = [];
+  const query = async (sql, parameters) => {
+    assert.match(sql, /employee-actions:resolve-handle/);
+    assert.deepEqual(parameters, [organizationId]);
+    return [{ id: actionId }];
+  };
+  const result = await archiveEmployeeActionDefinition(context("cat_admin"), {
+    actionHandle,
+  }, {
+    query,
+    runTransaction: async (items) => statements.push(...items),
+    prepareAudit: async (event) => ({ sql: "/* audit */ SELECT 1", parameters: [event.eventType, event.subjectType, event.payload.archived] }),
+  });
+  assert.deepEqual(result, { archived: true });
+  assert.equal(statements.length, 2);
+  assert.match(statements[0].sql, /employee-actions:archive-definition/);
+  assert.match(statements[0].sql, /UPDATE local801\.employee_actions action/);
+  assert.match(statements[0].sql, /SET archived_at = now\(\), updated_at = now\(\)/);
+  assert.match(statements[0].sql, /action\.archived_at IS NULL/);
+  assert.match(statements[0].sql, /role\.code IN \('system_owner','local_admin','membership_data_manager','cat_admin','cat_lead','cat_member'\)/);
+  assert.doesNotMatch(statements[0].sql, /DELETE FROM|employee_action_responses/i);
+  assert.deepEqual(statements[0].parameters, [organizationId, actionId, userId, "cat_admin"]);
+  assert.deepEqual(statements[1].parameters, ["config.change", "employee_action_definition", true]);
+});
+
+test("roles without catalog management cannot archive actions", async () => {
+  let queries = 0;
+  await assert.rejects(archiveEmployeeActionDefinition(context("report_viewer"), {
+    actionHandle,
+  }, {
+    query: async () => { queries += 1; return []; },
+  }), /not authorized/i);
+  assert.equal(queries, 0);
+});
+
 test("action managers can add a distinct custom response beyond the four defaults", async () => {
   const statements = [];
   const query = async (sql) => {
@@ -327,6 +365,8 @@ test("runtime contract matches the applied 0008 schema and does not use the supe
   assert.match(source, /reporting\.employee_action_current_responses/);
   assert.match(source, /response_status/);
   assert.match(source, /completed/);
+  assert.match(source, /employee-actions:archive-definition/);
+  assert.match(source, /SET archived_at = now\(\), updated_at = now\(\)/);
   assert.doesNotMatch(source, /local801\.employee_action_definitions/);
   assert.doesNotMatch(source, /local801\.employee_action_posture_events/);
   assert.doesNotMatch(source, /local801\.employee_action_response_events/);

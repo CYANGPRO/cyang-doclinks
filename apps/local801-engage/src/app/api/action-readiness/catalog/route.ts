@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requirePreviewUser } from "@/lib/authz.server";
-import { createEmployeeActionDefinition, updateEmployeeActionResponseOptions } from "@/lib/employee-actions";
+import { archiveEmployeeActionDefinition, createEmployeeActionDefinition, updateEmployeeActionResponseOptions } from "@/lib/employee-actions";
 import { enforceWorkspaceRateLimit, RateLimitError } from "@/lib/rate-limit";
 import { rateLimitResponse } from "@/lib/rate-limit-response";
 import { hasExactSameOrigin } from "@/lib/request-security";
@@ -87,5 +87,28 @@ export async function PATCH(request: Request) {
       : "The action response choices could not be updated safely.";
     const status = /too large/i.test(message) ? 413 : /must be JSON/i.test(message) ? 415 : /invalid|must be|at least|different/i.test(message) ? 400 : /authorized/i.test(message) ? 403 : 409;
     return json({ error: "ACTION_RESPONSE_OPTIONS_UNAVAILABLE", message }, status);
+  }
+}
+
+export async function DELETE(request: Request) {
+  if (!operationalRuntimeEnabled()) return json({ error: "NOT_FOUND" }, 404);
+  if (!hasExactSameOrigin(request)) return json({ error: "FORBIDDEN_ORIGIN", message: "This request must come from the signed-in application." }, 403);
+  const auth = await requirePreviewUser("manageActionCatalog");
+  if (!auth.ok) {
+    auth.response.headers.set("Cache-Control", noStore["Cache-Control"]);
+    return auth.response;
+  }
+  try {
+    const [context, body] = await Promise.all([resolveWorkspaceContext(auth.user), readJson(request)]);
+    await enforceWorkspaceRateLimit(context, "mutation");
+    const result = await archiveEmployeeActionDefinition(context, { actionHandle: body.actionHandle });
+    return json({ action: "archived", ...result });
+  } catch (error) {
+    if (error instanceof RateLimitError) return rateLimitResponse(error);
+    const message = error instanceof Error && /^(Action|Employee action)/.test(error.message)
+      ? error.message
+      : "The action could not be archived safely.";
+    const status = /too large/i.test(message) ? 413 : /must be JSON/i.test(message) ? 415 : /invalid/i.test(message) ? 400 : /authorized/i.test(message) ? 403 : 409;
+    return json({ error: "ACTION_ARCHIVE_UNAVAILABLE", message }, status);
   }
 }

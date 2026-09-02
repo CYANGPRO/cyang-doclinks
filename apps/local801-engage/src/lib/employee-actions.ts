@@ -491,6 +491,54 @@ export async function createEmployeeActionDefinition(
   return { handle: actionHandle(context.organizationId, actionId) };
 }
 
+export async function archiveEmployeeActionDefinition(
+  context: WorkspaceContext,
+  input: { actionHandle: unknown },
+  dependencies: EmployeeActionWriteDependencies = {},
+) {
+  if (!hasDefinitionManagement(context)) throw new Error("Employee action definition management is not authorized.");
+  const handle = requireActionHandle(input.actionHandle);
+  const query = dependencies.query ?? queryLocal801;
+  const runTransaction = dependencies.runTransaction ?? runLocal801Transaction;
+  const prepareAudit = dependencies.prepareAudit ?? prepareAtomicAuditStatement;
+  const actionId = await resolveActionId(context, handle, query);
+
+  const archiveStatement: DatabaseStatement = {
+    sql: `
+      /* employee-actions:archive-definition */
+      WITH archived AS (
+        UPDATE local801.employee_actions action
+        SET archived_at = now(), updated_at = now()
+        WHERE action.organization_id = $1::uuid
+          AND action.id = $2::uuid
+          AND action.archived_at IS NULL
+          AND EXISTS (
+            SELECT 1 FROM local801.users actor
+            JOIN local801.workspace_user_roles user_role ON user_role.user_id = actor.id
+            JOIN local801.workspace_roles role ON role.id = user_role.role_id AND role.organization_id = $1::uuid
+            WHERE actor.organization_id = $1::uuid AND actor.id = $3::uuid AND actor.deactivated_at IS NULL
+              AND role.code = $4::text
+              AND role.code IN ('system_owner','local_admin','membership_data_manager','cat_admin','cat_lead','cat_member')
+          )
+        RETURNING id
+      )
+      SELECT CASE WHEN count(*) = 1 THEN true ELSE 1 / count(*)::integer = 1 END AS action_archived
+      FROM archived
+    `,
+    parameters: [context.organizationId, actionId, context.userId, context.role],
+  };
+  const auditStatement = await prepareAudit({
+    eventType: "config.change",
+    actorId: context.userId,
+    organizationId: context.organizationId,
+    subjectType: "employee_action_definition",
+    subjectId: actionId,
+    payload: { archived: true },
+  }, query);
+  await runTransaction([archiveStatement, auditStatement]);
+  return { archived: true };
+}
+
 async function resolveActionId(
   context: WorkspaceContext,
   handle: string,

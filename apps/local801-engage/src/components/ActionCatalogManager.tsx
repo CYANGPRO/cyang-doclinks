@@ -110,6 +110,52 @@ export function ActionResponseEditor({ action }: { action: EmployeeActionDefinit
   </details>;
 }
 
+export function ActionArchiveControl({ action }: { action: Pick<EmployeeActionDefinition, "handle" | "label"> }) {
+  const router = useRouter();
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function archive() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/action-readiness/catalog", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ actionHandle: action.handle }),
+      });
+      const body = await response.json().catch(() => ({})) as { message?: unknown };
+      if (!response.ok) {
+        setError(typeof body.message === "string" ? body.message : "CAT couldn’t archive this action.");
+        return;
+      }
+      router.refresh();
+    } catch {
+      setError("CAT couldn’t archive this action. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <div className="stack">
+    <button className="button tertiary compact-button" type="button" aria-expanded={confirming}
+      onClick={() => { setConfirming((current) => !current); setError(null); }} disabled={busy}>
+      {confirming ? "Cancel" : "Archive action"}
+    </button>
+    {confirming ? <div className="confirmation-panel" role="group" aria-label={`Archive ${action.label}`}>
+      <strong>Archive “{action.label}”?</strong>
+      <p className="muted">It will disappear from the catalog and employee Action Readiness choices. CAT will retain past responses and audit history.</p>
+      <div className="form-actions">
+        <button className="button danger compact-button" type="button" onClick={archive} disabled={busy}>{busy ? "Archiving…" : "Confirm archive"}</button>
+        <button className="button secondary compact-button" type="button" onClick={() => { setConfirming(false); setError(null); }} disabled={busy}>Keep action</button>
+      </div>
+      {error ? <div className="form-message compact-message" role="alert">{error}</div> : null}
+    </div> : null}
+  </div>;
+}
+
 export function ActionCatalogManager() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
