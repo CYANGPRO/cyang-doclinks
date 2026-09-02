@@ -601,6 +601,7 @@ test("migrations and routes preserve protected authenticated boundaries across P
   const registeredUserMigration = readFileSync(new URL("../db/migrations/0037__registered_user_email_audience.sql", import.meta.url), "utf8");
   const attachmentMigration = readFileSync(new URL("../db/migrations/0038__member_email_document_attachments.sql", import.meta.url), "utf8");
   const productionMigration = readFileSync(new URL("../db/migrations/0039__production_member_email_delivery.sql", import.meta.url), "utf8");
+  const runtimePrivilegeMigration = readFileSync(new URL("../db/migrations/0046__member_email_runtime_privileges.sql", import.meta.url), "utf8");
   const page = readFileSync(new URL("../src/app/email-broadcasts/page.tsx", import.meta.url), "utf8");
   const previewPage = readFileSync(new URL("../src/app/email-broadcasts/[handle]/page.tsx", import.meta.url), "utf8");
   const http = readFileSync(new URL("../src/lib/member-email-http.ts", import.meta.url), "utf8");
@@ -621,6 +622,14 @@ test("migrations and routes preserve protected authenticated boundaries across P
   assert.match(productionMigration, /delivery_status/);
   assert.match(productionMigration, /member_email_templates/);
   assert.doesNotMatch(productionMigration, /recipient_email|email_address/i);
+  assert.match(runtimePrivilegeMigration, /revoke all on table[\s\S]*member_email_broadcasts[\s\S]*from public/i);
+  assert.match(runtimePrivilegeMigration, /grant select, insert, update on table local801\.member_email_broadcasts to local801_app/i);
+  assert.match(runtimePrivilegeMigration, /grant select, insert on table local801\.member_email_broadcast_content to local801_app/i);
+  assert.match(runtimePrivilegeMigration, /grant select, insert, update on table local801\.member_email_broadcast_recipients to local801_app/i);
+  assert.match(runtimePrivilegeMigration, /grant select, insert on table local801\.member_email_broadcast_attachments to local801_app/i);
+  assert.match(runtimePrivilegeMigration, /grant select, insert on table local801\.member_email_delivery_events to local801_app/i);
+  assert.match(runtimePrivilegeMigration, /grant select, insert on table local801\.member_email_templates to local801_app/i);
+  assert.doesNotMatch(runtimePrivilegeMigration, /grant\s+all|grant[^;]*delete/i);
   assert.match(page, /memberEmailRuntimeEnabled\(\)/);
   assert.match(page, /permission="sendMemberEmail"/);
   assert.match(page, /Promise\.allSettled/);
