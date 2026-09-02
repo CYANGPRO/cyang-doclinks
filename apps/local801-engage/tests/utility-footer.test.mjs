@@ -40,8 +40,14 @@ test("recommended public information pages are present and link to support", asy
   assert.match(about, /does not offer public sign-up/);
   assert.match(terms, /Use CAT only for approved Local 801 work/);
   assert.match(terms, /href="\/legal\/privacy"/);
+  assert.match(terms, /CAT records this as a separate acknowledgement from these terms/);
+  assert.match(terms, /You must follow MAPE&apos;s Data Privacy Agreement to safeguard member and employee data/);
+  assert.match(terms, /href=\{MAPE_DATA_PRIVACY_POLICY\.url\}/);
   assert.match(accessibility, /Report an accessibility barrier/);
   assert.match(accessibility, /href="\/support"/);
   assert.match(privacy, /href="\/support"/);
+  assert.match(privacy, /separately acknowledged both the CAT privacy and acceptable-use policy and MAPE&apos;s Data Privacy Agreement/);
+  assert.match(privacy, /This is a separate required acknowledgement before accessing CAT/);
+  assert.match(privacy, /href=\{MAPE_DATA_PRIVACY_POLICY\.url\}/);
   assert.match(support, /Never send credentials or member records/);
 });

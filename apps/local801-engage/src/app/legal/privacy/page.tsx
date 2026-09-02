@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader, SectionCard } from "@/components/DesignSystem";
+import { MAPE_DATA_PRIVACY_POLICY } from "@/lib/policy-contract";
 
 export const metadata: Metadata = {
   title: "Privacy Notice | Engaging Local 801",
@@ -12,10 +13,19 @@ export default function PublicPrivacyPage() {
     <PageHeader
       eyebrow="Privacy notice"
       title="How Engaging Local 801 handles information"
-      description="This notice applies to the Engaging Local 801 website and its iOS and Android applications. Last updated August 20, 2026."
+      description="This notice applies to the Engaging Local 801 website and its iOS and Android applications. Last updated September 2, 2026."
     />
     <SectionCard title="A private service for approved users" description="Engaging Local 801 does not offer public sign-up.">
-      <p>Local 801 administrators approve accounts and assign roles. Microsoft Entra ID verifies identity and MFA. CAT then checks that the account is active, has one role, has a current session, and has accepted the privacy and acceptable-use agreement.</p>
+      <p>Local 801 administrators approve accounts and assign roles. Microsoft Entra ID verifies identity and MFA. CAT then checks that the account is active, has one role, has a current session, and has separately acknowledged both the CAT privacy and acceptable-use policy and MAPE&apos;s Data Privacy Agreement.</p>
+    </SectionCard>
+    <SectionCard title="MAPE Data Privacy Agreement" description="This is a separate required acknowledgement before accessing CAT.">
+      <p><strong>You must follow MAPE&apos;s Data Privacy Agreement to safeguard member and employee data.</strong></p>
+      <p>
+        Review and complete the{" "}
+        <a href={MAPE_DATA_PRIVACY_POLICY.url} rel="noopener noreferrer" target="_blank">
+          MAPE Data Privacy Agreement Form
+        </a>.
+      </p>
     </SectionCard>
     <SectionCard title="Information CAT uses" description="CAT uses information needed for approved Local 801 work, security, and support.">
       <ul className="policy-list">

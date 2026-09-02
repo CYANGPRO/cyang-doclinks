@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader, SectionCard } from "@/components/DesignSystem";
+import { MAPE_DATA_PRIVACY_POLICY } from "@/lib/policy-contract";
 
 export const metadata: Metadata = {
   title: "Terms & Acceptable Use | Engaging Local 801",
@@ -12,7 +13,7 @@ export default function TermsPage() {
     <PageHeader
       eyebrow="Terms & acceptable use"
       title="Rules for using Engaging Local 801"
-      description="These requirements apply to the Engaging Local 801 website and mobile applications. Last updated August 25, 2026."
+      description="These requirements apply to the Engaging Local 801 website and mobile applications. Last updated September 2, 2026."
     />
     <SectionCard title="Use CAT only for approved Local 801 work" description="CAT is not a public service.">
       <p>Use only the account approved for you, and only for work allowed by your role. Do not share an account, invitation, signed-in session, exported record, or access method with anyone else.</p>
@@ -25,6 +26,15 @@ export default function TermsPage() {
         <li>Report suspected loss, disclosure, incorrect access, or account compromise promptly.</li>
         <li>Do not attempt to bypass authorization, interfere with service security, or access another person’s account or records.</li>
       </ul>
+    </SectionCard>
+    <SectionCard title="Follow MAPE's Data Privacy Agreement" description="CAT records this as a separate acknowledgement from these terms.">
+      <p><strong>You must follow MAPE&apos;s Data Privacy Agreement to safeguard member and employee data.</strong></p>
+      <p>
+        Review and complete the{" "}
+        <a href={MAPE_DATA_PRIVACY_POLICY.url} rel="noopener noreferrer" target="_blank">
+          MAPE Data Privacy Agreement Form
+        </a>.
+      </p>
     </SectionCard>
     <SectionCard title="Activity records and changes to access" description="CAT keeps records of important security and administrative activity.">
       <p>Access may be changed, suspended, or removed when a person’s responsibilities change, a security concern arises, or these rules are not followed. CAT features may also change as Local 801’s operational, security, legal, and records needs change.</p>
