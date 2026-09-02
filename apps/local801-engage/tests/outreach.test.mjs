@@ -99,7 +99,11 @@ test("outreach queue cards show full names, normalized membership, boxed fields,
     assert.match(queuePage, new RegExp(`label: "${label}"`));
   }
   assert.match(queuePage, /review-summary outreach-person-fields/);
+  assert.doesNotMatch(queuePage, /<strong>Your role<\/strong>/);
+  assert.match(queuePage, /<div className="outreach-contact-summary">[\s\S]*<dl className="outreach-contact-list">/);
   assert.match(stage18Styles, /\.outreach-person-fields > div[\s\S]*border: 1px solid var\(--border\)/);
+  assert.match(stage18Styles, /\.outreach-contact-summary \{[\s\S]*margin-top: 12px/);
+  assert.match(stage18Styles, /\.outreach-contact-list \{[\s\S]*grid-template-columns: repeat\(auto-fit/);
   assert.match(stage18Styles, /\.outreach-card-actions[\s\S]*margin-top: 20px/);
 });
 

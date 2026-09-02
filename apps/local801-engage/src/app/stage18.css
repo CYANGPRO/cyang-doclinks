@@ -290,6 +290,33 @@
   overflow-wrap: anywhere;
 }
 
+.outreach-contact-summary {
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-top: 12px;
+  min-width: 0;
+  padding: 12px 13px;
+}
+
+.outreach-contact-summary > strong {
+  color: var(--brand-navy-deep);
+  display: block;
+  font-size: .84rem;
+  margin-bottom: 8px;
+}
+
+.outreach-contact-summary > p { margin: 0; }
+.outreach-contact-list {
+  display: grid;
+  gap: 10px 20px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+  margin: 0;
+}
+.outreach-contact-list > div { display: grid; gap: 2px; min-width: 0; }
+.outreach-contact-list dt { color: var(--text-muted); font-size: .78rem; }
+.outreach-contact-list dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+
 .outreach-card-actions,
 .followup-card-actions {
   margin-top: 20px;

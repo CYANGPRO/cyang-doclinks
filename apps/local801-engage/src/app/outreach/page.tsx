@@ -202,11 +202,13 @@ export default async function OutreachPage({ searchParams }: { searchParams: Sea
               </div>
               <div className="review-summary outreach-person-fields">
                 <div><strong>Membership</strong><div>{membershipStatusLabel(person.membershipStatus)}</div></div>
-                <div><strong>Your role</strong><div>{person.assignmentRelationship === "primary" ? "Primary organizer" : person.assignmentRelationship === "backup" ? "Backup organizer" : "View only"}</div></div>
                 <div><strong>Last conversation</strong><div>{dateTime(person.latestEngagementAt)}{person.latestOutcome ? ` · ${person.latestOutcome}` : ""}</div></div>
                 <div><strong>Follow-up</strong><div>{person.overdueFollowupCount ? `${person.overdueFollowupCount} overdue` : person.openFollowupCount ? `${person.openFollowupCount} open · next ${dateTime(person.nextFollowupAt)}` : "No open follow-up"}</div></div>
                 <div><strong>Action readiness</strong><div>{person.willingActionLabels.length ? <>Willing: {person.willingActionLabels.join(", ")}</> : readiness(person)}</div></div>
-                <div className="outreach-contact-summary"><strong>Available contact</strong><div>{contactOptions.length ? contactOptions.map((contact) => <span key={contact.label}><span className="muted">{contact.label}: </span><a href={contact.href!}>{contact.value}</a></span>) : <span className="muted">No phone or email recorded</span>}</div></div>
+              </div>
+              <div className="outreach-contact-summary">
+                <strong>Available contact</strong>
+                {contactOptions.length ? <dl className="outreach-contact-list">{contactOptions.map((contact) => <div key={contact.label}><dt>{contact.label}</dt><dd><a href={contact.href!}>{contact.value}</a></dd></div>)}</dl> : <p className="muted">No phone or email recorded</p>}
               </div>
               <div className="page-actions outreach-card-actions"><Link className="button outreach-card-primary-action" href={employeeHref}>{fieldMode ? "Open and record" : "Open outreach record"}</Link></div>
             </article>;
