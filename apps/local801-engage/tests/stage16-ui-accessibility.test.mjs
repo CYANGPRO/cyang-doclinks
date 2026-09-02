@@ -85,6 +85,7 @@ test("destructive and inline operational actions do not regress to undersized ta
 test("dense filter panels retain clear separation from their result summaries", () => {
   const css = source("src/app/stage18.css");
   assert.match(css, /\.task-filter-panel \+ \.metrics-grid,[\s\S]*margin-top: 24px/);
+  assert.match(css, /\.import-data-issues-section \+ \.data-quality-summary,[\s\S]*margin-top: 24px/);
   assert.match(css, /\.data-quality-summary \+ \.data-quality-filter-card,[\s\S]*margin-top: 24px/);
   assert.match(css, /\.data-quality-filter-card \+ \.data-quality-review-queue[\s\S]*margin-top: 24px/);
 });

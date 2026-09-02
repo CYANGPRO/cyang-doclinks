@@ -31,6 +31,7 @@
 }
 
 .route-cat-action-detail-page .task-filter-panel + .metrics-grid,
+.membership-data-quality-page .import-data-issues-section + .data-quality-summary,
 .membership-data-quality-page .data-quality-summary + .data-quality-filter-card,
 .membership-data-quality-page .data-quality-filter-card + .data-quality-review-queue {
   margin-top: 24px;
