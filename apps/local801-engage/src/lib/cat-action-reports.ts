@@ -26,6 +26,7 @@ export type CatActionTaskStatusBreakdown = {
 };
 
 export type CatActionPerformance = {
+  handle: string;
   name: string;
   status: string;
   taskCount: number;
@@ -56,6 +57,7 @@ type OverviewRow = {
 type ActionStatusRow = { status: string; action_count: unknown };
 type TaskStatusRow = { status: string; task_count: unknown };
 type ActionRow = {
+  handle: string;
   name: string;
   status: string;
   task_count: unknown;
@@ -83,6 +85,7 @@ function performance(row: ActionRow): CatActionPerformance {
   const participantCount = Math.min(count(row.participant_count), completedTaskCount);
 
   return {
+    handle: row.handle,
     name: row.name,
     status: row.status,
     taskCount,
@@ -194,6 +197,7 @@ export async function getCatActionReport(
         GROUP BY task.cat_action_id
       )
       SELECT
+        encode(public.digest('cat-action:' || summary.organization_id::text || ':' || summary.cat_action_id::text, 'sha256'), 'hex') AS handle,
         summary.name,
         summary.status,
         COALESCE(task.task_count, 0) AS task_count,

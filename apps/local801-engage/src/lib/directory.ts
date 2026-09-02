@@ -91,7 +91,7 @@ type DirectoryRow = {
   total_count: number | string;
 };
 
-const organizationWideRoles = new Set<Role>(["system_owner", "local_admin", "membership_data_manager", "cat_admin", "cat_lead"]);
+const organizationWideRoles = new Set<Role>(["system_owner", "local_admin", "membership_data_manager", "cat_admin", "cat_lead", "cat_member"]);
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export class DirectoryAccessError extends Error {

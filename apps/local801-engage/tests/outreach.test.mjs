@@ -47,8 +47,10 @@ test("outreach queue bind positions are contiguous for live PostgreSQL parsing",
   assert.match(sql, /\$4::text IS NULL/);
   assert.match(sql, /LIMIT \$6::integer/);
   assert.match(sql, /\$12::text/);
-  assert.doesNotMatch(sql, /\$13::text/);
+  assert.match(sql, /\$13::text/);
+  assert.match(sql, /\$14::text/);
   assert.match(sql, /context\.organizationId,\s*context\.userId,\s*organizationWide,\s*like\(normalized\.term\),\s*normalized\.focus/);
+  assert.match(sql, /normalized\.assigneeHandle,\s*normalized\.actionHandle/);
   assert.doesNotMatch(sql, /context\.role,/);
 });
 

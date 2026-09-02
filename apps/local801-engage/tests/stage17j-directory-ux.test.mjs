@@ -9,7 +9,7 @@ function source(path) {
 test("Stage 17J Directory keeps the primary search focused and secondary filters behind More filters", () => {
   const directory = source("src/app/directory/page.tsx");
 
-  assert.match(directory, /Find people by name, workplace, classification, membership status, or work email\./);
+  assert.match(directory, /Find employees and assign their outreach to an active CAT member or higher role\./);
   assert.match(directory, /className="field directory-search-field"/);
   assert.match(directory, /className="button directory-search-submit"/);
   assert.match(directory, /className="directory-more-filters"/);
@@ -41,7 +41,7 @@ test("Stage 17J Directory presents membership status and outreach-record actions
   assert.doesNotMatch(directory, /Member 360/);
 });
 
-test("Stage 17J Directory preserves contextual Member 360 access without widening permissions", () => {
+test("Directory preserves outreach access and exposes CAT-or-higher assignment without employee deletion", () => {
   const directory = source("src/app/directory/page.tsx");
   const access = source("src/lib/access.ts");
 
@@ -49,6 +49,10 @@ test("Stage 17J Directory preserves contextual Member 360 access without widenin
   assert.match(directory, /href=\{`\/outreach\/\$\{person\.handle\}`\}/);
   assert.match(access, /recordEngagement: \["system_owner", "local_admin", "cat_admin", "cat_lead", "cat_member"\]/);
   assert.doesNotMatch(access, /recordEngagement: \[[^\]]*membership_data_manager/);
+  assert.match(access, /assignOutreach: \["system_owner", "local_admin", "cat_admin", "cat_lead", "cat_member"\]/);
+  assert.match(directory, /<OutreachAssignmentControl/);
+  assert.match(directory, />Assign employee<\/summary>/);
+  assert.doesNotMatch(directory, /EmployeeDeleteControl/);
 });
 
 test("Stage 17J Directory swaps the wide table for compact member rows on small screens", () => {

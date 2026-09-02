@@ -232,6 +232,33 @@
   min-height: 44px;
 }
 
+.directory-assignment-control {
+  min-width: 190px;
+}
+
+.directory-assignment-control > summary {
+  cursor: pointer;
+  list-style: none;
+  width: fit-content;
+}
+
+.directory-assignment-control > summary::-webkit-details-marker {
+  display: none;
+}
+
+.directory-assignment-panel {
+  background: var(--surface-subtle);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  margin-top: 8px;
+  max-width: 360px;
+  padding: 12px;
+}
+
+.directory-assignment-panel .form-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 @media (max-width: 900px) {
   .directory-search-form .filter-bar {
     grid-template-columns: 1fr 1fr;

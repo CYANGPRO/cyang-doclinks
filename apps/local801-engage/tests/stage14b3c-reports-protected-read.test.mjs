@@ -69,7 +69,7 @@ function commandCenterReport() {
     followups: { outstandingCount: 0, overdueCount: 0, dueSoonCount: 0, completedCount: 0, averageCloseDays: null },
     newHires: { hireCount: 0, engagedWithin7Count: 0, engagedWithin14Count: 0, engagedWithin30Count: 0, missed14DayTargetCount: 0, within7Rate: 0, within14Rate: 0, within30Rate: 0 },
     depth: [], departments: [], workLocations: [],
-    organizers: [{ label: "WRONG LEGACY NAME", assignedCount: 1, reachedInPeriodCount: 1, coverageRate: 100, engagementEventCount: 2, outstandingFollowupCount: 1, overdueFollowupCount: 0 }],
+    organizers: [{ handle: "c".repeat(64), label: "WRONG LEGACY NAME", assignedCount: 1, reachedInPeriodCount: 1, coverageRate: 100, engagementEventCount: 2, outstandingFollowupCount: 1, overdueFollowupCount: 0 }],
     actionReadiness: { actionSignalCount: 0, willingEmployeeCount: 0, consideringEmployeeCount: 0, completedEmployeeCount: 0, declinesAllCount: 0, specificDeclineEmployeeCount: 0, noActionSignalCount: 2, willingActionCount: 0, completedActionCount: 0, readinessCaptureRate: 0, willingEmployeeRate: 0 },
     actionReadinessByAction: [], actionReadinessDepth: [],
   };
@@ -94,11 +94,12 @@ test("command-center organizer labels and metrics use protected user PII", async
   const query = async (sql) => {
     if (sql.includes("acceptance-state")) return state();
     if (sql.includes("report-read:users")) return [protectedUser(keyConfig)];
-    if (sql.includes("command-center-organizers")) return [{ user_id: userId, assigned_count: 2, reached_in_period_count: 1, engagement_event_count: 4, outstanding_followup_count: 2, overdue_followup_count: 1 }];
+    if (sql.includes("command-center-organizers")) return [{ user_id: userId, organizer_handle: "c".repeat(64), assigned_count: 2, reached_in_period_count: 1, engagement_event_count: 4, outstanding_followup_count: 2, overdue_followup_count: 1 }];
     throw new Error("unexpected query");
   };
   const result = await hydrateCommandCenterReportFromProtectedPii(organizationId, commandCenterReport(), { query, env: environment, keyConfig });
   assert.deepEqual(result.organizers[0], {
+    handle: "c".repeat(64),
     label: "Synthetic CAT Lead",
     assignedCount: 2,
     reachedInPeriodCount: 1,

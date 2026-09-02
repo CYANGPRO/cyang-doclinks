@@ -16,7 +16,7 @@ export const permissions = {
   manageImports: ["system_owner", "local_admin", "membership_data_manager"],
   approveImports: ["system_owner", "local_admin", "membership_data_manager"],
   assignNewHires: ["system_owner", "local_admin", "membership_data_manager", "cat_admin", "cat_lead"],
-  assignOutreach: ["system_owner", "local_admin", "cat_admin", "cat_lead"],
+  assignOutreach: ["system_owner", "local_admin", "cat_admin", "cat_lead", "cat_member"],
   manageActionCatalog: ["system_owner", "local_admin", "membership_data_manager", "cat_admin", "cat_lead", "cat_member"],
   manageCampaigns: ["system_owner", "local_admin", "cat_admin"],
   viewCampaigns: ["system_owner", "local_admin", "cat_admin", "cat_lead", "cat_member"],

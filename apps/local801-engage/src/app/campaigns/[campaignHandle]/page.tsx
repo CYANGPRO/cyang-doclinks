@@ -222,7 +222,7 @@ export default async function CampaignDetailPage({
             {population.people.map((person) => <tr key={person.personHandle}>
               <td>
                 <strong>{person.first_name} {person.last_name}</strong>
-                <div><Link href={`/outreach/${person.personHandle}`}>Open outreach record</Link></div>
+                <div className="inline-actions"><Link className="button secondary compact-button" href={`/outreach/${person.personHandle}`}>Open outreach record</Link></div>
               </td>
               <td>{person.department || "Department unavailable"}</td>
               <td><StatusBadge tone={person.completed ? "ready" : person.overdue ? "warning" : person.contacted ? "info" : "neutral"}>{person.completed ? "Completed" : person.overdue ? "Overdue" : person.contacted ? "Contacted" : "Not contacted"}</StatusBadge></td>

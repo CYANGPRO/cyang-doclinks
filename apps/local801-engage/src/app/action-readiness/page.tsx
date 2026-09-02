@@ -26,7 +26,7 @@ export default async function ActionReadinessCatalogPage() {
       </DataTable>}
       <p className="muted">“Not recorded” means no response has been entered yet. Use “Declines all actions” on the outreach record when that describes the member’s overall response.</p>
     </SectionCard>
-    <SectionCard title="Add a custom action" description="CATs, LCATs, Membership Data Managers, 801 Administrators, Local Administrators, and System Owners can extend this catalog.">
+    <SectionCard title="Add another custom action" description="Add as many organization-wide actions as needed. Each starts with four standard responses; open Customize responses on any action and use + Add response choice for additional answers.">
       <ActionCatalogManager />
     </SectionCard>
   </div></ProtectedPage>;

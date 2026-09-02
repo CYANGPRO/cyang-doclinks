@@ -13,7 +13,7 @@ export const OUTREACH_PAGE_SIZES = [25, 50] as const;
 export const MAX_OUTREACH_SEARCH_LENGTH = 100;
 
 export type OutreachScope = "assigned" | "authorized";
-export type OutreachFocus = "all" | "attention" | "never-engaged" | "stale";
+export type OutreachFocus = "all" | "attention" | "never-engaged" | "stale" | "assigned" | "unassigned" | "contacted" | "willing";
 export type OutreachPriority = "overdue_followup" | "due_today" | "never_engaged" | "stale_90_days" | "upcoming" | "recent";
 
 type OutreachCursor = {
@@ -29,6 +29,8 @@ export type OutreachSearchInput = {
   term?: unknown;
   scope?: unknown;
   focus?: unknown;
+  assignee?: unknown;
+  action?: unknown;
   pageSize?: unknown;
   cursor?: unknown;
 };
@@ -37,6 +39,8 @@ export type NormalizedOutreachSearch = {
   term: string;
   requestedScope: OutreachScope;
   focus: OutreachFocus;
+  assigneeHandle: string | null;
+  actionHandle: string | null;
   pageSize: number;
   cursor: OutreachCursor | null;
 };
@@ -61,6 +65,7 @@ export type OutreachQueuePerson = {
   overdueFollowupCount: number;
   nextFollowupAt: string | null;
   willingActionCount: number;
+  willingActionLabels: string[];
   consideringActionCount: number;
   completedActionCount: number;
   declinesAllActions: boolean;
@@ -72,6 +77,8 @@ export type OutreachQueuePage = {
   requestedScope: OutreachScope;
   effectiveScope: OutreachScope;
   focus: OutreachFocus;
+  assigneeHandle: string | null;
+  actionHandle: string | null;
   pageSize: number;
   total: number;
   previousCursor: string | null;
@@ -123,6 +130,7 @@ type QueueRow = {
   overdue_followup_count: unknown;
   next_followup_at: string | Date | null;
   willing_action_count: unknown;
+  willing_action_labels: string[] | null;
   considering_action_count: unknown;
   completed_action_count: unknown;
   declines_all_actions: boolean | null;
@@ -239,11 +247,18 @@ function encodeCursor(row: QueueRow) {
 export function normalizeOutreachSearch(input: OutreachSearchInput): NormalizedOutreachSearch {
   const rawScope = scalarString(input.scope);
   const rawFocus = scalarString(input.focus);
-  const focus: OutreachFocus = rawFocus === "attention" || rawFocus === "never-engaged" || rawFocus === "stale" ? rawFocus : "all";
+  const focus: OutreachFocus = rawFocus === "attention" || rawFocus === "never-engaged" || rawFocus === "stale"
+    || rawFocus === "assigned" || rawFocus === "unassigned" || rawFocus === "contacted" || rawFocus === "willing" ? rawFocus : "all";
+  const optionalHandle = (value: unknown) => {
+    const handle = scalarString(value).trim().toLowerCase();
+    return HANDLE_RE.test(handle) ? handle : null;
+  };
   return {
     term: scalarString(input.term).trim().replace(/\s+/g, " ").slice(0, MAX_OUTREACH_SEARCH_LENGTH),
     requestedScope: rawScope === "authorized" ? "authorized" : "assigned",
     focus,
+    assigneeHandle: optionalHandle(input.assignee),
+    actionHandle: optionalHandle(input.action),
     pageSize: normalizePageSize(input.pageSize),
     cursor: decodeCursor(input.cursor),
   };
@@ -331,6 +346,16 @@ export async function getOutreachQueue(
               AND (scope_assignment.primary_user_id = $2::uuid OR scope_assignment.backup_user_id = $2::uuid)
           )
         )
+        AND ($13::text IS NULL OR EXISTS (
+          SELECT 1
+          FROM local801.engagement_assignments filtered_assignment
+          WHERE filtered_assignment.organization_id = $1::uuid
+            AND filtered_assignment.person_id = person.id
+            AND filtered_assignment.archived_at IS NULL
+            AND filtered_assignment.status = 'open'
+            AND filtered_assignment.primary_user_id IS NOT NULL
+            AND encode(public.digest('user:' || $1::text || ':' || filtered_assignment.primary_user_id::text, 'sha256'), 'hex') = $13::text
+        ))
     ), signals AS (
       SELECT
         base.*,
@@ -341,6 +366,7 @@ export async function getOutreachQueue(
         contact.home_phone,
         COALESCE(assignment_info.is_primary, false) AS is_primary,
         COALESCE(assignment_info.is_backup, false) AS is_backup,
+        COALESCE(assignment_info.active_assignment_count, 0) AS active_assignment_count,
         assignment_info.assignment_due_at,
         latest_event.occurred_at AS latest_engagement_at,
         latest_event.outcome AS latest_outcome,
@@ -348,6 +374,7 @@ export async function getOutreachQueue(
         COALESCE(followup.overdue_count, 0) AS overdue_followup_count,
         followup.next_due_at AS next_followup_at,
         COALESCE(readiness.willing_action_count, 0) AS willing_action_count,
+        COALESCE(willing_actions.labels, ARRAY[]::text[]) AS willing_action_labels,
         COALESCE(readiness.considering_action_count, 0) AS considering_action_count,
         COALESCE(readiness.completed_action_count, 0) AS completed_action_count,
         COALESCE(readiness.declines_all_actions, false) AS declines_all_actions
@@ -356,6 +383,7 @@ export async function getOutreachQueue(
         SELECT
           bool_or(assignment.primary_user_id = $2::uuid) AS is_primary,
           bool_or(assignment.backup_user_id = $2::uuid) AS is_backup,
+          count(*) AS active_assignment_count,
           min(assignment.due_at) FILTER (WHERE assignment.due_at IS NOT NULL) AS assignment_due_at
         FROM local801.engagement_assignments assignment
         WHERE assignment.organization_id = $1::uuid
@@ -363,6 +391,17 @@ export async function getOutreachQueue(
           AND assignment.archived_at IS NULL
           AND assignment.status = 'open'
       ) assignment_info ON true
+      LEFT JOIN LATERAL (
+        SELECT array_agg(action.name ORDER BY action.engagement_level, action.name) AS labels
+        FROM reporting.employee_action_current_responses response
+        JOIN local801.employee_actions action
+          ON action.organization_id = response.organization_id
+         AND action.id = response.action_id
+         AND action.archived_at IS NULL
+        WHERE response.organization_id = $1::uuid
+          AND response.person_id = base.person_id
+          AND response.response_status = 'willing'
+      ) willing_actions ON true
       LEFT JOIN LATERAL (
         SELECT
           (array_agg(method.contact_value ORDER BY method.is_primary DESC, method.created_at DESC, method.id DESC)
@@ -417,7 +456,14 @@ export async function getOutreachQueue(
       LEFT JOIN reporting.employee_action_person_readiness readiness
         ON readiness.organization_id = $1::uuid
        AND readiness.person_id = base.person_id
-      WHERE (
+      WHERE ($14::text IS NULL OR EXISTS (
+        SELECT 1
+        FROM reporting.employee_action_current_responses selected_response
+        WHERE selected_response.organization_id = $1::uuid
+          AND selected_response.person_id = base.person_id
+          AND selected_response.response_status = 'willing'
+          AND encode(public.digest($1::text || ':' || selected_response.action_id::text, 'sha256'), 'hex') = $14::text
+      )) AND (
         $4::text IS NULL
         OR base.first_name ILIKE $4 ESCAPE '\\'
         OR base.last_name ILIKE $4 ESCAPE '\\'
@@ -454,6 +500,10 @@ export async function getOutreachQueue(
          OR ($5::text = 'attention' AND priority_rank <= 4)
          OR ($5::text = 'never-engaged' AND priority_rank = 3)
          OR ($5::text = 'stale' AND priority_rank = 4)
+         OR ($5::text = 'assigned' AND active_assignment_count > 0)
+         OR ($5::text = 'unassigned' AND active_assignment_count = 0)
+         OR ($5::text = 'contacted' AND latest_engagement_at IS NOT NULL)
+         OR ($5::text = 'willing' AND willing_action_count > 0)
     ), total AS (
       SELECT count(*) AS total_count FROM focused
     ), page_rows AS (
@@ -483,6 +533,8 @@ export async function getOutreachQueue(
     cursor?.lastName ?? null,
     cursor?.firstName ?? null,
     cursor?.handle ?? null,
+    normalized.assigneeHandle,
+    normalized.actionHandle,
   ]);
 
   const total = finiteInteger(rows[0]?.total_count);
@@ -509,6 +561,7 @@ export async function getOutreachQueue(
     overdueFollowupCount: finiteInteger(row.overdue_followup_count),
     nextFollowupAt: normalizeTimestamp(row.next_followup_at),
     willingActionCount: finiteInteger(row.willing_action_count),
+    willingActionLabels: row.willing_action_labels ?? [],
     consideringActionCount: finiteInteger(row.considering_action_count),
     completedActionCount: finiteInteger(row.completed_action_count),
     declinesAllActions: Boolean(row.declines_all_actions),
@@ -520,6 +573,8 @@ export async function getOutreachQueue(
     requestedScope: normalized.requestedScope,
     effectiveScope,
     focus: normalized.focus,
+    assigneeHandle: normalized.assigneeHandle,
+    actionHandle: normalized.actionHandle,
     pageSize: normalized.pageSize,
     total,
     previousCursor: cursor ? null : null,

@@ -11,7 +11,8 @@ import {
 } from "./db.ts";
 import type { WorkspaceContext } from "./workspace-context.ts";
 
-export type EmployeeActionResponse = "willing" | "considering" | "declined" | "completed";
+export type DefaultEmployeeActionResponse = "willing" | "considering" | "declined" | "completed";
+export type EmployeeActionResponse = DefaultEmployeeActionResponse | `custom:${string}`;
 export type EmployeeActionPosture = "open_to_actions" | "declines_all";
 export type EmployeeActionResponseOption = { value: EmployeeActionResponse; label: string; enabled: boolean };
 
@@ -51,10 +52,11 @@ type DefinitionRow = {
   declined_response_label: string;
   completed_response_label: string;
   enabled_response_statuses: string[];
+  custom_response_options: unknown;
 };
 
 type ProfileRow = DefinitionRow & {
-  response_status: EmployeeActionResponse;
+  response_status: string;
   first_recorded_at: string | Date;
   last_updated_at: string | Date;
   response_history_count: unknown;
@@ -75,8 +77,9 @@ export type EmployeeActionWriteDependencies = {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const HANDLE_RE = /^[0-9a-f]{64}$/i;
+const CUSTOM_RESPONSE_RE = /^custom:[0-9a-f]{32}$/;
 const RESPONSE_VALUES = ["willing", "considering", "declined", "completed"] as const;
-const DEFAULT_RESPONSE_LABELS: Record<EmployeeActionResponse, string> = {
+const DEFAULT_RESPONSE_LABELS: Record<DefaultEmployeeActionResponse, string> = {
   willing: "Willing",
   considering: "Considering",
   declined: "Declined",
@@ -114,6 +117,7 @@ function normalizeTimestamp(value: string | Date) {
 
 function response(value: unknown): EmployeeActionResponse {
   if (value === "willing" || value === "considering" || value === "declined" || value === "completed") return value;
+  if (typeof value === "string" && CUSTOM_RESPONSE_RE.test(value)) return value as EmployeeActionResponse;
   throw new Error("Employee action response is invalid.");
 }
 
@@ -126,16 +130,28 @@ function responseLabel(value: unknown) {
 
 function responseOptionsFromRow(row: DefinitionRow): EmployeeActionResponseOption[] {
   const enabled = new Set(Array.isArray(row.enabled_response_statuses) ? row.enabled_response_statuses : RESPONSE_VALUES);
-  return [
+  const defaults: EmployeeActionResponseOption[] = [
     { value: "willing", label: row.willing_response_label || DEFAULT_RESPONSE_LABELS.willing, enabled: enabled.has("willing") },
     { value: "considering", label: row.considering_response_label || DEFAULT_RESPONSE_LABELS.considering, enabled: enabled.has("considering") },
     { value: "declined", label: row.declined_response_label || DEFAULT_RESPONSE_LABELS.declined, enabled: enabled.has("declined") },
     { value: "completed", label: row.completed_response_label || DEFAULT_RESPONSE_LABELS.completed, enabled: enabled.has("completed") },
   ];
+  if (!Array.isArray(row.custom_response_options)) return defaults;
+  const custom: EmployeeActionResponseOption[] = [];
+  const seen = new Set<string>();
+  for (const raw of row.custom_response_options.slice(0, 8)) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("Stored custom action response is invalid.");
+    const item = raw as Record<string, unknown>;
+    const value = response(item.value);
+    if (!value.startsWith("custom:") || seen.has(value) || typeof item.enabled !== "boolean") throw new Error("Stored custom action response is invalid.");
+    seen.add(value);
+    custom.push({ value, label: responseLabel(item.label), enabled: item.enabled && enabled.has(value) });
+  }
+  return [...defaults, ...custom];
 }
 
 function requireResponseOptions(value: unknown): EmployeeActionResponseOption[] {
-  if (!Array.isArray(value) || value.length !== RESPONSE_VALUES.length) throw new Error("Action response choices are invalid.");
+  if (!Array.isArray(value) || value.length < RESPONSE_VALUES.length || value.length > RESPONSE_VALUES.length + 8) throw new Error("Action response choices are invalid.");
   const supplied = new Map<EmployeeActionResponse, EmployeeActionResponseOption>();
   for (const raw of value) {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("Action response choices are invalid.");
@@ -144,8 +160,11 @@ function requireResponseOptions(value: unknown): EmployeeActionResponseOption[] 
     if (supplied.has(key) || typeof item.enabled !== "boolean") throw new Error("Action response choices are invalid.");
     supplied.set(key, { value: key, label: responseLabel(item.label), enabled: item.enabled });
   }
-  const options = RESPONSE_VALUES.map((key) => supplied.get(key)).filter((item): item is EmployeeActionResponseOption => Boolean(item));
-  if (options.length !== RESPONSE_VALUES.length || !options.some((item) => item.enabled)) throw new Error("Keep at least one action response available.");
+  const defaults = RESPONSE_VALUES.map((key) => supplied.get(key)).filter((item): item is EmployeeActionResponseOption => Boolean(item));
+  if (defaults.length !== RESPONSE_VALUES.length) throw new Error("The four standard action responses must remain available for configuration.");
+  const custom = [...supplied.values()].filter((item) => item.value.startsWith("custom:"));
+  const options = [...defaults, ...custom];
+  if (!options.some((item) => item.enabled)) throw new Error("Keep at least one action response available.");
   const labels = options.filter((item) => item.enabled).map((item) => item.label.toLocaleLowerCase());
   if (new Set(labels).size !== labels.length) throw new Error("Available action response labels must be different.");
   return options;
@@ -228,7 +247,7 @@ export async function listEmployeeActionDefinitions(
     /* employee-actions:definitions */
     SELECT id, name AS label, engagement_level, scope_type AS scope,
       willing_response_label, considering_response_label, declined_response_label, completed_response_label,
-      enabled_response_statuses
+      enabled_response_statuses, custom_response_options
     FROM local801.employee_actions
     WHERE organization_id = $1::uuid
       AND archived_at IS NULL
@@ -258,6 +277,7 @@ export async function updateEmployeeActionResponseOptions(
   const actionId = await resolveActionId(context, handle, query);
   const labels = new Map(options.map((item) => [item.value, item.label]));
   const enabled = options.filter((item) => item.enabled).map((item) => item.value);
+  const custom = options.filter((item) => item.value.startsWith("custom:"));
   const updateStatement: DatabaseStatement = {
     sql: `
       /* employee-actions:update-response-options */
@@ -268,6 +288,7 @@ export async function updateEmployeeActionResponseOptions(
           declined_response_label = $5::text,
           completed_response_label = $6::text,
           enabled_response_statuses = $7::text[],
+          custom_response_options = $8::jsonb,
           updated_at = now()
         WHERE action.organization_id = $1::uuid
           AND action.id = $2::uuid
@@ -276,8 +297,8 @@ export async function updateEmployeeActionResponseOptions(
             SELECT 1 FROM local801.users actor
             JOIN local801.workspace_user_roles user_role ON user_role.user_id = actor.id
             JOIN local801.workspace_roles role ON role.id = user_role.role_id AND role.organization_id = $1::uuid
-            WHERE actor.organization_id = $1::uuid AND actor.id = $8::uuid AND actor.deactivated_at IS NULL
-              AND role.code = $9::text
+            WHERE actor.organization_id = $1::uuid AND actor.id = $9::uuid AND actor.deactivated_at IS NULL
+              AND role.code = $10::text
               AND role.code IN ('system_owner','local_admin','membership_data_manager','cat_admin','cat_lead','cat_member')
           )
         RETURNING id
@@ -285,7 +306,7 @@ export async function updateEmployeeActionResponseOptions(
       SELECT CASE WHEN count(*) = 1 THEN true ELSE 1 / count(*)::integer = 1 END AS responses_updated
       FROM updated
     `,
-    parameters: [context.organizationId, actionId, labels.get("willing"), labels.get("considering"), labels.get("declined"), labels.get("completed"), enabled, context.userId, context.role],
+    parameters: [context.organizationId, actionId, labels.get("willing"), labels.get("considering"), labels.get("declined"), labels.get("completed"), enabled, JSON.stringify(custom), context.userId, context.role],
   };
   const auditStatement = await prepareAudit({
     eventType: "config.change",
@@ -293,7 +314,7 @@ export async function updateEmployeeActionResponseOptions(
     organizationId: context.organizationId,
     subjectType: "employee_action_response_options",
     subjectId: actionId,
-    payload: { enabledResponses: enabled },
+    payload: { enabledResponses: enabled, customResponseCount: custom.length },
   }, query);
   await runTransaction([updateStatement, auditStatement]);
   return { updated: true, responseOptions: options };
@@ -337,6 +358,7 @@ export async function getEmployeeActionProfile(
         action.declined_response_label,
         action.completed_response_label,
         action.enabled_response_statuses,
+        action.custom_response_options,
         current.response_status,
         min(history.recorded_at) AS first_recorded_at,
         current.recorded_at AS last_updated_at,
@@ -362,6 +384,7 @@ export async function getEmployeeActionProfile(
         action.declined_response_label,
         action.completed_response_label,
         action.enabled_response_statuses,
+        action.custom_response_options,
         current.response_status,
         current.recorded_at
       ORDER BY action.engagement_level ASC, action.name ASC, action.id ASC

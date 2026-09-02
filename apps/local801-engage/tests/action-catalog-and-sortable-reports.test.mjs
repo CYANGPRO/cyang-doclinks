@@ -26,10 +26,16 @@ test("catalog page exposes all four current response states and custom action ma
   const manager = await read("../src/components/ActionCatalogManager.tsx");
   const route = await read("../src/app/api/action-readiness/catalog/route.ts");
   const migration = await read("../db/migrations/0040__custom_action_response_options.sql");
+  const additionalResponsesMigration = await read("../db/migrations/0042__additional_custom_action_responses.sql");
   for (const state of ["Willing", "Considering", "Declined", "Completed"]) assert.match(migration, new RegExp(state));
   assert.match(page, /ActionResponseEditor/);
   assert.match(page, /action\.responseOptions\.filter/);
   assert.match(manager, /Customize responses/);
+  assert.match(manager, /\+ Add response choice/);
+  assert.match(manager, /crypto\.randomUUID/);
+  assert.match(additionalResponsesMigration, /custom_response_options/);
+  assert.match(additionalResponsesMigration, /custom:\[0-9a-f\]/);
+  assert.match(additionalResponsesMigration, /response_status <> 'declined'/);
   assert.match(manager, /method: "PATCH"/);
   assert.match(manager, /Escalation level/);
   assert.match(route, /requirePreviewUser\("manageActionCatalog"\)/);

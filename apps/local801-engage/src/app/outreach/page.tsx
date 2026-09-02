@@ -12,6 +12,8 @@ import { fieldPersonHref, fieldQueueHref, member360Href, normalizeFieldModeConte
 import { DEFAULT_OUTREACH_PAGE_SIZE, getOutreachQueue, type OutreachPriority, type OutreachQueuePage } from "@/lib/outreach";
 import { getProtectedOutreachQueue } from "@/lib/pii-protected-outreach-query";
 import { getPiiProtectedReadMode } from "@/lib/pii-protected-read";
+import { hydrateOutreachAssigneeOptionsFromProtectedPii } from "@/lib/pii-protected-outreach-read";
+import { getOutreachAssignmentOptions } from "@/lib/outreach-assignment";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
@@ -19,6 +21,7 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 function emptyResults(): OutreachQueuePage {
   return {
     people: [], term: "", requestedScope: "assigned", effectiveScope: "assigned", focus: "all",
+    assigneeHandle: null, actionHandle: null,
     pageSize: DEFAULT_OUTREACH_PAGE_SIZE, total: 0, previousCursor: null, nextCursor: null,
   };
 }
@@ -30,6 +33,8 @@ function href(results: OutreachQueuePage, cursor: string | null, fieldMode: bool
   if (!fieldMode && standardView) params.set("view", "standard");
   params.set("scope", fieldMode ? results.effectiveScope : results.requestedScope);
   params.set("focus", results.focus);
+  if (results.assigneeHandle) params.set("assignee", results.assigneeHandle);
+  if (results.actionHandle) params.set("action", results.actionHandle);
   params.set("limit", String(results.pageSize));
   if (cursor) params.set("cursor", cursor);
   return `/outreach?${params.toString()}`;
@@ -74,6 +79,10 @@ function focusLabel(focus: OutreachQueuePage["focus"]) {
   if (focus === "attention") return "Needs attention";
   if (focus === "never-engaged") return "No conversation recorded";
   if (focus === "stale") return "90+ days since contact";
+  if (focus === "assigned") return "Active organizer assignment";
+  if (focus === "unassigned") return "No active organizer assignment";
+  if (focus === "contacted") return "Contact recorded";
+  if (focus === "willing") return "Willing to act";
   return "";
 }
 
@@ -90,6 +99,7 @@ export default async function OutreachPage({ searchParams }: { searchParams: Sea
   let results = emptyResults();
   let unavailable = false;
   let protectedReadMode: "legacy" | "preview" | "protected" = "legacy";
+  let assigneeOptions: Array<{ handle: string; label: string; current?: boolean }> = [];
   try {
     const context = await resolveWorkspaceContext(user);
     protectedReadMode = getPiiProtectedReadMode();
@@ -97,12 +107,20 @@ export default async function OutreachPage({ searchParams }: { searchParams: Sea
       term: fieldMode ? undefined : parameters.q,
       scope: parameters.scope,
       focus: parameters.focus,
+      assignee: parameters.assignee,
+      action: parameters.action,
       pageSize: parameters.limit,
       cursor: parameters.cursor,
     };
-    results = protectedReadMode === "legacy"
-      ? await getOutreachQueue(context, input)
-      : await getProtectedOutreachQueue(context, input);
+    const queuePromise = protectedReadMode === "legacy"
+      ? getOutreachQueue(context, input)
+      : getProtectedOutreachQueue(context, input);
+    const optionsPromise = can(user.role, "assignOutreach")
+      ? getOutreachAssignmentOptions(context).then((rawOptions) => protectedReadMode === "legacy"
+        ? rawOptions
+        : hydrateOutreachAssigneeOptionsFromProtectedPii(context.organizationId, rawOptions))
+      : Promise.resolve([]);
+    [results, assigneeOptions] = await Promise.all([queuePromise, optionsPromise]);
   } catch {
     unavailable = true;
   }
@@ -110,7 +128,7 @@ export default async function OutreachPage({ searchParams }: { searchParams: Sea
   const constrained = results.requestedScope !== results.effectiveScope;
   const canonicalFieldContext = {
     scope: results.effectiveScope,
-    focus: results.focus,
+    focus: results.focus === "willing" || results.focus === "assigned" || results.focus === "unassigned" || results.focus === "contacted" ? "all" as const : results.focus,
     limit: results.pageSize === 50 ? 50 as const : 25 as const,
   };
   const startFieldHref = fieldQueueHref(canonicalFieldContext);
@@ -120,6 +138,8 @@ export default async function OutreachPage({ searchParams }: { searchParams: Sea
     !fieldMode && results.term ? `Search: ${results.term}` : "",
     results.focus !== "all" ? `Focus: ${focusLabel(results.focus)}` : "",
     !fieldMode && results.requestedScope === "authorized" ? "Everyone I can access" : "",
+    results.assigneeHandle ? `Organizer: ${assigneeOptions.find((option) => option.handle === results.assigneeHandle)?.label ?? "selected organizer"}` : "",
+    results.actionHandle ? "Specific willing action" : "",
   ].filter(Boolean);
 
   return <ProtectedPage permission="recordEngagement"><div className={`content outreach-page ${fieldMode ? "outreach-field-queue-page" : "outreach-plan-page"}`}>
@@ -149,8 +169,10 @@ export default async function OutreachPage({ searchParams }: { searchParams: Sea
         <FilterBar>
           {fieldMode ? <input type="hidden" name="field" value="1" /> : <div className="field"><label htmlFor="outreach-search">Search</label><input id="outreach-search" name="q" type="search" maxLength={100} defaultValue={results.term} placeholder="Name, department, location, classification, or work email" /></div>}
           {standardView ? <input type="hidden" name="view" value="standard" /> : null}
-          <div className="field"><label htmlFor="outreach-focus">Focus</label><select id="outreach-focus" name="focus" defaultValue={results.focus}><option value="all">Everyone in my list</option><option value="attention">Needs attention</option><option value="never-engaged">No conversation recorded</option><option value="stale">90+ days since contact</option></select></div>
+          {results.actionHandle ? <input type="hidden" name="action" value={results.actionHandle} /> : null}
+          <div className="field"><label htmlFor="outreach-focus">Focus</label><select id="outreach-focus" name="focus" defaultValue={results.focus}><option value="all">Everyone in my list</option><option value="attention">Needs attention</option><option value="assigned">Active organizer assignment</option><option value="unassigned">No active organizer</option><option value="contacted">Contact recorded</option><option value="never-engaged">No conversation recorded</option><option value="stale">90+ days since contact</option><option value="willing">Willing to act</option></select></div>
           <div className="field"><label htmlFor="outreach-scope">Scope</label><select id="outreach-scope" name="scope" defaultValue={fieldMode ? results.effectiveScope : results.requestedScope}><option value="assigned">My assignments</option><option value="authorized">Everyone I can access</option></select></div>
+          {!fieldMode && assigneeOptions.length ? <div className="field"><label htmlFor="outreach-assignee">Organizer</label><select id="outreach-assignee" name="assignee" defaultValue={results.assigneeHandle ?? ""}><option value="">All organizers</option>{assigneeOptions.map((option) => <option key={option.handle} value={option.handle}>{option.label}{option.current ? " (you)" : ""}</option>)}</select></div> : null}
           <div className="field"><label htmlFor="outreach-limit">Rows</label><select id="outreach-limit" name="limit" defaultValue={String(results.pageSize)}><option value="25">25</option><option value="50">50</option></select></div>
           <button className="button" type="submit">Update list</button>
         </FilterBar>
@@ -183,7 +205,7 @@ export default async function OutreachPage({ searchParams }: { searchParams: Sea
                 <div><strong>Your role</strong><div>{person.assignmentRelationship === "primary" ? "Primary organizer" : person.assignmentRelationship === "backup" ? "Backup organizer" : "View only"}</div></div>
                 <div><strong>Last conversation</strong><div>{dateTime(person.latestEngagementAt)}{person.latestOutcome ? ` · ${person.latestOutcome}` : ""}</div></div>
                 <div><strong>Follow-up</strong><div>{person.overdueFollowupCount ? `${person.overdueFollowupCount} overdue` : person.openFollowupCount ? `${person.openFollowupCount} open · next ${dateTime(person.nextFollowupAt)}` : "No open follow-up"}</div></div>
-                <div><strong>Action readiness</strong><div>{readiness(person)}</div></div>
+                <div><strong>Action readiness</strong><div>{person.willingActionLabels.length ? <>Willing: {person.willingActionLabels.join(", ")}</> : readiness(person)}</div></div>
                 <div className="outreach-contact-summary"><strong>Available contact</strong><div>{contactOptions.length ? contactOptions.map((contact) => <span key={contact.label}><span className="muted">{contact.label}: </span><a href={contact.href!}>{contact.value}</a></span>) : <span className="muted">No phone or email recorded</span>}</div></div>
               </div>
               <div className="page-actions outreach-card-actions"><Link className="button outreach-card-primary-action" href={employeeHref}>{fieldMode ? "Open and record" : "Open outreach record"}</Link></div>

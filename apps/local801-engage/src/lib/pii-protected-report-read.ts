@@ -37,6 +37,7 @@ type EngagementOrganizerRow = {
 
 type CommandCenterOrganizerRow = {
   user_id: string | null;
+  organizer_handle: string;
   assigned_count: unknown;
   reached_in_period_count: unknown;
   engagement_event_count: unknown;
@@ -259,6 +260,7 @@ export async function hydrateCommandCenterReportFromProtectedPii(
         SELECT organizer_user_id FROM organizer_followups
       )
       SELECT organizer_ids.organizer_user_id::text AS user_id,
+        encode(public.digest('user:' || $1::text || ':' || organizer_ids.organizer_user_id::text, 'sha256'), 'hex') AS organizer_handle,
         COALESCE(assigned_summary.assigned_count, 0) AS assigned_count,
         COALESCE(assigned_summary.reached_in_period_count, 0) AS reached_in_period_count,
         COALESCE(organizer_events.engagement_event_count, 0) AS engagement_event_count,
@@ -281,6 +283,7 @@ export async function hydrateCommandCenterReportFromProtectedPii(
       const assignedCount = count(row.assigned_count);
       const reachedInPeriodCount = Math.min(count(row.reached_in_period_count), assignedCount);
       return {
+        handle: row.organizer_handle,
         label: protectedOrganizerLabel(row.user_id, usersById, organizationId, keyConfig),
         assignedCount,
         reachedInPeriodCount,

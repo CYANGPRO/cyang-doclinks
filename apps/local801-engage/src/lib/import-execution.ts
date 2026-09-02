@@ -505,7 +505,45 @@ export const IMPORT_EXECUTION_SQL = `
     CROSS JOIN actor_gate actor
     RETURNING id
   ),
-  inserted_employment_events AS (
+  cleared_prior_new_hire_queue AS (
+    UPDATE local801.new_hire_roster_entries roster
+    SET archived_at = now()
+    FROM gate_facts batch
+    WHERE batch.import_kind IN ('new_hires','recent_hires')
+      AND roster.organization_id = $1::uuid
+      AND roster.archived_at IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM target_rows target WHERE target.target_person_id = roster.person_id
+      )
+      AND EXISTS (
+        SELECT 1
+        FROM local801.engagement_assignments assignment
+        JOIN local801.workspace_user_roles organizer_role
+          ON organizer_role.user_id IN (assignment.primary_user_id, assignment.backup_user_id)
+        JOIN local801.workspace_roles role
+          ON role.organization_id = $1::uuid
+         AND role.id = organizer_role.role_id
+         AND role.code IN ('system_owner','local_admin','cat_admin','cat_lead','cat_member')
+        WHERE assignment.organization_id = $1::uuid
+          AND assignment.person_id = roster.person_id
+          AND assignment.archived_at IS NULL
+          AND assignment.status = 'open'
+      )
+    RETURNING roster.person_id
+  ), upserted_new_hire_queue AS (
+    INSERT INTO local801.new_hire_roster_entries (
+      organization_id, person_id, source_import_file_id, first_listed_at, last_listed_at, archived_at
+    )
+    SELECT $1::uuid, target.target_person_id, batch.source_file_id, now(), now(), NULL
+    FROM target_rows target CROSS JOIN gate_facts batch
+    CROSS JOIN (SELECT count(*) FROM inserted_people) people_barrier
+    WHERE batch.import_kind IN ('new_hires','recent_hires')
+    ON CONFLICT (organization_id, person_id) DO UPDATE SET
+      source_import_file_id = excluded.source_import_file_id,
+      last_listed_at = now(),
+      archived_at = NULL
+    RETURNING person_id
+  ), inserted_employment_events AS (
     INSERT INTO local801.employment_events (
       id, organization_id, person_id, event_type, effective_date,
       department, work_location, source_import_file_id

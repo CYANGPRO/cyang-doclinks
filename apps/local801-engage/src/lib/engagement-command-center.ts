@@ -72,6 +72,7 @@ export type CoverageGapRow = {
 };
 
 export type OrganizerCoverageRow = {
+  handle: string;
   label: string;
   assignedCount: number;
   reachedInPeriodCount: number;
@@ -96,12 +97,14 @@ export type EmployeeActionReadinessOverview = {
 };
 
 export type EmployeeActionReadinessRow = {
+  handle: string;
   label: string;
   engagementLevel: number;
   willingCount: number;
   consideringCount: number;
   declinedCount: number;
   completedCount: number;
+  customResponses: Array<{ value: string; label: string; count: number }>;
 };
 
 export type EmployeeActionDepthRow = {
@@ -162,6 +165,8 @@ type CoverageRow = {
 };
 
 type OrganizerRow = {
+  user_id: string;
+  organizer_handle: string;
   label: string;
   assigned_count: unknown;
   reached_in_period_count: unknown;
@@ -182,12 +187,15 @@ type ActionReadinessOverviewRow = {
 };
 
 type ActionReadinessByActionRow = {
+  action_handle: string;
   label: string;
   engagement_level: unknown;
   willing_count: unknown;
   considering_count: unknown;
   declined_count: unknown;
   completed_count: unknown;
+  custom_response_options: unknown;
+  custom_response_counts: unknown;
 };
 
 type ActionReadinessDepthDatabaseRow = {
@@ -223,6 +231,21 @@ function safeDimension(value: unknown) {
   const trimmed = value.trim();
   if (!trimmed || trimmed.length > 120 || /[\u0000-\u001f\u007f]/.test(trimmed)) return null;
   return trimmed;
+}
+
+function customResponseCounts(optionsValue: unknown, countsValue: unknown, maximum: number) {
+  if (!Array.isArray(optionsValue)) return [];
+  const counts = countsValue && typeof countsValue === "object" && !Array.isArray(countsValue)
+    ? countsValue as Record<string, unknown>
+    : {};
+  return optionsValue.slice(0, 8).flatMap((raw) => {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [];
+    const option = raw as Record<string, unknown>;
+    const value = typeof option.value === "string" && /^custom:[0-9a-f]{32}$/.test(option.value) ? option.value : null;
+    const label = typeof option.label === "string" ? option.label.trim().slice(0, 40) : "";
+    if (!value || !label) return [];
+    return [{ value, label, count: Math.min(count(counts[value]), maximum) }];
+  });
 }
 
 export function parseCommandCenterFilters(input: Record<string, string | string[] | undefined>): CommandCenterFilters {
@@ -581,6 +604,8 @@ export async function getEngagementCommandCenterReport(
         SELECT organizer_user_id FROM organizer_followups
       )
       SELECT
+        organizer_ids.organizer_user_id::text AS user_id,
+        encode(public.digest('user:' || $1::text || ':' || organizer_ids.organizer_user_id::text, 'sha256'), 'hex') AS organizer_handle,
         COALESCE(NULLIF(trim(user_record.display_name), ''), 'Unknown organizer') AS label,
         COALESCE(sum(assigned_summary.assigned_count), 0) AS assigned_count,
         COALESCE(sum(assigned_summary.reached_in_period_count), 0) AS reached_in_period_count,
@@ -594,7 +619,7 @@ export async function getEngagementCommandCenterReport(
       LEFT JOIN assigned_summary ON assigned_summary.organizer_user_id = organizer_ids.organizer_user_id
       LEFT JOIN organizer_events ON organizer_events.organizer_user_id = organizer_ids.organizer_user_id
       LEFT JOIN organizer_followups ON organizer_followups.organizer_user_id = organizer_ids.organizer_user_id
-      GROUP BY COALESCE(NULLIF(trim(user_record.display_name), ''), 'Unknown organizer')
+      GROUP BY organizer_ids.organizer_user_id, COALESCE(NULLIF(trim(user_record.display_name), ''), 'Unknown organizer')
       ORDER BY assigned_count DESC, label ASC
       LIMIT 50
     `, parameters),
@@ -608,7 +633,8 @@ export async function getEngagementCommandCenterReport(
           COALESCE(readiness.willing_action_count, 0) AS willing_action_count,
           COALESCE(readiness.considering_action_count, 0) AS considering_action_count,
           COALESCE(readiness.declined_action_count, 0) AS declined_action_count,
-          COALESCE(readiness.completed_action_count, 0) AS completed_action_count
+          COALESCE(readiness.completed_action_count, 0) AS completed_action_count,
+          COALESCE(readiness.custom_action_count, 0) AS custom_action_count
         FROM cohort
         LEFT JOIN reporting.employee_action_person_readiness readiness
           ON readiness.organization_id = $1::uuid
@@ -621,6 +647,7 @@ export async function getEngagementCommandCenterReport(
              OR considering_action_count > 0
              OR declined_action_count > 0
              OR completed_action_count > 0
+             OR custom_action_count > 0
         ) AS action_signal_count,
         count(*) FILTER (WHERE willing_action_count > 0) AS willing_employee_count,
         count(*) FILTER (WHERE willing_action_count = 0 AND considering_action_count > 0) AS considering_employee_count,
@@ -639,20 +666,33 @@ export async function getEngagementCommandCenterReport(
         FROM reporting.employee_action_current_responses response
         JOIN cohort ON cohort.person_id = response.person_id
         WHERE response.organization_id = $1::uuid
+      ), custom_counts AS (
+        SELECT action_id, jsonb_object_agg(response_status, response_count) AS response_counts
+        FROM (
+          SELECT action_id, response_status, count(DISTINCT person_id) AS response_count
+          FROM scoped_response
+          WHERE response_status LIKE 'custom:%'
+          GROUP BY action_id, response_status
+        ) counted
+        GROUP BY action_id
       )
       SELECT
+        encode(public.digest($1::text || ':' || action.id::text, 'sha256'), 'hex') AS action_handle,
         action.name AS label,
         action.engagement_level,
         count(DISTINCT scoped_response.person_id) FILTER (WHERE scoped_response.response_status = 'willing') AS willing_count,
         count(DISTINCT scoped_response.person_id) FILTER (WHERE scoped_response.response_status = 'considering') AS considering_count,
         count(DISTINCT scoped_response.person_id) FILTER (WHERE scoped_response.response_status = 'declined') AS declined_count,
-        count(DISTINCT scoped_response.person_id) FILTER (WHERE scoped_response.response_status = 'completed') AS completed_count
+        count(DISTINCT scoped_response.person_id) FILTER (WHERE scoped_response.response_status = 'completed') AS completed_count,
+        action.custom_response_options,
+        COALESCE(custom_counts.response_counts, '{}'::jsonb) AS custom_response_counts
       FROM local801.employee_actions action
       LEFT JOIN scoped_response
         ON scoped_response.action_id = action.id
+      LEFT JOIN custom_counts ON custom_counts.action_id = action.id
       WHERE action.organization_id = $1::uuid
         AND action.archived_at IS NULL
-      GROUP BY action.id, action.name, action.engagement_level
+      GROUP BY action.id, action.name, action.engagement_level, action.custom_response_options, custom_counts.response_counts
       ORDER BY action.engagement_level ASC, action.name ASC
       LIMIT 50
     `, parameters),
@@ -772,6 +812,7 @@ export async function getEngagementCommandCenterReport(
       const assigned = count(row.assigned_count);
       const reached = Math.min(count(row.reached_in_period_count), assigned);
       return {
+        handle: row.organizer_handle,
         label: row.label,
         assignedCount: assigned,
         reachedInPeriodCount: reached,
@@ -795,12 +836,14 @@ export async function getEngagementCommandCenterReport(
       willingEmployeeRate: rate(willingEmployeeCount, representedCount),
     },
     actionReadinessByAction: actionReadinessByActionRows.map((row) => ({
+      handle: row.action_handle,
       label: row.label,
       engagementLevel: Math.min(5, Math.max(1, Math.trunc(count(row.engagement_level) || 1))),
       willingCount: Math.min(count(row.willing_count), representedCount),
       consideringCount: Math.min(count(row.considering_count), representedCount),
       declinedCount: Math.min(count(row.declined_count), representedCount),
       completedCount: Math.min(count(row.completed_count), representedCount),
+      customResponses: customResponseCounts(row.custom_response_options, row.custom_response_counts, representedCount),
     })),
     actionReadinessDepth: actionDepthDefinitions.map(([bucket, label]) => {
       const employeeCount = Math.min(actionDepthCounts.get(bucket) ?? 0, representedCount);
@@ -809,4 +852,4 @@ export async function getEngagementCommandCenterReport(
   };
 }
 
-export const __testing = { count, nullableNumber, rate, safeDimension };
+export const __testing = { count, nullableNumber, rate, safeDimension, customResponseCounts };

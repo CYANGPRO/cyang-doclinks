@@ -35,7 +35,7 @@ test("shared tables become labeled records instead of sideways mobile tables", (
   assert.match(sortable, /className="responsive-table"/);
   assert.match(css, /\.responsive-table thead \{ display: none; \}/);
   assert.match(css, /\.responsive-table td::before \{[\s\S]*content: attr\(data-label\)/);
-  assert.match(globals, /\.table-scroll \{[^}]*overflow-x: visible/);
+  assert.match(globals, /\.table-scroll \{[^}]*overflow-x: hidden; overflow-y: auto/);
   assert.doesNotMatch(`${globals}\n${stage16}`, /\.data-table \{[^}]*min-width: (?:640|720)px/);
   assert.doesNotMatch(sortable, /Swipe horizontally/);
 });
@@ -47,7 +47,7 @@ test("dense operational tables keep no more than six decision-focused columns", 
   const catActions = source("src/app/cat-actions/page.tsx");
   const documents = source("src/app/documents/page.tsx");
 
-  assert.match(directory, /canDeleteEmployee \? \["Person", "Hire Date", "Work", "Contact", "Actions"\] : \["Person", "Hire Date", "Work", "Contact"\]/);
+  assert.match(directory, /canAssignEmployee \? \["Person", "Hire Date", "Work", "Contact", "Assignment"\] : \["Person", "Hire Date", "Work", "Contact"\]/);
   assert.doesNotMatch(directory, /directory-action-cell|directory-member360-button/);
   assert.match(newHires, /\["Person", "Hire Date", "Work", "Contact", "Assignment"\]/);
   assert.match(campaigns, /\["Campaign", "Status", "Dates", "Population", "Contacted", "Completed"\]/);

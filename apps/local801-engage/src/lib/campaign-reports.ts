@@ -22,6 +22,7 @@ export type CampaignStatusBreakdown = {
 };
 
 export type CampaignPerformance = {
+  handle: string;
   name: string;
   status: string;
   populationCount: number;
@@ -50,6 +51,7 @@ type OverviewRow = {
 
 type StatusRow = { status: string; campaign_count: unknown };
 type CampaignRow = {
+  handle: string;
   name: string;
   status: string;
   population_count: unknown;
@@ -74,6 +76,7 @@ function performance(row: CampaignRow): CampaignPerformance {
   const contactedCount = Math.min(count(row.contacted_count), populationCount);
   const completedCount = Math.min(count(row.completed_count), assignedCount);
   return {
+    handle: row.handle,
     name: row.name,
     status: row.status,
     populationCount,
@@ -141,6 +144,7 @@ export async function getCampaignReport(
         GROUP BY campaign_id
       )
       SELECT
+        encode(public.digest('campaign:' || summary.organization_id::text || ':' || summary.campaign_id::text, 'sha256'), 'hex') AS handle,
         summary.name,
         summary.status,
         summary.population_count,

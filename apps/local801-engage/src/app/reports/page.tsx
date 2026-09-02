@@ -226,14 +226,14 @@ function engagementBreakdownTable(
   </SectionCard>;
 }
 
-function newHireBreakdownTable(title: string, rows: NewHireBreakdown[]) {
+function newHireBreakdownTable(title: string, rows: NewHireBreakdown[], canDrilldown: boolean) {
   return (
     <SectionCard title={title} description={`Showing ${Math.min(rows.length, 50)} group${Math.min(rows.length, 50) === 1 ? "" : "s"}.`}>
       {rows.length === 0 ? <EmptyState title={`No ${title.toLowerCase()} data`} description="No new-hire totals are available for this organization." /> : (
         <DataTable caption={title} headers={[title === "New hires by department" ? "Department" : "Work location", "New hires"]}>
           {rows.map((row) => (
             <tr key={row.label}>
-              <td><strong>{row.label}</strong></td>
+              <td><strong>{canDrilldown ? <Link href={`/new-hires?q=${encodeURIComponent(row.label)}&scope=authorized`}>{row.label}</Link> : row.label}</strong></td>
               <td>{whole(row.newHireCount)}</td>
             </tr>
           ))}
@@ -243,14 +243,14 @@ function newHireBreakdownTable(title: string, rows: NewHireBreakdown[]) {
   );
 }
 
-function campaignPerformanceTable(rows: CampaignPerformance[]) {
+function campaignPerformanceTable(rows: CampaignPerformance[], canOpenCampaigns: boolean) {
   return (
     <SectionCard title="Campaign population and completion" description={`Population, assignment, contact, and completion for ${Math.min(rows.length, 50)} campaign${Math.min(rows.length, 50) === 1 ? "" : "s"}.`}>
       {rows.length === 0 ? <EmptyState title="No campaign performance data" description="No active or closed campaign totals are available for this organization." /> : (
         <DataTable caption="Campaign performance" headers={["Campaign", "Status", "Population", "Contacted", "Completed", "Coverage"]}>
           {rows.map((row) => (
             <tr key={`${row.name}:${row.status}`}>
-              <td><strong>{row.name}</strong></td>
+              <td><strong>{canOpenCampaigns ? <Link className="button secondary compact-button" href={`/campaigns/${row.handle}`}>{row.name}</Link> : row.name}</strong></td>
               <td>{statusLabel(row.status)}</td>
               <td>{whole(row.populationCount)}</td>
               <td>{whole(row.contactedCount)}</td>
@@ -264,14 +264,14 @@ function campaignPerformanceTable(rows: CampaignPerformance[]) {
   );
 }
 
-function catActionPerformanceTable(rows: CatActionPerformance[]) {
+function catActionPerformanceTable(rows: CatActionPerformance[], canOpenCatActions: boolean) {
   return (
     <SectionCard title="CAT Action workload and completion" description={`Task counts, overdue work, completion, and participation for ${Math.min(rows.length, 50)} CAT Action${Math.min(rows.length, 50) === 1 ? "" : "s"}.`}>
       {rows.length === 0 ? <EmptyState title="No CAT Action performance data" description="No CAT Action totals are available for this organization." /> : (
         <DataTable caption="CAT Action performance" headers={["CAT Action", "Status", "Workload", "Completed", "Overdue", "Completion"]}>
           {rows.map((row, index) => (
             <tr key={`${row.name}:${row.status}:${index}`}>
-              <td><strong>{row.name}</strong></td>
+              <td><strong>{canOpenCatActions ? <Link className="button secondary compact-button" href={`/cat-actions/${row.handle}`}>{row.name}</Link> : row.name}</strong></td>
               <td>{statusLabel(row.status)}</td>
               <td>{whole(row.openTaskCount)} open<div className="muted">{whole(row.taskCount)} tasks · {whole(row.participantCount)} participants</div></td>
               <td>{whole(row.completedTaskCount)}</td>
@@ -359,7 +359,7 @@ export default async function ReportsPage({
     {view === "overview" ? (
       !commandCenterReport ? (
         <SectionCard title="Outreach coverage and workload"><UnavailableState title="Outreach coverage unavailable" description="We couldn’t load assignment, contact, follow-up, and new-hire timing totals for your current access. No substitute numbers are shown. Reference: REPORTS_UNAVAILABLE." action={<Link className="button secondary" href="/reports?view=overview">Try again</Link>} /></SectionCard>
-      ) : <EngagementCommandCenter report={commandCenterReport} />
+      ) : <EngagementCommandCenter report={commandCenterReport} canOpenPeople={can(user.role, "recordEngagement")} />
     ) : view === "cat-actions" ? (
       !catActionReport ? (
         <SectionCard title="CAT Action reporting"><UnavailableState title="CAT Action report unavailable" description="We couldn’t load the CAT Action summary for your current access. Reference: REPORTS_UNAVAILABLE." action={<Link className="button secondary" href="/reports?view=cat-actions">Try again</Link>} /></SectionCard>
@@ -388,7 +388,7 @@ export default async function ReportsPage({
             </DataTable>
           )}
         </SectionCard>
-        {catActionPerformanceTable(catActionReport.actions)}
+        {catActionPerformanceTable(catActionReport.actions, can(user.role, "manageCatActions"))}
       </>
     ) : view === "campaigns" ? (
       !campaignReport ? (
@@ -409,7 +409,7 @@ export default async function ReportsPage({
             </DataTable>
           )}
         </SectionCard>
-        {campaignPerformanceTable(campaignReport.campaigns)}
+        {campaignPerformanceTable(campaignReport.campaigns, can(user.role, "viewCampaigns"))}
       </>
     ) : view === "engagement" ? (
       !engagementReport ? (
@@ -455,8 +455,8 @@ export default async function ReportsPage({
           {newHireTrend(newHireReport.monthly)}
         </SectionCard>
 
-        {newHireBreakdownTable("New hires by department", newHireReport.departments)}
-        {newHireBreakdownTable("New hires by work location", newHireReport.workLocations)}
+        {newHireBreakdownTable("New hires by department", newHireReport.departments, can(user.role, "assignNewHires"))}
+        {newHireBreakdownTable("New hires by work location", newHireReport.workLocations, can(user.role, "assignNewHires"))}
       </>
     ) : !membershipReport ? (
       <SectionCard title="Membership reporting">

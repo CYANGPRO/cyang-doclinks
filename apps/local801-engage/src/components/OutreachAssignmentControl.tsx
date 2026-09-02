@@ -19,6 +19,7 @@ export function OutreachAssignmentControl({
   returnHref: string;
 }) {
   const router = useRouter();
+  const organizerSelectId = `outreach-primary-organizer-${memberHandle.slice(0, 12)}`;
   const [selected, setSelected] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -78,21 +79,21 @@ export function OutreachAssignmentControl({
   return <div className="stack">
     {assignees.length > 0 ? <div className="form-grid">
         <div className="field">
-          <label htmlFor="outreach-primary-organizer">Primary organizer</label>
+          <label htmlFor={organizerSelectId}>Primary organizer</label>
           <select
-            id="outreach-primary-organizer"
+            id={organizerSelectId}
             aria-label={`Assign outreach for ${memberName}`}
             value={selected}
             disabled={busy}
             onChange={(event) => setSelected(event.target.value)}
           >
-            <option value="">Choose an LCAT or CAT</option>
+            <option value="">Choose a CAT member or higher</option>
             {assignees.map((assignee) => <option key={assignee.handle} value={assignee.handle}>
               {assignee.label}{assignee.current ? " (you)" : ""}
             </option>)}
           </select>
         </div>
-      </div> : <p className="muted">No active LCAT or CAT accounts are available to assign.</p>}
+      </div> : <p className="muted">No active CAT-or-higher accounts are available to assign.</p>}
     <div className="form-actions">
       {assignees.length > 0 ? <button className="button secondary" type="button" disabled={busy || !selected} onClick={assign}>
           {busy ? "Saving…" : "Assign organizer"}

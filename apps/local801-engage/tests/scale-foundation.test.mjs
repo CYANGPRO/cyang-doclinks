@@ -128,10 +128,10 @@ test("generated 20,000-person Directory search returns at most 100 deterministic
   assert.doesNotMatch(sqlText, /OFFSET/i);
 });
 
-test("CAT Directory scope cannot be broadened by query input in a 20,000-person search", async () => {
+test("CAT Directory can use the authorized organization-wide scope for assignment search", async () => {
   let sqlText = "";
   const result = await getDirectoryPage(context("cat_member"), { scope: "authorized", pageSize: "100" }, async (sql) => { sqlText = sql; return []; });
-  assert.equal(result.effectiveScope, "assigned");
+  assert.equal(result.effectiveScope, "authorized");
   assert.match(sqlText, /engagement_assignments assignment/);
   assert.match(sqlText, /assignment\.organization_id = \$1/);
   assert.match(sqlText, /assignment\.primary_user_id = \$2::uuid OR assignment\.backup_user_id = \$2::uuid/);

@@ -477,10 +477,20 @@ body {
 .snapshot-panel .stat-detail { font-size: .69rem; margin-top: 5px; }
 .snapshot-panel .stat-card > span[aria-hidden="true"] { right: 9px !important; top: 7px !important; }
 
-/* Responsive records replace sideways tables. */
-.responsive-table .table-scroll-hint { display: none; }
-.table-scroll { border-color: var(--border-soft); box-shadow: none; overflow: visible; }
-.data-table { min-width: 0; width: 100%; }
+/* Desktop tables wrap every column and long lists remain vertically reviewable in place. */
+.responsive-table { max-width: 100%; min-width: 0; }
+.responsive-table .table-scroll-hint { display: block; }
+.table-scroll {
+  border-color: var(--border-soft);
+  box-shadow: none;
+  max-height: min(70vh, 760px);
+  max-width: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+.data-table { min-width: 0; table-layout: auto; width: 100%; }
+.data-table thead { position: sticky; top: 0; z-index: 1; }
 .data-table th,
 .data-table td { min-width: 0; overflow-wrap: anywhere; }
 .data-table .button {
@@ -702,7 +712,7 @@ body {
   .snapshot-panel .dashboard-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .snapshot-panel .stat-card { min-height: 96px; }
 
-  .responsive-table .table-scroll { background: transparent; border: 0; overflow: visible; }
+  .responsive-table .table-scroll { background: transparent; border: 0; max-height: none; overflow: visible; }
   .responsive-table .data-table { display: block; min-width: 0; width: 100%; }
   .responsive-table thead { display: none; }
   .responsive-table tbody { display: grid; gap: 10px; }

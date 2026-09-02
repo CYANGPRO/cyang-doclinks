@@ -230,7 +230,7 @@ export default async function OutreachEmployeePage({ params, searchParams }: { p
               : item.parentHandle && item.scope === "cat_action" && can(user.role, "manageCatActions") ? <Link href={`/cat-actions/${item.parentHandle}`}><strong>{item.parentName}</strong></Link>
                 : <strong>{item.parentName}</strong>}<div className="muted">{item.scope.replaceAll("_", " ")} · {item.parentStatus}</div></td>
             <td>{item.actionLabel}</td>
-            <td><StatusBadge tone={item.response === "willing" || item.response === "completed" ? "ready" : item.response === "declined" ? "warning" : "pending"}>{responseLabel(item.response)}</StatusBadge></td>
+            <td><StatusBadge tone={item.response === "willing" || item.response === "completed" ? "ready" : item.response === "declined" ? "warning" : "pending"}>{item.responseLabel || responseLabel(item.response)}</StatusBadge></td>
             <td>{dateTime(item.updatedAt)}</td>
           </tr>)}
         </DataTable>}

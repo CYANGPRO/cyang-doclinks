@@ -37,6 +37,7 @@ type CandidateRow = {
   overdue_followup_count: unknown;
   next_followup_at: string | Date | null;
   willing_action_count: unknown;
+  willing_action_labels: string[] | null;
   considering_action_count: unknown;
   completed_action_count: unknown;
   declines_all_actions: boolean | null;
@@ -219,6 +220,15 @@ export async function getProtectedOutreachQueue(
             AND scope_assignment.archived_at IS NULL AND scope_assignment.status = 'open'
             AND (scope_assignment.primary_user_id = $2::uuid OR scope_assignment.backup_user_id = $2::uuid)
         ))
+        AND ($9::text IS NULL OR EXISTS (
+          SELECT 1 FROM local801.engagement_assignments filtered_assignment
+          WHERE filtered_assignment.organization_id = $1::uuid
+            AND filtered_assignment.person_id = person.id
+            AND filtered_assignment.archived_at IS NULL
+            AND filtered_assignment.status = 'open'
+            AND filtered_assignment.primary_user_id IS NOT NULL
+            AND encode(public.digest('user:' || $1::text || ':' || filtered_assignment.primary_user_id::text, 'sha256'), 'hex') = $9::text
+        ))
         AND ($4::text IS NULL
           OR person.department ILIKE $4::text ESCAPE '\\'
           OR person.classification ILIKE $4::text ESCAPE '\\'
@@ -247,6 +257,7 @@ export async function getProtectedOutreachQueue(
       SELECT base.*,
         COALESCE(assignment_info.is_primary, false) AS is_primary,
         COALESCE(assignment_info.is_backup, false) AS is_backup,
+        COALESCE(assignment_info.active_assignment_count, 0) AS active_assignment_count,
         assignment_info.assignment_due_at,
         latest_event.occurred_at AS latest_engagement_at,
         latest_event.outcome AS latest_outcome,
@@ -254,6 +265,7 @@ export async function getProtectedOutreachQueue(
         COALESCE(followup.overdue_count, 0) AS overdue_followup_count,
         followup.next_due_at AS next_followup_at,
         COALESCE(readiness.willing_action_count, 0) AS willing_action_count,
+        COALESCE(willing_actions.labels, ARRAY[]::text[]) AS willing_action_labels,
         COALESCE(readiness.considering_action_count, 0) AS considering_action_count,
         COALESCE(readiness.completed_action_count, 0) AS completed_action_count,
         COALESCE(readiness.declines_all_actions, false) AS declines_all_actions
@@ -261,11 +273,23 @@ export async function getProtectedOutreachQueue(
       LEFT JOIN LATERAL (
         SELECT bool_or(assignment.primary_user_id = $2::uuid) AS is_primary,
           bool_or(assignment.backup_user_id = $2::uuid) AS is_backup,
+          count(*) AS active_assignment_count,
           min(assignment.due_at) FILTER (WHERE assignment.due_at IS NOT NULL) AS assignment_due_at
         FROM local801.engagement_assignments assignment
         WHERE assignment.organization_id = $1::uuid AND assignment.person_id = base.person_id
           AND assignment.archived_at IS NULL AND assignment.status = 'open'
       ) assignment_info ON true
+      LEFT JOIN LATERAL (
+        SELECT array_agg(action.name ORDER BY action.engagement_level, action.name) AS labels
+        FROM reporting.employee_action_current_responses response
+        JOIN local801.employee_actions action
+          ON action.organization_id = response.organization_id
+         AND action.id = response.action_id
+         AND action.archived_at IS NULL
+        WHERE response.organization_id = $1::uuid
+          AND response.person_id = base.person_id
+          AND response.response_status = 'willing'
+      ) willing_actions ON true
       LEFT JOIN LATERAL (
         SELECT event.occurred_at, event.outcome
         FROM local801.engagement_events event
@@ -281,6 +305,13 @@ export async function getProtectedOutreachQueue(
       ) followup ON true
       LEFT JOIN reporting.employee_action_person_readiness readiness
         ON readiness.organization_id = $1::uuid AND readiness.person_id = base.person_id
+      WHERE $10::text IS NULL OR EXISTS (
+        SELECT 1 FROM reporting.employee_action_current_responses selected_response
+        WHERE selected_response.organization_id = $1::uuid
+          AND selected_response.person_id = base.person_id
+          AND selected_response.response_status = 'willing'
+          AND encode(public.digest($1::text || ':' || selected_response.action_id::text, 'sha256'), 'hex') = $10::text
+      )
     ), prioritized AS (
       SELECT signals.*,
         CASE
@@ -301,6 +332,10 @@ export async function getProtectedOutreachQueue(
        OR ($5::text = 'attention' AND priority_rank <= 4)
        OR ($5::text = 'never-engaged' AND priority_rank = 3)
        OR ($5::text = 'stale' AND priority_rank = 4)
+       OR ($5::text = 'assigned' AND active_assignment_count > 0)
+       OR ($5::text = 'unassigned' AND active_assignment_count = 0)
+       OR ($5::text = 'contacted' AND latest_engagement_at IS NOT NULL)
+       OR ($5::text = 'willing' AND willing_action_count > 0)
     ORDER BY person_id
     LIMIT ${CANDIDATE_CAP + 1}
   `, [
@@ -312,6 +347,8 @@ export async function getProtectedOutreachQueue(
     search.email?.key_version ?? null,
     search.email?.hash ?? null,
     JSON.stringify(search.tokens),
+    normalized.assigneeHandle,
+    normalized.actionHandle,
   ]);
   if (rows.length > CANDIDATE_CAP) {
     blocked("OUTREACH_CANDIDATE_CAP", "The protected Outreach candidate set is too large. Narrow the search or focus.");
@@ -412,6 +449,7 @@ export async function getProtectedOutreachQueue(
       overdueFollowupCount: finiteInteger(row.overdue_followup_count),
       nextFollowupAt: normalizeTimestamp(row.next_followup_at),
       willingActionCount: finiteInteger(row.willing_action_count),
+      willingActionLabels: row.willing_action_labels ?? [],
       consideringActionCount: finiteInteger(row.considering_action_count),
       completedActionCount: finiteInteger(row.completed_action_count),
       declinesAllActions: Boolean(row.declines_all_actions),
@@ -425,6 +463,8 @@ export async function getProtectedOutreachQueue(
     requestedScope: normalized.requestedScope,
     effectiveScope,
     focus: normalized.focus,
+    assigneeHandle: normalized.assigneeHandle,
+    actionHandle: normalized.actionHandle,
     pageSize: normalized.pageSize,
     total,
     previousCursor: null,

@@ -79,7 +79,7 @@ async function resolveAssignee(context: WorkspaceContext, handleInput: unknown, 
       ON role.id = user_role.role_id AND role.organization_id = $1::uuid
     WHERE app_user.organization_id = $1::uuid
       AND app_user.deactivated_at IS NULL
-      AND role.code IN ('cat_lead','cat_member')
+      AND role.code IN ('system_owner','local_admin','cat_admin','cat_lead','cat_member')
       AND encode(public.digest('user:' || $1::text || ':' || app_user.id::text, 'sha256'), 'hex') = $2::text
     LIMIT 1
   `, [context.organizationId, handle]);
@@ -101,7 +101,7 @@ export async function getOutreachAssignmentOptions(
       ON role.id = user_role.role_id AND role.organization_id = $1::uuid
     WHERE app_user.organization_id = $1::uuid
       AND app_user.deactivated_at IS NULL
-      AND role.code IN ('cat_lead','cat_member')
+      AND role.code IN ('system_owner','local_admin','cat_admin','cat_lead','cat_member')
     ORDER BY app_user.display_name, app_user.id
     LIMIT 100
   `, [context.organizationId]);
@@ -162,7 +162,7 @@ export async function assignOutreachOrganizer(
               ON role.id = user_role.role_id AND role.organization_id = $1::uuid
             WHERE user_role.user_id = app_user.id
               AND role.code = $4::text
-              AND role.code IN ('system_owner','local_admin','cat_admin','cat_lead')
+              AND role.code IN ('system_owner','local_admin','cat_admin','cat_lead','cat_member')
           )
       ), person AS MATERIALIZED (
         SELECT candidate.id
@@ -178,7 +178,7 @@ export async function assignOutreachOrganizer(
           ON role.id = user_role.role_id AND role.organization_id = $1::uuid
         WHERE candidate.organization_id = $1::uuid
           AND candidate.deactivated_at IS NULL
-          AND role.code IN ('cat_lead','cat_member')
+          AND role.code IN ('system_owner','local_admin','cat_admin','cat_lead','cat_member')
           AND encode(public.digest('user:' || $1::text || ':' || candidate.id::text, 'sha256'), 'hex') = $6::text
       ), current_direct AS MATERIALIZED (
         SELECT assignment.id
@@ -280,7 +280,7 @@ export async function deleteMemberOutreach(
               ON role.id = user_role.role_id AND role.organization_id = $1::uuid
             WHERE user_role.user_id = app_user.id
               AND role.code = $4::text
-              AND role.code IN ('system_owner','local_admin','cat_admin','cat_lead')
+              AND role.code IN ('system_owner','local_admin','cat_admin','cat_lead','cat_member')
           )
       ), person AS MATERIALIZED (
         SELECT candidate.id

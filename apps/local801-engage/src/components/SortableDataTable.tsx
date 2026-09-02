@@ -59,7 +59,7 @@ export function SortableDataTable({ caption, headers, children, initialRows }: {
   }
 
   return <div className="responsive-table">
-    <p className="table-scroll-hint">Select a column heading to sort.</p>
+    <p className="table-scroll-hint">Select a column heading to sort. Long tables scroll vertically so every row remains available.</p>
     <div className="table-scroll" tabIndex={0} role="region" aria-label={caption}>
       <table className="data-table">
         <caption className="sr-only">{caption}</caption>

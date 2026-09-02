@@ -251,6 +251,10 @@ export async function getNewHireQueue(
         event.hire_department,
         event.hire_work_location
       FROM local801.people person
+      JOIN local801.new_hire_roster_entries roster
+        ON roster.organization_id = $1::uuid
+       AND roster.person_id = person.id
+       AND roster.archived_at IS NULL
       LEFT JOIN latest_hire_events event ON event.person_id = person.id
       WHERE person.organization_id = $1::uuid
         AND person.archived_at IS NULL

@@ -1,14 +1,16 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppliedFilterSummary, DataTable, DisclosureCard, EmptyState, FilterBar, PageHeader, Pagination, SectionCard, StatusBadge, UnavailableState } from "@/components/DesignSystem";
+import { OutreachAssignmentControl } from "@/components/OutreachAssignmentControl";
 import { ProtectedPage } from "@/components/ProtectedPage";
 import { QueueDensity } from "@/components/QueueDensity";
-import { EmployeeDeleteControl } from "@/components/EmployeeDeleteControl";
 import { can } from "@/lib/access";
 import { getPreviewUser } from "@/lib/authz.server";
 import { formatCatDate } from "@/lib/date-format";
 import { DEFAULT_DIRECTORY_PAGE_SIZE, getDirectoryPage, type DirectoryPage as Results } from "@/lib/directory";
 import { hydrateDirectoryPageFromProtectedPii, isPiiProtectedReadEnabled } from "@/lib/pii-protected-read";
+import { hydrateOutreachAssigneeOptionsFromProtectedPii } from "@/lib/pii-protected-outreach-read";
+import { getOutreachAssignmentOptions } from "@/lib/outreach-assignment";
 import { resolveWorkspaceContext } from "@/lib/workspace-context";
 import { enforceWorkspaceRateLimit } from "@/lib/rate-limit";
 
@@ -34,14 +36,23 @@ export default async function DirectoryPage({ searchParams }: { searchParams: Se
   if (!user) redirect("/sign-in");
   if (!can(user.role, "viewDirectory")) redirect("/unauthorized");
   const canOpenEmployee = can(user.role, "recordEngagement");
-  const canDeleteEmployee = can(user.role, "deleteEmployees");
+  const canAssignEmployee = can(user.role, "assignOutreach");
   const parameters = await searchParams;
   let results = emptyResults(); let unavailable = false; let protectedReadEnabled = false;
+  let assignmentOptions: Awaited<ReturnType<typeof getOutreachAssignmentOptions>> = [];
   try {
     const context = await resolveWorkspaceContext(user);
     await enforceWorkspaceRateLimit(context, "search");
-    const legacyResults = await getDirectoryPage(context, { term: parameters.q, scope: parameters.scope, pageSize: parameters.limit, cursor: parameters.cursor, membershipStatus: parameters.membershipStatus, department: parameters.department, classification: parameters.classification, workLocation: parameters.workLocation });
-    results = await hydrateDirectoryPageFromProtectedPii(context.organizationId, legacyResults);
+    const [legacyResults, rawAssignmentOptions] = await Promise.all([
+      getDirectoryPage(context, { term: parameters.q, scope: parameters.scope, pageSize: parameters.limit, cursor: parameters.cursor, membershipStatus: parameters.membershipStatus, department: parameters.department, classification: parameters.classification, workLocation: parameters.workLocation }),
+      canAssignEmployee ? getOutreachAssignmentOptions(context) : Promise.resolve([]),
+    ]);
+    [results, assignmentOptions] = await Promise.all([
+      hydrateDirectoryPageFromProtectedPii(context.organizationId, legacyResults),
+      canAssignEmployee
+        ? hydrateOutreachAssigneeOptionsFromProtectedPii(context.organizationId, rawAssignmentOptions)
+        : Promise.resolve([]),
+    ]);
     protectedReadEnabled = isPiiProtectedReadEnabled();
   } catch (error) {
     const source = error && typeof error === "object" ? error as Record<string, unknown> : {};
@@ -67,7 +78,7 @@ export default async function DirectoryPage({ searchParams }: { searchParams: Se
   ].filter(Boolean);
 
   return <ProtectedPage permission="viewDirectory"><div className="content directory-page">
-    <PageHeader eyebrow="Members" title="Directory" description="Find people by name, workplace, classification, membership status, or work email." />
+    <PageHeader eyebrow="Members" title="Directory" description="Find employees and assign their outreach to an active CAT member or higher role." />
     <DisclosureCard className="directory-filter-card queue-filter-panel" title="Find someone" description={filterSummary.length ? `${filterSummary.length} filter${filterSummary.length === 1 ? "" : "s"} applied. Open to change the current view.` : "Search by name, workplace, classification, membership status, or work email."} defaultOpen={filterSummary.length === 0}>
       <form className="directory-search-form" action="/directory" method="get">
         <FilterBar>
@@ -113,7 +124,7 @@ export default async function DirectoryPage({ searchParams }: { searchParams: Se
         </div> : null}
 
         <div className="directory-desktop-results">
-          <DataTable caption="Directory results" headers={canDeleteEmployee ? ["Person", "Hire Date", "Work", "Contact", "Actions"] : ["Person", "Hire Date", "Work", "Contact"]}>
+          <DataTable caption="Directory results" headers={canAssignEmployee ? ["Person", "Hire Date", "Work", "Contact", "Assignment"] : ["Person", "Hire Date", "Work", "Contact"]}>
             {results.people.map((person) => <tr key={person.handle}>
               <td>
                 <div className="person-membership-stack">
@@ -131,7 +142,16 @@ export default async function DirectoryPage({ searchParams }: { searchParams: Se
                 <div>{person.workEmail ? <a href={`mailto:${person.workEmail}`}>{person.workEmail}</a> : <span className="muted">Work email not recorded</span>}</div>
                 <div>{person.workPhone ? <a href={`tel:${person.workPhone}`}>{person.workPhone}</a> : <span className="muted">Work phone not recorded</span>}</div>
               </td>
-              {canDeleteEmployee ? <td><EmployeeDeleteControl displayName={`${person.firstName} ${person.lastName}`} personHandle={person.handle} /></td> : null}
+              {canAssignEmployee ? <td><details className="directory-assignment-control">
+                <summary className="button secondary">Assign employee</summary>
+                <div className="directory-assignment-panel"><OutreachAssignmentControl
+                  memberHandle={person.handle}
+                  memberName={`${person.firstName} ${person.lastName}`}
+                  assignees={assignmentOptions}
+                  canDelete={false}
+                  returnHref="/directory"
+                /></div>
+              </details></td> : null}
             </tr>)}
           </DataTable>
         </div>
@@ -152,7 +172,16 @@ export default async function DirectoryPage({ searchParams }: { searchParams: Se
               <span>{person.workPhone ? <a href={`tel:${person.workPhone}`}>{person.workPhone}</a> : <span className="muted">Work phone not recorded</span>}</span>
             </div>
             {canOpenEmployee ? <Link className="directory-member360-link" href={`/outreach/${person.handle}`}>Outreach record <span aria-hidden="true">→</span></Link> : null}
-            {canDeleteEmployee ? <EmployeeDeleteControl displayName={`${person.firstName} ${person.lastName}`} personHandle={person.handle} /> : null}
+            {canAssignEmployee ? <details className="directory-assignment-control">
+              <summary className="button secondary">Assign employee</summary>
+              <div className="directory-assignment-panel"><OutreachAssignmentControl
+                memberHandle={person.handle}
+                memberName={`${person.firstName} ${person.lastName}`}
+                assignees={assignmentOptions}
+                canDelete={false}
+                returnHref="/directory"
+              /></div>
+            </details> : null}
           </article>)}
         </div></QueueDensity>
 

@@ -82,7 +82,7 @@ export async function PATCH(request: Request) {
     return json({ action: "responses_updated", ...result });
   } catch (error) {
     if (error instanceof RateLimitError) return rateLimitResponse(error);
-    const message = error instanceof Error && /^(Action|Employee action|Keep at least)/.test(error.message)
+    const message = error instanceof Error && /^(Action|Employee action|Keep at least|The four|Available action)/.test(error.message)
       ? error.message
       : "The action response choices could not be updated safely.";
     const status = /too large/i.test(message) ? 413 : /must be JSON/i.test(message) ? 415 : /invalid|must be|at least|different/i.test(message) ? 400 : /authorized/i.test(message) ? 403 : 409;

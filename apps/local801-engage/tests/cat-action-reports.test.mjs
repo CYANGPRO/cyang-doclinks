@@ -28,6 +28,7 @@ function reportQueryRecorder() {
     if (sql.includes("reports:cat-actions-statuses")) return [{ status: "active", action_count: "1" }];
     if (sql.includes("reports:cat-actions-task-statuses")) return [{ status: "open", task_count: "1" }];
     if (sql.includes("reports:cat-actions-performance")) return [{
+      handle: "a".repeat(64),
       name: "Synthetic Contract Action",
       status: "active",
       task_count: "1",
@@ -95,6 +96,7 @@ test("CAT action counts and rates are clamped to valid denominators", async () =
       participant_count: 6,
     }];
     if (sql.includes("reports:cat-actions-performance")) return [{
+      handle: "a".repeat(64),
       name: "Synthetic Contract Action",
       status: "active",
       task_count: 2,
@@ -120,6 +122,7 @@ test("CAT action report model does not expose internal IDs or assignee data", as
   const serialized = JSON.stringify(report);
   assert.doesNotMatch(serialized, /catActionId|cat_action_id|assignedTo|assigned_to|userId|personId/i);
   assert.deepEqual(report.actions[0], {
+    handle: "a".repeat(64),
     name: "Synthetic Contract Action",
     status: "active",
     taskCount: 1,

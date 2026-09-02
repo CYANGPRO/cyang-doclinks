@@ -7,7 +7,7 @@ import type {
   EngagementAssigneeOption,
   EngagementAssignmentOption,
 } from "@/lib/engagement-recording";
-import type { EmployeeActionDefinition, EmployeeActionProfileItem } from "@/lib/employee-actions";
+import type { EmployeeActionDefinition, EmployeeActionProfileItem, EmployeeActionResponse } from "@/lib/employee-actions";
 import { followupSuggestionForOutcome, suggestedLocalDateTime } from "@/lib/follow-up-suggestions";
 
 const contactMethods = [
@@ -51,8 +51,6 @@ type Props = {
   organizationWide: boolean;
 };
 
-type ActionResponse = "willing" | "considering" | "declined" | "completed";
-
 async function responseBody(response: Response) {
   return response.json().catch(() => ({})) as Promise<{ message?: unknown; engagementHandle?: unknown }>;
 }
@@ -74,7 +72,7 @@ export function EngagementRecorder({
   const [followupEnabled, setFollowupEnabled] = useState(false);
   const [followupDueAt, setFollowupDueAt] = useState("");
   const [lastEngagementHandle, setLastEngagementHandle] = useState<string | null>(null);
-  const [actionSelections, setActionSelections] = useState<Record<string, ActionResponse | "">>({});
+  const [actionSelections, setActionSelections] = useState<Record<string, EmployeeActionResponse | "">>({});
   const currentByAction = useMemo(() => new Map(currentActions.map((item) => [item.handle, item.response])), [currentActions]);
   const followupSuggestion = useMemo(() => followupSuggestionForOutcome(outcome), [outcome]);
 
@@ -130,7 +128,7 @@ export function EngagementRecorder({
     }
   }
 
-  async function updateAction(actionHandle: string, responseValue: ActionResponse) {
+  async function updateAction(actionHandle: string, responseValue: EmployeeActionResponse) {
     if (actionBusy) return;
     setActionBusy(actionHandle);
     setError(null);
@@ -217,7 +215,7 @@ export function EngagementRecorder({
         {lastEngagementHandle ? <p className="muted">Changes you make now will be linked to the conversation you just saved.</p> : null}
         {actionDefinitions.length === 0 ? <div className="empty-state"><strong>No actions are set up yet</strong><p>Create the action catalog before recording willingness.</p></div> : <div className="stack">
           {actionDefinitions.map((action) => {
-            const current = currentByAction.get(action.handle) as ActionResponse | undefined;
+            const current = currentByAction.get(action.handle) as EmployeeActionResponse | undefined;
             const selected = actionSelections[action.handle] ?? current ?? "";
             const fieldId = `action-response-${action.handle}`;
             const currentOption = current ? action.responseOptions.find((option) => option.value === current) : null;
@@ -227,7 +225,7 @@ export function EngagementRecorder({
               <div className="form-grid action-readiness-editor">
                 <div className="field">
                   <label htmlFor={fieldId}>Response</label>
-                  <select id={fieldId} value={selected} onChange={(event) => setActionSelections((previous) => ({ ...previous, [action.handle]: event.target.value as ActionResponse | "" }))}>
+                  <select id={fieldId} value={selected} onChange={(event) => setActionSelections((previous) => ({ ...previous, [action.handle]: event.target.value as EmployeeActionResponse | "" }))}>
                     <option value="">Choose a response</option>
                     {currentOption && !currentOption.enabled ? <option value={currentOption.value} disabled>{currentOption.label} (no longer available)</option> : null}
                     {availableOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}

@@ -58,6 +58,15 @@ test("protected apply SQL is set-based, protected-companion aware, and never rea
   assert.doesNotMatch(PROTECTED_IMPORT_APPLY_SQL, /operational_json\s*->>\s*'member_identifier'/i);
 });
 
+test("protected new-hire execution replaces only omitted people whose CAT work is already assigned", () => {
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /cleared_prior_new_hire_queue AS/);
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /UPDATE local801\.new_hire_roster_entries roster/);
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /NOT EXISTS \([\s\S]*mutations mutation[\s\S]*mutation\.target_person_id = roster\.person_id/);
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /role\.code IN \('system_owner','local_admin','cat_admin','cat_lead','cat_member'\)/);
+  assert.doesNotMatch(PROTECTED_IMPORT_APPLY_SQL, /UPDATE local801\.engagement_assignments|DELETE FROM local801\.engagement_assignments/i);
+  assert.match(PROTECTED_IMPORT_APPLY_SQL, /upserted_new_hire_queue AS[\s\S]*archived_at = NULL/);
+});
+
 test("current-roster snapshots use the rows returned by insert and update CTEs", () => {
   assert.match(PROTECTED_IMPORT_APPLY_SQL, /RETURNING id, membership_status, department, work_location, classification/);
   assert.match(PROTECTED_IMPORT_APPLY_SQL, /RETURNING person\.id, person\.membership_status, person\.department, person\.work_location, person\.classification/);

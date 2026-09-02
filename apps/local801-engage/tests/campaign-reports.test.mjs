@@ -18,7 +18,7 @@ function recorder() {
     calls.push({ sql, parameters });
     if (sql.includes("reports:campaign-overview")) return [{ campaign_count: "1", active_campaign_count: "1", population_count: "4", assigned_count: "4", contacted_count: "1", completed_count: "0" }];
     if (sql.includes("reports:campaign-statuses")) return [{ status: "active", campaign_count: "1" }];
-    if (sql.includes("reports:campaign-performance")) return [{ name: "Synthetic Member Outreach", status: "active", population_count: "4", assigned_count: "4", contacted_count: "1", completed_count: "0" }];
+    if (sql.includes("reports:campaign-performance")) return [{ handle: "b".repeat(64), name: "Synthetic Member Outreach", status: "active", population_count: "4", assigned_count: "4", contacted_count: "1", completed_count: "0" }];
     throw new Error("Unexpected campaign report query");
   };
   return { calls, query };
@@ -62,7 +62,7 @@ test("campaign report excludes archived campaigns and bounds detail/status outpu
 });
 
 test("coverage and completion ratios are clamped to valid denominators", () => {
-  const row = __testing.performance({ name: "A", status: "active", population_count: 4, assigned_count: 9, contacted_count: 8, completed_count: 7 });
+  const row = __testing.performance({ handle: "b".repeat(64), name: "A", status: "active", population_count: 4, assigned_count: 9, contacted_count: 8, completed_count: 7 });
   assert.equal(row.assignedCount, 4);
   assert.equal(row.contactedCount, 4);
   assert.equal(row.completedCount, 4);

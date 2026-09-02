@@ -21,7 +21,8 @@ export type Member360ScopedReadiness = {
   parentName: string;
   parentStatus: string;
   actionLabel: string;
-  response: "willing" | "considering" | "declined" | "completed";
+  response: string;
+  responseLabel: string;
   updatedAt: string;
 };
 
@@ -45,6 +46,7 @@ type ReadinessRow = {
   parent_status: string | null;
   action_label: string;
   response_status: Member360ScopedReadiness["response"];
+  response_label: string;
   recorded_at: string | Date;
 };
 
@@ -140,6 +142,21 @@ export async function getMember360ConnectedContext(
         CASE action.scope_type WHEN 'campaign' THEN campaign.status WHEN 'cat_action' THEN cat_action.status ELSE NULL END AS parent_status,
         action.name AS action_label,
         current.response_status,
+        COALESCE(
+          CASE current.response_status
+            WHEN 'willing' THEN action.willing_response_label
+            WHEN 'considering' THEN action.considering_response_label
+            WHEN 'declined' THEN action.declined_response_label
+            WHEN 'completed' THEN action.completed_response_label
+          END,
+          (
+            SELECT option ->> 'label'
+            FROM jsonb_array_elements(action.custom_response_options) option
+            WHERE option ->> 'value' = current.response_status
+            LIMIT 1
+          ),
+          'Custom response'
+        ) AS response_label,
         current.recorded_at
       FROM reporting.employee_action_current_responses current
       JOIN local801.employee_actions action
@@ -179,6 +196,7 @@ export async function getMember360ConnectedContext(
         parentStatus: row.parent_status!,
         actionLabel: row.action_label,
         response: row.response_status,
+        responseLabel: row.response_label,
         updatedAt: timestamp(row.recorded_at)!,
       })),
   };

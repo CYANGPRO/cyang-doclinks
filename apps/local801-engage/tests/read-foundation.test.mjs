@@ -252,33 +252,7 @@ test("Directory permission includes membership managers and excludes report view
   assert.equal(can("report_viewer", "viewDirectory"), false);
 });
 
-for (const role of ["cat_member"]) {
-  test(`${role} is assignment scoped and cannot escalate with authorized scope`, async () => {
-    let capturedSql = "";
-    let capturedParameters = [];
-    const result = await getDirectoryPage(
-      workspaceContext(role),
-      { term: "Morgan", scope: "authorized" },
-      async (sql, parameters) => {
-        capturedSql = sql;
-        capturedParameters = parameters;
-        return [directoryRow()];
-      },
-    );
-
-    assert.equal(result.requestedScope, "authorized");
-    assert.equal(result.effectiveScope, "assigned");
-    assert.match(capturedSql, /FROM local801\.engagement_assignments assignment/);
-    assert.match(capturedSql, /assignment\.organization_id = \$1/);
-    assert.match(capturedSql, /assignment\.archived_at IS NULL/);
-    assert.match(capturedSql, /assignment\.status = 'open'/);
-    assert.match(capturedSql, /assignment\.primary_user_id = \$2::uuid OR assignment\.backup_user_id = \$2::uuid/);
-    assert.deepEqual(capturedParameters.slice(0, 3), [organizationId, userId, "%Morgan%"]);
-    assert.equal(capturedParameters[11], false);
-  });
-}
-
-for (const role of ["system_owner", "local_admin", "membership_data_manager", "cat_admin", "cat_lead"]) {
+for (const role of ["system_owner", "local_admin", "membership_data_manager", "cat_admin", "cat_lead", "cat_member"]) {
   test(`${role} can perform an organization-wide Directory search`, async () => {
     let capturedSql = "";
     let capturedParameters = [];

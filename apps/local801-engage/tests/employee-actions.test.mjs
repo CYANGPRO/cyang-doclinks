@@ -252,7 +252,7 @@ test("approved CAT, LCAT, data, and administrator roles can create audited actio
   }, { query }), /not authorized/i);
 });
 
-test("action managers can rename and enable response choices without changing response meanings", async () => {
+test("action managers can add a distinct custom response beyond the four defaults", async () => {
   const statements = [];
   const query = async (sql) => {
     if (sql.includes("employee-actions:resolve-handle")) return [{ id: actionId }];
@@ -263,6 +263,7 @@ test("action managers can rename and enable response choices without changing re
     { value: "considering", label: "Needs more information", enabled: true },
     { value: "declined", label: "Not participating", enabled: false },
     { value: "completed", label: "Done", enabled: true },
+    { value: `custom:${"a".repeat(32)}`, label: "Needs transportation", enabled: true },
   ];
   const result = await updateEmployeeActionResponseOptions(context("cat_admin"), {
     actionHandle,
@@ -277,9 +278,33 @@ test("action managers can rename and enable response choices without changing re
   assert.equal(statements.length, 2);
   assert.match(statements[0].sql, /employee-actions:update-response-options/);
   assert.match(statements[0].sql, /enabled_response_statuses = \$7::text\[\]/);
-  assert.deepEqual(statements[0].parameters[6], ["willing", "considering", "completed"]);
+  assert.match(statements[0].sql, /custom_response_options = \$8::jsonb/);
+  assert.deepEqual(statements[0].parameters[6], ["willing", "considering", "completed", `custom:${"a".repeat(32)}`]);
+  assert.deepEqual(JSON.parse(statements[0].parameters[7]), [{ value: `custom:${"a".repeat(32)}`, label: "Needs transportation", enabled: true }]);
   assert.match(statements[0].sql, /role\.code IN \('system_owner','local_admin','membership_data_manager','cat_admin','cat_lead','cat_member'\)/);
-  assert.deepEqual(statements[1].parameters[0], ["willing", "considering", "completed"]);
+  assert.deepEqual(statements[1].parameters[0], ["willing", "considering", "completed", `custom:${"a".repeat(32)}`]);
+});
+
+test("custom action responses are accepted as distinct append-only history values", async () => {
+  const statements = [];
+  const customResponse = `custom:${"b".repeat(32)}`;
+  const query = async (sql) => {
+    if (sql.includes("employee-actions:person-scope")) return [{ allowed: true, declines_all_actions: false }];
+    if (sql.includes("employee-actions:resolve-handle")) return [{ id: actionId }];
+    throw new Error("Unexpected query");
+  };
+  const result = await recordEmployeeActionResponse(context("cat_member"), {
+    personId,
+    actionHandle,
+    response: customResponse,
+  }, {
+    query,
+    runTransaction: async (items) => statements.push(...items),
+    prepareAudit: async () => ({ sql: "SELECT 1" }),
+  });
+  assert.equal(result.response, customResponse);
+  assert.equal(statements[0].parameters[3], customResponse);
+  assert.match(statements[0].sql, /ANY\(action\.enabled_response_statuses\)/);
 });
 
 test("custom action response choices require one enabled choice and distinct visible labels", () => {

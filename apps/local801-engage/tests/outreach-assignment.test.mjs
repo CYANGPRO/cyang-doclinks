@@ -41,7 +41,7 @@ function dependencies(overrides = {}) {
   };
 }
 
-test("outreach assignment options are limited to active LCAT and CAT accounts", async () => {
+test("outreach assignment options include every active CAT-or-higher account", async () => {
   let captured = null;
   const options = await getOutreachAssignmentOptions(context(), async (sql, parameters) => {
     captured = { sql, parameters };
@@ -49,15 +49,14 @@ test("outreach assignment options are limited to active LCAT and CAT accounts", 
   });
   assert.deepEqual(options, [{ handle: assigneeHandle, label: "Synthetic CAT", current: false }]);
   assert.deepEqual(captured.parameters, [organizationId]);
-  assert.match(captured.sql, /role\.code IN \('cat_lead','cat_member'\)/);
-  assert.doesNotMatch(captured.sql, /role\.code IN \([^)]*cat_admin/);
+  assert.match(captured.sql, /role\.code IN \('system_owner','local_admin','cat_admin','cat_lead','cat_member'\)/);
 });
 
-test("801 Administrators and LCATs can assign outreach while CATs and data roles cannot", async () => {
-  for (const role of ["system_owner", "local_admin", "cat_admin", "cat_lead"]) {
+test("CAT members and every role above them can assign outreach while data-only roles cannot", async () => {
+  for (const role of ["system_owner", "local_admin", "cat_admin", "cat_lead", "cat_member"]) {
     await getOutreachAssignmentOptions(context(role), async () => []);
   }
-  for (const role of ["membership_data_manager", "cat_member", "report_viewer"]) {
+  for (const role of ["membership_data_manager", "report_viewer"]) {
     await assert.rejects(
       getOutreachAssignmentOptions(context(role), async () => { throw new Error("SQL must not run"); }),
       (error) => error instanceof OutreachAssignmentError && error.code === "FORBIDDEN" && error.status === 403,
@@ -83,8 +82,7 @@ test("assigning outreach atomically replaces only the direct assignment and writ
   assert.match(replace.sql, /assignment\.campaign_id IS NULL/);
   assert.match(replace.sql, /assignment\.assignment_type = 'direct'/);
   assert.match(replace.sql, /SET status = 'closed', archived_at = now\(\)/);
-  assert.match(replace.sql, /role\.code IN \('system_owner','local_admin','cat_admin','cat_lead'\)/);
-  assert.match(replace.sql, /role\.code IN \('cat_lead','cat_member'\)/);
+  assert.match(replace.sql, /role\.code IN \('system_owner','local_admin','cat_admin','cat_lead','cat_member'\)/);
   assert.match(replace.sql, /NULL, person\.id, assignee\.id, NULL, 'direct', 'open'/);
   assert.deepEqual(replace.parameters, [organizationId, assignmentId, userId, "cat_lead", personHandle, assigneeHandle]);
   assert.deepEqual(state.audits[0].payload, {
@@ -146,7 +144,7 @@ test("deleting member outreach archives only the active direct assignment and re
   assert.match(archive.sql, /SET status = 'closed', archived_at = now\(\)/);
   assert.match(archive.sql, /assignment\.campaign_id IS NULL/);
   assert.match(archive.sql, /assignment\.assignment_type = 'direct'/);
-  assert.match(archive.sql, /role\.code IN \('system_owner','local_admin','cat_admin','cat_lead'\)/);
+  assert.match(archive.sql, /role\.code IN \('system_owner','local_admin','cat_admin','cat_lead','cat_member'\)/);
   assert.doesNotMatch(archive.sql, /engagement_events|engagement_followups|outreach_campaign_population/);
   assert.deepEqual(archive.parameters, [organizationId, oldAssignmentId, userId, "cat_lead", personHandle]);
   assert.equal(state.audits[0].eventType, "record.archive");
@@ -161,8 +159,8 @@ test("deleting member outreach archives only the active direct assignment and re
   });
 });
 
-test("member outreach delete is limited to LCAT and every role above it", async () => {
-  for (const role of ["system_owner", "local_admin", "cat_admin", "cat_lead"]) {
+test("member outreach assignment removal is available to CAT members and every role above", async () => {
+  for (const role of ["system_owner", "local_admin", "cat_admin", "cat_lead", "cat_member"]) {
     const state = dependencies({
       query: async (sql) => {
         if (sql.includes("resolve-person")) return [{ id: personId }];
@@ -172,7 +170,7 @@ test("member outreach delete is limited to LCAT and every role above it", async 
     });
     await deleteMemberOutreach(context(role), { personHandle }, state.values);
   }
-  for (const role of ["membership_data_manager", "cat_member", "report_viewer"]) {
+  for (const role of ["membership_data_manager", "report_viewer"]) {
     await assert.rejects(
       deleteMemberOutreach(context(role), { personHandle }, { query: async () => { throw new Error("SQL must not run"); } }),
       (error) => error instanceof OutreachAssignmentError && error.code === "FORBIDDEN" && error.status === 403,
@@ -212,10 +210,10 @@ test("outreach assignment endpoint and member control retain request-security gu
   assert.match(control, /method: "DELETE"/);
   assert.match(control, /Delete from member outreach/);
   assert.match(control, /Campaign assignments, follow-ups, conversations, and audit history will be retained/);
-  assert.match(control, /Choose an LCAT or CAT/);
+  assert.match(control, /Choose a CAT member or higher/);
   assert.match(control, /router\.refresh\(\)/);
   assert.match(page, /<OutreachAssignmentControl/);
   assert.match(page, /canDelete=\{workspace\.activeDirectAssignmentCount > 0\}/);
   assert.match(page, /can\(user\.role, "assignOutreach"\)/);
-  assert.match(access, /assignOutreach: \["system_owner", "local_admin", "cat_admin", "cat_lead"\]/);
+  assert.match(access, /assignOutreach: \["system_owner", "local_admin", "cat_admin", "cat_lead", "cat_member"\]/);
 });

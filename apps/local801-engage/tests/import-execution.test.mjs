@@ -187,6 +187,18 @@ test("legacy execution performs roster work through SQL CTEs, not JavaScript per
   assert.doesNotMatch(service, /OFFSET/i);
 });
 
+test("new-hire uploads replace assigned prior work while retaining omitted unassigned people", () => {
+  const sql = IMPORT_EXECUTION_SQL;
+  assert.match(sql, /cleared_prior_new_hire_queue AS/);
+  assert.match(sql, /UPDATE local801\.new_hire_roster_entries roster[\s\S]*batch\.import_kind IN \('new_hires','recent_hires'\)/);
+  assert.match(sql, /NOT EXISTS \([\s\S]*target_rows target[\s\S]*target\.target_person_id = roster\.person_id/);
+  assert.match(sql, /role\.code IN \('system_owner','local_admin','cat_admin','cat_lead','cat_member'\)/);
+  assert.match(sql, /assignment\.archived_at IS NULL[\s\S]*assignment\.status = 'open'/);
+  assert.match(sql, /upserted_new_hire_queue AS[\s\S]*ON CONFLICT \(organization_id, person_id\) DO UPDATE/);
+  assert.doesNotMatch(sql, /DELETE FROM local801\.employment_events|UPDATE local801\.people[\s\S]*hire_date = NULL/i);
+  assert.doesNotMatch(sql, /UPDATE local801\.engagement_assignments|DELETE FROM local801\.engagement_assignments/i);
+});
+
 test("current-roster execution recoverably archives active people omitted from the reviewed full roster", () => {
   const sql = IMPORT_EXECUTION_SQL;
   assert.match(sql, /inserted_snapshot AS/);
