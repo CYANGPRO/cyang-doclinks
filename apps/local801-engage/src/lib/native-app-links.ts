@@ -1,4 +1,4 @@
-const APP_BUNDLE_ID = "io.cyang.local801engage";
+const APP_BUNDLE_ID = "io.cyang.local801.engage";
 const ANDROID_PACKAGE_NAME = "io.cyang.local801.engage";
 const APPLE_TEAM_ID = /^[A-Z0-9]{10}$/;
 const SHA256_CERT_FINGERPRINT = /^(?:[0-9A-F]{2}:){31}[0-9A-F]{2}$/;

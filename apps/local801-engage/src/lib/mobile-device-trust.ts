@@ -53,7 +53,7 @@ export function getMobileDeviceConfiguration(env: NodeJS.ProcessEnv = process.en
     pushGateway: enabled ? pushGateway! : "",
     attestationSecret: enabled ? attestationSecret : "",
     pushSecret: enabled ? pushSecret : "",
-    appleAppId: enabled ? `${appleTeamId}.io.cyang.local801engage` : "",
+    appleAppId: enabled ? `${appleTeamId}.io.cyang.local801.engage` : "",
     androidPackageName: "io.cyang.local801.engage",
     androidCloudProjectNumber: enabled ? androidCloudProjectNumber : "",
   });

@@ -3,7 +3,7 @@
 ## Release identity
 
 - Product: Engaging Local 801
-- Apple bundle ID: `io.cyang.local801engage`
+- Apple bundle ID: `io.cyang.local801.engage`
 - Apple Team ID: `2U38UX2XKN`
 - Android package: `io.cyang.local801.engage`
 - Initial public version: `1.0` (`versionCode` / build `1`)
@@ -22,11 +22,7 @@ Store screenshots, review accounts, fixtures, and test documents must use synthe
 
 ## Apple — first release
 
-Run `npm run mobile:release:gate:ios` for the Apple release. This gate requires the shared Production,
-privacy, authentication, hosted-interface review, reviewer-account, Universal Link and real-device
-acceptance evidence plus Apple identifiers. It intentionally does not require Android signing material.
-
-1. In Certificates, Identifiers & Profiles, use the registered explicit App ID `io.cyang.local801engage`.
+1. In Certificates, Identifiers & Profiles, register the explicit App ID `io.cyang.local801.engage`.
 2. Enable Associated Domains, App Attest, and Push Notifications for the identifier.
 3. Record the 10-character Apple Team ID in Production as `LOCAL801_APPLE_TEAM_ID`, redeploy, and verify `https://cat.cyang.io/.well-known/apple-app-site-association` returns the exact Team ID + bundle ID.
 4. In App Store Connect, create the iOS app with name **Engaging Local 801**, primary language English (U.S.), bundle ID above, and an owner-controlled SKU such as `local801-engage-ios`.
@@ -34,7 +30,7 @@ acceptance evidence plus Apple identifiers. It intentionally does not require An
 6. Confirm Release entitlements show Production App Attest, Production APS, and `applinks:cat.cyang.io`.
 7. Run `npm ci`, `npm run native:sync`, then select **Any iOS Device (arm64)** and use **Product → Archive**.
 8. In Organizer, run **Validate App**, then **Distribute App → App Store Connect → Upload**. Do not use Development or Ad Hoc distribution for the store build.
-9. In App Store Connect, use the repository text in `store/ios/en-US`, category **Business**, privacy URL above, support URL above, and synthetic iPhone screenshots.
+9. In App Store Connect, use the repository text in `store/ios/en-US`, category **Business**, privacy URL above, support URL above, and synthetic iPhone/iPad screenshots.
 10. Complete App Privacy consistently with `PrivacyInfo.xcprivacy`: app functionality collects linked identity/contact/member-sensitive/user-content/device/interaction data; limited diagnostics are not linked; no tracking; no advertising.
 11. Provide a temporary reviewer account and a workable MFA method in the private App Review notes. Revoke it after review.
 12. Submit for App Review and state that unlisted distribution is intended. After approval, submit Apple's Unlisted App request and retain the private download link as controlled operational information.
@@ -42,9 +38,6 @@ acceptance evidence plus Apple identifiers. It intentionally does not require An
 Apple signing certificates, API keys, reviewer credentials, and MFA recovery methods belong in the approved credential vault—not Git, Vercel logs, or issue trackers.
 
 ## Google Play — first release
-
-Run `npm run mobile:release:gate:android` for the later Android release. Android signing and App Links
-remain independent from the approved iPhone-first release.
 
 1. In Play Console, create **Engaging Local 801** as an app, English (United States), app, free, and accept the required declarations. Use package `io.cyang.local801.engage`.
 2. Enroll in Play App Signing and let Google generate/hold the app-signing key. Create a separate upload key on a trusted release workstation with JDK 21 or newer:

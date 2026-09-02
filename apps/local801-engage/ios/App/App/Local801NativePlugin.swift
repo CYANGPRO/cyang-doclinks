@@ -191,7 +191,7 @@ public final class Local801NativePlugin: CAPPlugin, CAPBridgedPlugin, VNDocument
 final class Local801BackgroundUpload: NSObject, URLSessionTaskDelegate {
     private var completionHandler: (() -> Void)?
     static let shared = Local801BackgroundUpload(); private var session: URLSession!
-    private override init() { super.init(); session = URLSession(configuration: URLSessionConfiguration.background(withIdentifier: "io.cyang.local801engage.secure-upload"), delegate: self, delegateQueue: nil) }
+    private override init() { super.init(); session = URLSession(configuration: URLSessionConfiguration.background(withIdentifier: "io.cyang.local801.engage.secure-upload"), delegate: self, delegateQueue: nil) }
     func enqueue(request: URLRequest, file: URL) { let task = session.uploadTask(with: request, fromFile: file); task.taskDescription = "0|" + file.path; task.resume() }
     func setCompletionHandler(_ handler: @escaping () -> Void) { completionHandler = handler }
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {

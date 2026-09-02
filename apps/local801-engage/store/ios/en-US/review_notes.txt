@@ -9,7 +9,6 @@ Sign-in sequence:
 2. Use the temporary App Review account supplied in App Store Connect.
 3. Complete the supplied MFA method.
 4. Accept the in-application privacy and acceptable-use agreement.
-5. Separately acknowledge the MAPE Data Privacy Agreement requirement. The acknowledgement links to https://mape.org/data-privacy-agreement-form.
 
 The application uses the camera only after a user chooses document or QR scanning. Biometrics confirm local device possession. Generic reminders never contain member details. Protected member records are not persisted for offline browsing.
 

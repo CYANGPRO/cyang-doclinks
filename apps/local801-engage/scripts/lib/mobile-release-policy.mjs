@@ -6,10 +6,7 @@ function enabled(env, key) {
   return env[key] === "1";
 }
 
-export function getMobileReleaseState(env = process.env, platform = "all") {
-  if (!["all", "ios", "android"].includes(platform)) {
-    throw new Error(`Unsupported mobile release platform: ${platform}`);
-  }
+export function getMobileReleaseState(env = process.env) {
   const blockers = [];
   const requireEnabled = (key, blocker) => {
     if (!enabled(env, key)) blockers.push(blocker);
@@ -44,21 +41,17 @@ export function getMobileReleaseState(env = process.env, platform = "all") {
     blockers.push("MOBILE_APP_URL_INVALID");
   }
 
-  if (platform !== "android") {
-    const teamId = env.LOCAL801_APPLE_TEAM_ID?.trim().toUpperCase() || "";
-    if (!APPLE_TEAM_ID.test(teamId)) blockers.push("APPLE_TEAM_ID_INVALID");
-    const appIdPrefix = env.LOCAL801_APPLE_APP_ID_PREFIX?.trim().toUpperCase() || "";
-    if (!APPLE_TEAM_ID.test(appIdPrefix)) blockers.push("APPLE_APP_ID_PREFIX_INVALID");
-  }
+  const teamId = env.LOCAL801_APPLE_TEAM_ID?.trim().toUpperCase() || "";
+  if (!APPLE_TEAM_ID.test(teamId)) blockers.push("APPLE_TEAM_ID_INVALID");
+  const appIdPrefix = env.LOCAL801_APPLE_APP_ID_PREFIX?.trim().toUpperCase() || "";
+  if (!APPLE_TEAM_ID.test(appIdPrefix)) blockers.push("APPLE_APP_ID_PREFIX_INVALID");
 
-  if (platform !== "ios") {
-    const certificates = (env.LOCAL801_ANDROID_APP_LINK_SHA256 || "")
-      .split(",")
-      .map((value) => value.trim().toUpperCase())
-      .filter(Boolean);
-    if (certificates.length === 0 || certificates.some((value) => !ANDROID_CERTIFICATE.test(value))) {
-      blockers.push("ANDROID_APP_LINK_CERTIFICATE_INVALID");
-    }
+  const certificates = (env.LOCAL801_ANDROID_APP_LINK_SHA256 || "")
+    .split(",")
+    .map((value) => value.trim().toUpperCase())
+    .filter(Boolean);
+  if (certificates.length === 0 || certificates.some((value) => !ANDROID_CERTIFICATE.test(value))) {
+    blockers.push("ANDROID_APP_LINK_CERTIFICATE_INVALID");
   }
 
   return { ready: blockers.length === 0, blockers };

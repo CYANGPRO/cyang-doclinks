@@ -7,7 +7,7 @@ if (origin.protocol !== "https:" || origin.pathname !== "/" || origin.search || 
 }
 
 const config: CapacitorConfig = {
-  appId: "io.cyang.local801engage",
+  appId: "io.cyang.local801.engage",
   appName: "Engaging Local 801",
   webDir: "native-shell",
   server: {

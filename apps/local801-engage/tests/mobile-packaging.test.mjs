@@ -1,12 +1,7 @@
 import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
 import test from "node:test";
-import {
-  androidAssetLinks,
-  appleAppSiteAssociation,
-  LOCAL801_ANDROID_PACKAGE_NAME,
-  LOCAL801_IOS_APP_ID,
-} from "../src/lib/mobile-associations.ts";
+import { androidAssetLinks, appleAppSiteAssociation, LOCAL801_MOBILE_APP_ID } from "../src/lib/mobile-associations.ts";
 import { getMobileReleaseState } from "../scripts/lib/mobile-release-policy.mjs";
 
 const certificate = Array.from({ length: 32 }, (_, index) => index.toString(16).padStart(2, "0")).join(":").toUpperCase();
@@ -54,23 +49,6 @@ test("a complete mobile acceptance record can pass", () => {
   assert.deepEqual(getMobileReleaseState(readyEnv()), { ready: true, blockers: [] });
 });
 
-test("iOS release readiness does not require Android signing", () => {
-  const state = getMobileReleaseState(readyEnv({ LOCAL801_ANDROID_APP_LINK_SHA256: undefined }), "ios");
-  assert.deepEqual(state, { ready: true, blockers: [] });
-});
-
-test("Android release readiness does not require Apple signing", () => {
-  const state = getMobileReleaseState(readyEnv({
-    LOCAL801_APPLE_TEAM_ID: undefined,
-    LOCAL801_APPLE_APP_ID_PREFIX: undefined,
-  }), "android");
-  assert.deepEqual(state, { ready: true, blockers: [] });
-});
-
-test("mobile release readiness rejects an unknown platform", () => {
-  assert.throws(() => getMobileReleaseState(readyEnv(), "windows-phone"), /Unsupported mobile release platform/);
-});
-
 test("mobile release accepts only the canonical HTTPS app origin", () => {
   for (const value of ["http://cat.cyang.io", "https://preview.cyang.io", "https://cat.cyang.io/preview", "not-a-url"]) {
     const state = getMobileReleaseState(readyEnv({ LOCAL801_MOBILE_APP_URL: value }));
@@ -86,20 +64,20 @@ test("Apple and Android domain associations are empty until valid public identif
   assert.deepEqual(appleAppSiteAssociation({ LOCAL801_APPLE_APP_ID_PREFIX: "a1b2c3d4e5" }), {
     applinks: {
       apps: [],
-      details: [{ appIDs: [`A1B2C3D4E5.${LOCAL801_IOS_APP_ID}`], components: [{ "/": "/*" }] }],
+      details: [{ appIDs: [`A1B2C3D4E5.${LOCAL801_MOBILE_APP_ID}`], components: [{ "/": "/*" }] }],
     },
   });
   assert.deepEqual(androidAssetLinks({ LOCAL801_ANDROID_APP_LINK_SHA256: certificate }), [{
     relation: ["delegate_permission/common.handle_all_urls"],
     target: {
       namespace: "android_app",
-      package_name: LOCAL801_ANDROID_PACKAGE_NAME,
+      package_name: LOCAL801_MOBILE_APP_ID,
       sha256_cert_fingerprints: [certificate],
     },
   }]);
 });
 
-test("native projects use their registered identifiers, verified links, and locked device backup settings", async () => {
+test("native projects use the same identifier, verified links, and locked device backup settings", async () => {
   const [capacitor, androidBuild, androidManifest, androidActivity, xcodeProject, entitlements, sceneDelegate] = await Promise.all([
     readFile(new URL("../capacitor.config.ts", import.meta.url), "utf8"),
     readFile(new URL("../android/app/build.gradle", import.meta.url), "utf8"),
@@ -110,9 +88,7 @@ test("native projects use their registered identifiers, verified links, and lock
     readFile(new URL("../ios/App/App/SceneDelegate.swift", import.meta.url), "utf8"),
   ]);
 
-  assert.match(capacitor, /io\.cyang\.local801engage/);
-  assert.match(xcodeProject, /io\.cyang\.local801engage/);
-  assert.match(androidBuild, /io\.cyang\.local801\.engage/);
+  for (const source of [capacitor, androidBuild, xcodeProject]) assert.match(source, /io\.cyang\.local801\.engage/);
   assert.match(androidManifest, /android:allowBackup="false"/);
   assert.match(androidManifest, /android:usesCleartextTraffic="false"/);
   assert.match(androidManifest, /android:autoVerify="true"/);

@@ -46,11 +46,9 @@
     "mobile:add:ios": "npm run mobile:assets && cap add ios --packagemanager SPM",
     "mobile:open:android": "cap open android",
     "mobile:open:ios": "cap open ios",
-    "mobile:build:android": "node scripts/check-mobile-release.mjs --platform=android && cap build android --androidreleasetype AAB",
-    "mobile:build:ios": "node scripts/check-mobile-release.mjs --platform=ios && cap build ios --scheme App",
-    "mobile:release:gate": "node scripts/check-mobile-release.mjs --platform=all",
-    "mobile:release:gate:android": "node scripts/check-mobile-release.mjs --platform=android",
-    "mobile:release:gate:ios": "node scripts/check-mobile-release.mjs --platform=ios"
+    "mobile:build:android": "node scripts/check-mobile-release.mjs && cap build android --androidreleasetype AAB",
+    "mobile:build:ios": "node scripts/check-mobile-release.mjs && cap build ios --scheme App",
+    "mobile:release:gate": "node scripts/check-mobile-release.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1011.0",
