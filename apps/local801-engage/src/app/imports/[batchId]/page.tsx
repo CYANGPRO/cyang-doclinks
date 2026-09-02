@@ -98,6 +98,12 @@ export default async function ImportDetailPage({ params, searchParams }: { param
         <StatCard label="Existing with changes" value={summary.counts.existingWithChanges} detail="One set acknowledgement" tone="attention" />
         <StatCard label="Proposed new" value={summary.counts.proposedNew} detail="One set decision" tone="attention" />
         <StatCard label="Needs attention" value={summary.counts.needsAttention} detail="Blocking exceptions" tone={summary.counts.needsAttention ? "danger" : "default"} />
+        <StatCard
+          label="Removed / archived employees"
+          value={summary.snapshot?.leaving ?? 0}
+          detail={summary.snapshot ? "Missing from this roster · history retained" : "Only calculated for full roster uploads"}
+          tone={summary.snapshot?.leaving ? "danger" : "default"}
+        />
         <StatCard label="Excluded" value={summary.counts.excluded ?? "—"} detail={summary.counts.excluded == null ? "Unavailable for legacy batch" : "Not included in review"} />
         <StatCard label="Rejected" value={summary.counts.rejected} detail="Correct and re-upload" tone={summary.counts.rejected ? "danger" : "default"} />
       </section>

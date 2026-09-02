@@ -278,6 +278,9 @@ test("import review UI uses validation-error wording, refreshes the queue, and r
   assert.doesNotMatch(form, /window\.location|location\.reload/);
   assert.match(detail, /eyebrow="Data imports"/);
   assert.match(detail, /Unchanged existing/);
+  assert.match(detail, /Removed \/ archived employees/);
+  assert.match(detail, /summary\.snapshot\?\.leaving \?\? 0/);
+  assert.match(detail, /history retained/);
   assert.doesNotMatch(importUi, /<button[^>]*>\s*(Approve|Merge|Create Person|Accept match|Reject match|Resolve match)/i);
   assert.doesNotMatch(importUi, /(INSERT|UPDATE|DELETE)[\s\S]*local801\.(people|person_identifiers|person_contact_methods|membership_events|employment_events|membership_snapshots|membership_snapshot_rows|import_approvals)/i);
 });
