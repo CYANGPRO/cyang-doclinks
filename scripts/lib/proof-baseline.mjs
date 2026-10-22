@@ -28,8 +28,7 @@ function parseRange(range) {
       const version = parseVersion(match[2]);
       if (!version) return null;
       return { operator, version };
-    })
-    .filter(Boolean);
+    });
 }
 
 export function satisfiesExactVersion(actual, expected) {
@@ -42,10 +41,12 @@ export function satisfiesExactVersion(actual, expected) {
 export function satisfiesVersionRange(actual, range) {
   const parsedActual = parseVersion(actual);
   if (!parsedActual) return false;
-  const comparators = parseRange(range);
-  if (!comparators.length) return false;
+  const alternatives = String(range || "").split("||").map(parseRange);
+  if (alternatives.some((comparators) => !comparators.length || comparators.some((comparator) => !comparator))) {
+    return false;
+  }
 
-  return comparators.every((comparator) => {
+  return alternatives.some((comparators) => comparators.every((comparator) => {
     const cmp = compareVersions(parsedActual, comparator.version);
     switch (comparator.operator) {
       case ">":
@@ -60,7 +61,7 @@ export function satisfiesVersionRange(actual, range) {
       default:
         return cmp === 0;
     }
-  });
+  }));
 }
 
 export function evaluateProofRuntime({

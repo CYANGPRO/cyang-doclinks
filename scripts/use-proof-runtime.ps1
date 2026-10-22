@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [string]$RequiredNode = "22.19.0",
+  [string]$RequiredNode = "22.23.4",
   [string]$RequiredNpm = "10.9.2"
 )
 
